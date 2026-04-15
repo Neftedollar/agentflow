@@ -1,10 +1,15 @@
 {
   "name": "@ageflow/runner-codex",
   "version": "0.1.0",
+  "description": "OpenAI Codex CLI subprocess runner for ageflow",
+  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/agentflow/packages/runners/codex",
   "type": "module",
   "private": false,
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "files": ["dist"],
   "scripts": {
@@ -13,10 +18,28 @@
     "test": "vitest run",
     "lint": "biome check src/"
   },
-  "dependencies": { "@ageflow/core": "workspace:*" },
+  "dependencies": {
+    "@ageflow/core": "workspace:*"
+  },
   "devDependencies": {
     "@types/bun": "^1.1.0",
     "@types/node": "^22.0.0",
     "vitest": "^2.1.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Neftedollar/ageflow.git"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "workflow",
+    "llm",
+    "dsl",
+    "typescript",
+    "claude",
+    "openai",
+    "multi-agent"
+  ],
+  "license": "MIT"
 }
