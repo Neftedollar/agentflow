@@ -333,3 +333,52 @@ describe("runPreflight — env var warnings", () => {
     expect(envErrors).toHaveLength(0);
   });
 });
+
+// ─── validateStaticArgs ───────────────────────────────────────────────────────
+
+describe("runPreflight — static arg validation", () => {
+  it("returns error for invalid runner identifier (bypassed builder via cast)", async () => {
+    // defineAgent validates at construction; craft a raw TasksMap to test preflight's check
+    const badTask = {
+      agent: {
+        runner: "bad;runner",
+        input: claudeAgent.input,
+        output: claudeAgent.output,
+        prompt: claudeAgent.prompt,
+      },
+      input: { text: "test" },
+    };
+
+    const workflow = {
+      name: "test",
+      // biome-ignore lint/suspicious/noExplicitAny: intentional bad-actor cast for test
+      tasks: { t: badTask as any },
+    };
+
+    // biome-ignore lint/suspicious/noExplicitAny: intentional bad-actor cast for test
+    const result = await runPreflight(workflow as any, { whichFn: alwaysFoundWhich });
+    const staticErrors = result.errors.filter((e) => e.includes("bad;runner"));
+    expect(staticErrors.length).toBeGreaterThan(0);
+  });
+
+  it("returns error for invalid env var name", async () => {
+    const agentWithBadEnv = defineAgent({
+      runner: "claude",
+      input: z.object({ text: z.string() }),
+      output: z.object({ result: z.string() }),
+      prompt: ({ text }) => `Analyze: ${text}`,
+      env: { pass: ["lower_case_var"] }, // env vars must match /^[A-Z_][A-Z0-9_]*$/
+    });
+
+    const workflow = defineWorkflow({
+      name: "test",
+      tasks: {
+        t: { agent: agentWithBadEnv, input: { text: "hello" } },
+      },
+    });
+
+    const result = await runPreflight(workflow, { whichFn: alwaysFoundWhich });
+    const staticErrors = result.errors.filter((e) => e.includes("lower_case_var"));
+    expect(staticErrors.length).toBeGreaterThan(0);
+  });
+});

@@ -35,25 +35,24 @@ function makeSpawnResult(stdout: string, exitCode = 0, stderr = ""): SpawnResult
   };
 }
 
-function makeJsonlOutput(
-  resultContent: string,
-  conversationId = "conv-123",
+/**
+ * Build a real `codex exec --json` event stream.
+ * Format observed in Codex CLI v0.59.0:
+ *   thread.started → turn.started → item.completed (agent_message) → turn.completed
+ */
+function makeCodexEventStream(
+  agentMessage: string,
+  threadId = "thread-123",
   tokensIn = 10,
   tokensOut = 20,
-  usageFlavor: "new" | "legacy" = "new",
 ): string {
-  const usage =
-    usageFlavor === "new"
-      ? { input_tokens: tokensIn, output_tokens: tokensOut }
-      : { prompt_tokens: tokensIn, completion_tokens: tokensOut };
-
-  const resultLine = JSON.stringify({
-    type: "result",
-    output: resultContent,
-    conversation_id: conversationId,
-    usage,
-  });
-  return `{"type":"assistant","message":"thinking..."}\n${resultLine}\n`;
+  const lines = [
+    JSON.stringify({ type: "thread.started", thread_id: threadId }),
+    JSON.stringify({ type: "turn.started" }),
+    JSON.stringify({ type: "item.completed", item: { id: "item_0", type: "agent_message", text: agentMessage } }),
+    JSON.stringify({ type: "turn.completed", usage: { input_tokens: tokensIn, cached_input_tokens: 0, output_tokens: tokensOut } }),
+  ];
+  return lines.join("\n") + "\n";
 }
 
 // ─── validate() tests ─────────────────────────────────────────────────────────
@@ -74,17 +73,18 @@ describe("CodexRunner.validate()", () => {
     expect(result.version).toBe("1.2.3");
   });
 
-  it("parses version string with just digits", async () => {
+  it("parses real codex --version output format (semver + build hash)", async () => {
+    // Real codex --version: "0.59.0 (29a7fe0d-2b17-43e2-b3bb-8fed03d1ce03)"
     const spawnSync: SpawnSyncFn = vi
       .fn()
       .mockReturnValueOnce(makeSpawnSyncResult(0, "/usr/bin/codex"))
-      .mockReturnValueOnce(makeSpawnSyncResult(0, "2.0.1"));
+      .mockReturnValueOnce(makeSpawnSyncResult(0, "0.59.0 (29a7fe0d-2b17-43e2-b3bb-8fed03d1ce03)"));
 
     const runner = new CodexRunner({ spawnSync });
     const result = await runner.validate();
 
     expect(result.ok).toBe(true);
-    expect(result.version).toBe("2.0.1");
+    expect(result.version).toBe("0.59.0");
   });
 
   it("returns ok: false when codex is not found on PATH", async () => {
@@ -102,9 +102,7 @@ describe("CodexRunner.validate()", () => {
   it("returns ok: false when --version fails", async () => {
     const spawnSync: SpawnSyncFn = vi
       .fn()
-      // which succeeds
       .mockReturnValueOnce(makeSpawnSyncResult(0, "/usr/bin/codex"))
-      // --version fails
       .mockReturnValueOnce(makeSpawnSyncResult(1, "", "permission denied"));
 
     const runner = new CodexRunner({ spawnSync });
@@ -118,69 +116,49 @@ describe("CodexRunner.validate()", () => {
 // ─── spawn() tests ────────────────────────────────────────────────────────────
 
 describe("CodexRunner.spawn()", () => {
-  it("parses JSONL output correctly", async () => {
-    const resultJson = JSON.stringify({ answer: "42" });
-    const jsonlOutput = makeJsonlOutput(resultJson, "conv-abc", 100, 200);
+  it("parses real codex event stream correctly", async () => {
+    const agentMessage = JSON.stringify({ answer: "42" });
+    const eventStream = makeCodexEventStream(agentMessage, "thread-abc", 100, 200);
 
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     const result = await runner.spawn({ prompt: "What is the answer?" });
 
-    expect(result.stdout).toBe(resultJson);
-    expect(result.sessionHandle).toBe("conv-abc");
+    expect(result.stdout).toBe(agentMessage);
+    expect(result.sessionHandle).toBe("thread-abc");
     expect(result.tokensIn).toBe(100);
     expect(result.tokensOut).toBe(200);
   });
 
-  it("handles legacy prompt_tokens/completion_tokens fields", async () => {
-    const resultJson = JSON.stringify({ answer: "legacy" });
-    const jsonlOutput = makeJsonlOutput(resultJson, "conv-legacy", 50, 75, "legacy");
+  it("takes the last agent_message when multiple item.completed events", async () => {
+    // Regression: tool calls and reasoning items precede the final agent_message
+    const lines = [
+      JSON.stringify({ type: "thread.started", thread_id: "thread-multi" }),
+      JSON.stringify({ type: "turn.started" }),
+      // Tool call item — not agent_message, should be ignored
+      JSON.stringify({ type: "item.completed", item: { id: "item_0", type: "tool_call", text: "calling bash..." } }),
+      // Intermediate reasoning item — should be ignored
+      JSON.stringify({ type: "item.completed", item: { id: "item_1", type: "reasoning", text: "thinking..." } }),
+      // Final agent_message — this is the result
+      JSON.stringify({ type: "item.completed", item: { id: "item_2", type: "agent_message", text: "Final answer" } }),
+      JSON.stringify({ type: "turn.completed", usage: { input_tokens: 50, output_tokens: 10, cached_input_tokens: 0 } }),
+    ];
+    const eventStream = lines.join("\n") + "\n";
 
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
-    const runner = new CodexRunner({ spawn: spawnFn });
-
-    const result = await runner.spawn({ prompt: "legacy usage test" });
-
-    expect(result.stdout).toBe(resultJson);
-    expect(result.tokensIn).toBe(50);
-    expect(result.tokensOut).toBe(75);
-  });
-
-  it("falls back to result field when output field is absent", async () => {
-    const resultContent = JSON.stringify({ answer: "fallback" });
-    const resultLine = JSON.stringify({
-      type: "result",
-      result: resultContent,
-      conversation_id: "conv-fallback",
-      usage: { input_tokens: 5, output_tokens: 5 },
-    });
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(resultLine));
-    const runner = new CodexRunner({ spawn: spawnFn });
-
-    const result = await runner.spawn({ prompt: "fallback test" });
-    expect(result.stdout).toBe(resultContent);
-    expect(result.sessionHandle).toBe("conv-fallback");
-  });
-
-  it("uses last result line if multiple present", async () => {
-    const firstResult = JSON.stringify({ answer: "first" });
-    const secondResult = JSON.stringify({ answer: "second" });
-    const jsonlOutput =
-      `${JSON.stringify({ type: "result", output: firstResult, conversation_id: "conv-1", usage: { input_tokens: 5, output_tokens: 5 } })}\n` +
-      `${JSON.stringify({ type: "result", output: secondResult, conversation_id: "conv-2", usage: { input_tokens: 10, output_tokens: 10 } })}\n`;
-
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     const result = await runner.spawn({ prompt: "test" });
-    expect(result.stdout).toBe(secondResult);
-    expect(result.sessionHandle).toBe("conv-2");
+    expect(result.stdout).toBe("Final answer");
+    expect(result.sessionHandle).toBe("thread-multi");
+    expect(result.tokensIn).toBe(50);
+    expect(result.tokensOut).toBe(10);
   });
 
   it("includes model flag when model is provided", async () => {
-    const jsonlOutput = makeJsonlOutput("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const eventStream = makeCodexEventStream("{}");
+    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     await runner.spawn({ prompt: "test", model: "gpt-4o" });
@@ -191,8 +169,8 @@ describe("CodexRunner.spawn()", () => {
   });
 
   it("does NOT include model flag when model is not provided", async () => {
-    const jsonlOutput = makeJsonlOutput("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const eventStream = makeCodexEventStream("{}");
+    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     await runner.spawn({ prompt: "test" });
@@ -201,32 +179,53 @@ describe("CodexRunner.spawn()", () => {
     expect(callArgs).not.toContain("--model");
   });
 
-  it("includes conversation-id when sessionHandle is provided", async () => {
-    const jsonlOutput = makeJsonlOutput("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+  it("uses 'codex exec resume <THREAD_ID>' subcommand for session resumption", async () => {
+    const eventStream = makeCodexEventStream("{}");
+    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
-    await runner.spawn({ prompt: "test", sessionHandle: "conv-xyz" });
+    await runner.spawn({ prompt: "continue", sessionHandle: "thread-xyz" });
 
     const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
-    expect(callArgs).toContain("--conversation-id");
-    expect(callArgs).toContain("conv-xyz");
+    // Correct shape: ["codex", "exec", "--json", "resume", "thread-xyz", "continue"]
+    expect(callArgs).toContain("exec");
+    expect(callArgs).toContain("resume");
+    expect(callArgs).toContain("thread-xyz");
+    // NOT a flag — resume is positional
+    expect(callArgs).not.toContain("--conversation-id");
+    expect(callArgs).not.toContain("--resume");
   });
 
-  it("does NOT include conversation-id for empty sessionHandle", async () => {
-    const jsonlOutput = makeJsonlOutput("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+  it("does NOT include resume subcommand for empty sessionHandle", async () => {
+    const eventStream = makeCodexEventStream("{}");
+    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     await runner.spawn({ prompt: "test", sessionHandle: "" });
 
     const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
-    expect(callArgs).not.toContain("--conversation-id");
+    expect(callArgs).not.toContain("resume");
+  });
+
+  it("always uses 'codex exec --json' invocation shape", async () => {
+    const eventStream = makeCodexEventStream("{}");
+    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
+    const runner = new CodexRunner({ spawn: spawnFn });
+
+    await runner.spawn({ prompt: "test" });
+
+    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
+    expect(callArgs[0]).toBe("codex");
+    expect(callArgs[1]).toBe("exec");
+    expect(callArgs).toContain("--json");
+    // Old flags must NOT appear
+    expect(callArgs).not.toContain("--output-format");
+    expect(callArgs).not.toContain("-q");
   });
 
   it("prepends system prompt before user prompt", async () => {
-    const jsonlOutput = makeJsonlOutput("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const eventStream = makeCodexEventStream("{}");
+    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     await runner.spawn({
@@ -238,7 +237,6 @@ describe("CodexRunner.spawn()", () => {
     const lastArg = callArgs[callArgs.length - 1] ?? "";
     expect(lastArg).toContain("You are a helpful assistant");
     expect(lastArg).toContain("User prompt here");
-    // System prompt comes before user prompt
     expect(lastArg.indexOf("You are a helpful assistant")).toBeLessThan(
       lastArg.indexOf("User prompt here"),
     );
@@ -278,32 +276,43 @@ describe("CodexRunner.spawn()", () => {
     await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(AgentHitlConflictError);
   });
 
-  it("does NOT throw AgentHitlConflictError when result content contains [y/n] text", async () => {
-    // Regression: HITL check must NOT scan the JSON result content.
-    const resultContent = JSON.stringify({ answer: "Please choose [y/n] to proceed" });
-    const jsonlOutput = makeJsonlOutput(resultContent, "conv-abc", 10, 20);
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+  it("does NOT throw AgentHitlConflictError when agent_message text contains [y/n]", async () => {
+    // Regression: HITL check must NOT scan JSON event content.
+    const agentMessage = JSON.stringify({ answer: "Please choose [y/n] to proceed" });
+    const eventStream = makeCodexEventStream(agentMessage, "thread-abc", 10, 20);
+    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     const result = await runner.spawn({ prompt: "test" });
-    expect(result.stdout).toBe(resultContent);
+    expect(result.stdout).toBe(agentMessage);
   });
 
-  it("returns empty sessionHandle when no conversation_id in result", async () => {
-    const resultLine = JSON.stringify({
-      type: "result",
-      output: "{}",
-      usage: { input_tokens: 5, output_tokens: 5 },
-    });
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(resultLine));
+  it("returns thread_id as sessionHandle", async () => {
+    const eventStream = makeCodexEventStream("{}", "thread-42");
+    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
+    const runner = new CodexRunner({ spawn: spawnFn });
+
+    const result = await runner.spawn({ prompt: "test" });
+    expect(result.sessionHandle).toBe("thread-42");
+  });
+
+  it("returns empty sessionHandle when no thread.started event", async () => {
+    // Only turn events, no thread.started
+    const lines = [
+      JSON.stringify({ type: "turn.started" }),
+      JSON.stringify({ type: "item.completed", item: { id: "item_0", type: "agent_message", text: "hello" } }),
+      JSON.stringify({ type: "turn.completed", usage: { input_tokens: 5, output_tokens: 5, cached_input_tokens: 0 } }),
+    ];
+    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(lines.join("\n") + "\n"));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     const result = await runner.spawn({ prompt: "test" });
     expect(result.sessionHandle).toBe("");
   });
 
-  it("handles output with no JSONL result line (raw stdout fallback)", async () => {
-    const rawOutput = "Some raw text without JSON\n";
+  it("falls back to raw stdout when no agent_message event found", async () => {
+    // Unexpected output (not valid codex events) — return raw so upstream can surface clearly
+    const rawOutput = "Some unexpected output without JSON events\n";
     const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(rawOutput));
     const runner = new CodexRunner({ spawn: spawnFn });
 
@@ -312,27 +321,5 @@ describe("CodexRunner.spawn()", () => {
     expect(result.sessionHandle).toBe("");
     expect(result.tokensIn).toBe(0);
     expect(result.tokensOut).toBe(0);
-  });
-
-  it("always includes --output-format json and -q flags", async () => {
-    const jsonlOutput = makeJsonlOutput("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
-    const runner = new CodexRunner({ spawn: spawnFn });
-
-    await runner.spawn({ prompt: "test" });
-
-    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
-    expect(callArgs).toContain("--output-format");
-    expect(callArgs).toContain("json");
-    expect(callArgs).toContain("-q");
-  });
-
-  it("extracts session handle from conversation_id field", async () => {
-    const jsonlOutput = makeJsonlOutput("{}", "conversation-42");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
-    const runner = new CodexRunner({ spawn: spawnFn });
-
-    const result = await runner.spawn({ prompt: "test" });
-    expect(result.sessionHandle).toBe("conversation-42");
   });
 });

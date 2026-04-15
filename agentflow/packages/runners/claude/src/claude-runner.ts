@@ -48,20 +48,23 @@ export interface SpawnResult {
 export type SpawnSyncFn = (cmd: string[], opts?: { stdout: string; stderr: string }) => SpawnSyncResult;
 export type SpawnFn = (cmd: string[], opts?: { stdout: string; stderr: string }) => SpawnResult;
 
-function defaultSpawnSync(cmd: string[], opts?: { stdout: string; stderr: string }): SpawnSyncResult {
+function defaultSpawnSync(cmd: string[], _opts?: { stdout: string; stderr: string }): SpawnSyncResult {
   const result = Bun.spawnSync(cmd, {
+    stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
   });
   return {
-    exitCode: result.exitCode ?? 1,
+    // Use -1 as sentinel to distinguish signal-killed (null) from explicit exit 1
+    exitCode: result.exitCode ?? -1,
     stdout: result.stdout ?? new Uint8Array(),
     stderr: result.stderr ?? new Uint8Array(),
   };
 }
 
-function defaultSpawn(cmd: string[], opts?: { stdout: string; stderr: string }): SpawnResult {
+function defaultSpawn(cmd: string[], _opts?: { stdout: string; stderr: string }): SpawnResult {
   const proc = Bun.spawn(cmd, {
+    stdin: "ignore", // prevent stdin inheritance / interactive prompt leakage
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -201,6 +204,8 @@ export class ClaudeRunner implements Runner {
       /\(Y\/n\)/i.test(hitlCheck) ||
       /\(y\/N\)/i.test(hitlCheck)
     ) {
+      // Runners don't know their task name — runNode in the executor
+      // catches this and re-throws with the real taskName.
       throw new AgentHitlConflictError("unknown");
     }
 

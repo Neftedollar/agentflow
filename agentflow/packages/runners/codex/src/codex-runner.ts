@@ -14,22 +14,36 @@ export class CodexSubprocessError extends AgentFlowError {
   }
 }
 
-// ─── JSONL result types ───────────────────────────────────────────────────────
+// ─── JSONL event types (codex exec --json output format, v0.59.0+) ──────────
+//
+// Observed event stream:
+//   {"type":"thread.started","thread_id":"019d9277-..."}
+//   {"type":"turn.started"}
+//   {"type":"item.completed","item":{"id":"...","type":"agent_message","text":"Hi."}}
+//   {"type":"turn.completed","usage":{"input_tokens":N,"cached_input_tokens":N,"output_tokens":N}}
+//
+// Session handle = thread_id from thread.started.
+// Result text    = last item.completed where item.type === "agent_message".
+// Token counts   = turn.completed.usage.{input,output}_tokens.
 
-interface CodexResultLine {
-  type: "result";
-  /** Primary result field (codex CLI). */
-  output?: string;
-  /** Alternative result field. */
-  result?: string;
-  conversation_id?: string;
+interface CodexThreadStarted {
+  type: "thread.started";
+  thread_id?: string;
+}
+
+interface CodexItemCompleted {
+  type: "item.completed";
+  item?: {
+    type?: string;
+    text?: string;
+  };
+}
+
+interface CodexTurnCompleted {
+  type: "turn.completed";
   usage?: {
-    // openai-style
     input_tokens?: number;
     output_tokens?: number;
-    // legacy openai-style
-    prompt_tokens?: number;
-    completion_tokens?: number;
   };
 }
 
@@ -57,11 +71,13 @@ export type SpawnFn = (cmd: string[], opts?: { stdout: string; stderr: string })
 
 function defaultSpawnSync(cmd: string[], _opts?: { stdout: string; stderr: string }): SpawnSyncResult {
   const result = Bun.spawnSync(cmd, {
+    stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
   });
   return {
-    exitCode: result.exitCode ?? 1,
+    // Use -1 as sentinel to distinguish signal-killed (null) from explicit exit 1
+    exitCode: result.exitCode ?? -1,
     stdout: result.stdout ?? new Uint8Array(),
     stderr: result.stderr ?? new Uint8Array(),
   };
@@ -69,6 +85,7 @@ function defaultSpawnSync(cmd: string[], _opts?: { stdout: string; stderr: strin
 
 function defaultSpawn(cmd: string[], _opts?: { stdout: string; stderr: string }): SpawnResult {
   const proc = Bun.spawn(cmd, {
+    stdin: "ignore", // C5: prevent stdin inheritance / "Reading additional input..." prompt
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -117,7 +134,7 @@ export class CodexRunner implements Runner {
     }
 
     const versionOutput = new TextDecoder().decode(versionResult.stdout).trim();
-    // Parse version string — expect something like "1.2.3" or "Codex CLI v1.2.3"
+    // Real codex reports e.g. "0.59.0 (29a7fe0d-...)" — extract semver portion
     const versionMatch = versionOutput.match(/(\d+\.\d+\.\d+)/);
     const version = versionMatch?.[1] ?? versionOutput;
 
@@ -125,14 +142,12 @@ export class CodexRunner implements Runner {
   }
 
   async spawn(args: RunnerSpawnArgs): Promise<RunnerSpawnResult> {
-    const cliArgs: string[] = ["--output-format", "json", "-q"];
+    // Codex CLI invocation: `codex exec --json [--model M] [--skip-git-repo-check] "<prompt>"`
+    // Session resumption:   `codex exec --json resume <THREAD_ID> "<prompt>"`
+    const subArgs: string[] = ["--json"];
 
     if (args.model !== undefined) {
-      cliArgs.push("--model", args.model);
-    }
-
-    if (args.sessionHandle !== undefined && args.sessionHandle !== "") {
-      cliArgs.push("--conversation-id", args.sessionHandle);
+      subArgs.push("--model", args.model);
     }
 
     // Build final prompt: prepend system prompt if provided
@@ -141,7 +156,15 @@ export class CodexRunner implements Runner {
       finalPrompt = `${args.systemPrompt}\n\n---\n\n${args.prompt}`;
     }
 
-    const proc = this._spawn(["codex", ...cliArgs, finalPrompt]);
+    // Session resumption uses a positional subcommand, not a flag
+    let cmd: string[];
+    if (args.sessionHandle !== undefined && args.sessionHandle !== "") {
+      cmd = ["codex", "exec", ...subArgs, "resume", args.sessionHandle, finalPrompt];
+    } else {
+      cmd = ["codex", "exec", ...subArgs, finalPrompt];
+    }
+
+    const proc = this._spawn(cmd);
 
     const stdoutStream = proc.stdout;
     const stderrStream = proc.stderr;
@@ -163,22 +186,45 @@ export class CodexRunner implements Runner {
       throw new CodexSubprocessError(exitCode, stderr);
     }
 
-    // Parse JSONL output: split on newlines, parse each line as JSON.
-    // Non-JSON lines are collected separately for HITL detection — this prevents
-    // false positives when the agent's result content contains "[y/n]" text.
+    // Parse JSONL event stream from `codex exec --json`.
+    // Non-JSON lines are separated for HITL detection to prevent false positives
+    // when agent response text happens to contain "[y/n]".
     const lines = stdout
       .split("\n")
       .map((l) => l.trim())
       .filter((l) => l.length > 0);
 
-    let resultLine: CodexResultLine | undefined;
+    let threadId = "";
+    let lastAgentMessage = "";
+    let tokensIn = 0;
+    let tokensOut = 0;
     const nonJsonLines: string[] = [];
 
     for (const line of lines) {
       try {
         const parsed = JSON.parse(line) as CodexJsonLine;
-        if (parsed["type"] === "result") {
-          resultLine = parsed as unknown as CodexResultLine;
+
+        switch (parsed["type"]) {
+          case "thread.started": {
+            const ev = parsed as unknown as CodexThreadStarted;
+            threadId = ev.thread_id ?? "";
+            break;
+          }
+          case "item.completed": {
+            const ev = parsed as unknown as CodexItemCompleted;
+            // Take last agent_message — tool calls and reasoning emit earlier items
+            if (ev.item?.type === "agent_message" && ev.item.text !== undefined) {
+              lastAgentMessage = ev.item.text;
+            }
+            break;
+          }
+          case "turn.completed": {
+            const ev = parsed as unknown as CodexTurnCompleted;
+            tokensIn = ev.usage?.input_tokens ?? 0;
+            tokensOut = ev.usage?.output_tokens ?? 0;
+            break;
+          }
+          // Other event types (turn.started, tool_call, etc.) are ignored
         }
       } catch {
         // Not valid JSON — collect for HITL detection below
@@ -187,39 +233,32 @@ export class CodexRunner implements Runner {
     }
 
     // Detect HITL prompts only in non-JSON output (interactive prompts are never
-    // valid JSON lines; checking full stdout would false-positive on result content).
+    // valid JSON events; checking full stdout would false-positive on response text).
     const hitlCheck = nonJsonLines.join("\n");
     if (
       /\[y\/n\]/i.test(hitlCheck) ||
       /\(Y\/n\)/i.test(hitlCheck) ||
       /\(y\/N\)/i.test(hitlCheck)
     ) {
+      // Runners don't know their task name — runNode in the executor
+      // catches this and re-throws with the real taskName.
       throw new AgentHitlConflictError("unknown");
     }
 
-    if (resultLine === undefined) {
-      // If no JSONL result line found, treat entire stdout as the result
+    if (lastAgentMessage === "" && lines.length > 0) {
+      // No agent_message event found — return raw stdout so upstream can surface
+      // the failure clearly rather than silently passing an empty string to Zod.
       return {
         stdout,
-        sessionHandle: "",
-        tokensIn: 0,
-        tokensOut: 0,
+        sessionHandle: threadId,
+        tokensIn,
+        tokensOut,
       };
     }
 
-    // Extract result content — prefer `output` field, fall back to `result`
-    const resultContent = resultLine.output ?? resultLine.result ?? "";
-    const sessionHandle = resultLine.conversation_id ?? "";
-
-    // Handle both input_tokens/output_tokens and prompt_tokens/completion_tokens
-    const tokensIn =
-      resultLine.usage?.input_tokens ?? resultLine.usage?.prompt_tokens ?? 0;
-    const tokensOut =
-      resultLine.usage?.output_tokens ?? resultLine.usage?.completion_tokens ?? 0;
-
     return {
-      stdout: resultContent,
-      sessionHandle,
+      stdout: lastAgentMessage,
+      sessionHandle: threadId,
       tokensIn,
       tokensOut,
     };

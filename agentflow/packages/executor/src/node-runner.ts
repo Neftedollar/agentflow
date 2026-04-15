@@ -154,9 +154,10 @@ export async function runNode<
         sessionHandle: spawnResult.sessionHandle,
       };
     } catch (err) {
-      // HITL conflict — never retry, throw immediately
+      // HITL conflict — never retry. Runners emit "unknown" as the task name
+      // because they don't know it; substitute the real taskName here.
       if (err instanceof AgentHitlConflictError) {
-        throw err;
+        throw new AgentHitlConflictError(taskName, { cause: err });
       }
 
       // Determine if this error kind is retryable
