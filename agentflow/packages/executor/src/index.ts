@@ -16,3 +16,5 @@ export { SessionManager } from "./session-manager.js";
 export { HITLManager } from "./hitl-manager.js";
 export { BudgetTracker } from "./budget-tracker.js";
 export { LoopExecutor } from "./loop-executor.js";
+export { runPreflight } from "./preflight.js";
+export type { PreflightResult, WhichFn } from "./preflight.js";
