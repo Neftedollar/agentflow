@@ -188,3 +188,17 @@ export function safePath(opts?: {
     }
   });
 }
+
+export const McpConfigSchema = z
+  .object({
+    description: z.string().optional(),
+    maxCostUsd: z.number().positive().nullable().optional(),
+    maxDurationSec: z.number().positive().nullable().optional(),
+    maxTurns: z.number().int().positive().nullable().optional(),
+    limits: z.literal("unsafe-unlimited").optional(),
+    inputTask: z.string().optional(),
+    outputTask: z.string().optional(),
+  })
+  .strict();
+
+export type McpConfigInput = z.input<typeof McpConfigSchema>;

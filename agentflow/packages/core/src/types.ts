@@ -421,11 +421,44 @@ export interface WorkflowHooks<T extends TasksMap = TasksMap> {
   ) => void;
 }
 
+// ─── MCP exposure config ─────────────────────────────────────────────────────
+
+/**
+ * Configuration for exposing a workflow as an MCP tool via @ageflow/mcp-server.
+ *
+ * Authors declare hard ceilings here — operators can only *lower* them via CLI.
+ * Use `null` on an individual ceiling to opt out of that specific limit, or
+ * `limits: "unsafe-unlimited"` as shorthand for all three.
+ *
+ * Set `mcp: false` on the workflow to explicitly forbid MCP exposure.
+ */
+export interface McpConfig {
+  /** Tool description surfaced to MCP clients. Defaults to "Run ageflow workflow: ${name}". */
+  readonly description?: string;
+  /** Hard cost ceiling in USD. `null` = unlimited. Default: 1.00. */
+  readonly maxCostUsd?: number | null;
+  /** Hard duration ceiling in seconds. `null` = unlimited. Default: 300. */
+  readonly maxDurationSec?: number | null;
+  /** Hard retry/loop-turn ceiling. `null` = unlimited. Default: 20. */
+  readonly maxTurns?: number | null;
+  /** Shorthand to disable all three ceilings. Requires exact literal "unsafe-unlimited". */
+  readonly limits?: "unsafe-unlimited";
+  /** Name of the task whose input becomes the tool's inputSchema. Required if DAG has >1 root. */
+  readonly inputTask?: string;
+  /** Name of the task whose output becomes the tool's outputSchema. Required if DAG has >1 leaf. */
+  readonly outputTask?: string;
+}
+
 export interface WorkflowDef<T extends TasksMap = TasksMap> {
   readonly name: string;
   readonly tasks: T;
   readonly hooks?: WorkflowHooks<T>;
   readonly budget?: BudgetConfig;
+  /**
+   * MCP exposure config. Set to `false` to forbid MCP exposure,
+   * omit for safe defaults, or provide a `McpConfig` to customize.
+   */
+  readonly mcp?: McpConfig | false;
   /**
    * Environment profiles. v2 feature — type reserved to prevent breaking API changes.
    * @v2
