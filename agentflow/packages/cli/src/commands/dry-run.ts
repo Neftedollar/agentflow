@@ -87,7 +87,14 @@ export function registerDryRunCommand(program: Command): void {
                 );
               }
 
-              renderDryRunTask(taskName, resolved.runner, prompt, deps);
+              let outputShape: unknown;
+              try {
+                outputShape = buildPlaceholder(task.agent.output);
+              } catch {
+                outputShape = undefined;
+              }
+
+              renderDryRunTask(taskName, resolved.runner, prompt, deps, outputShape);
             }
           }
         }
@@ -127,7 +134,14 @@ function renderDryRunInner(tasks: TasksMap): void {
           );
         }
 
-        renderDryRunTask(`  ${taskName}`, resolved.runner, prompt, deps);
+        let outputShape: unknown;
+        try {
+          outputShape = buildPlaceholder(task.agent.output);
+        } catch {
+          outputShape = undefined;
+        }
+
+        renderDryRunTask(`  ${taskName}`, resolved.runner, prompt, deps, outputShape);
       }
     }
   }

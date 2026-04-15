@@ -124,6 +124,7 @@ export function renderDryRunTask(
   runnerName: string,
   prompt: string,
   deps: readonly string[],
+  outputShape?: unknown,
 ): void {
   const depStr = deps.length > 0 ? ` (depends on: ${deps.join(", ")})` : "";
   process.stdout.write(
@@ -133,4 +134,11 @@ export function renderDryRunTask(
     }\n`,
   );
   process.stdout.write(`${chalk.dim("Prompt:\n") + prompt}\n`);
+  if (outputShape !== undefined) {
+    process.stdout.write(
+      chalk.dim("Output shape:\n") +
+        chalk.dim(JSON.stringify(outputShape, null, 2)) +
+        "\n",
+    );
+  }
 }
