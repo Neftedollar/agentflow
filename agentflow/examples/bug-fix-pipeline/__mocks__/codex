@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Mock codex CLI for smoke-testing without real LLM.
+# Usage: codex exec --json "<prompt>"
+
+PROMPT="${@: -1}"
+
+if echo "$PROMPT" | grep -qi "analyze\|codebase"; then
+  MSG='{"issues":[{"id":"i1","file":"src/app.ts","description":"Null pointer","severity":"high"}],"summary":"Found 1 issue"}'
+else
+  MSG='{"result":"ok"}'
+fi
+
+echo '{"type":"thread.started","thread_id":"mock-thread-001"}'
+echo '{"type":"turn.started"}'
+echo "{\"type\":\"item.completed\",\"item\":{\"id\":\"item_0\",\"type\":\"agent_message\",\"text\":$(echo "$MSG" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))')}}"
+echo '{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":0,"output_tokens":50}}'

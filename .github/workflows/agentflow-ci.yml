@@ -1,0 +1,25 @@
+name: AgentFlow CI
+on:
+  push:
+    paths:
+      - 'agentflow/**'
+  pull_request:
+    paths:
+      - 'agentflow/**'
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agentflow
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - run: bun run typecheck
+      - run: bun run lint
+      - run: bun run test
+      - run: bun run build
