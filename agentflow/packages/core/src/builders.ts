@@ -185,3 +185,11 @@ export function getRunner(name: string): Runner | undefined {
 export function getRunners(): ReadonlyMap<string, Runner> {
   return _runnerRegistry;
 }
+
+/**
+ * Remove a runner from the registry by name.
+ * Primarily for use in test harnesses to restore registry state.
+ */
+export function unregisterRunner(name: string): void {
+  _runnerRegistry.delete(name);
+}

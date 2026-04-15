@@ -47,6 +47,7 @@ export {
   resolveAgentDef,
   sessionToken,
   shareSessionWith,
+  unregisterRunner,
 } from "./builders.js";
 
 // Schemas
