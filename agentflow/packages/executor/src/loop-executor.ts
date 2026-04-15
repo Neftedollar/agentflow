@@ -1,5 +1,5 @@
-import type { LoopDef, TasksMap } from "@agentflow/core";
-import { LoopMaxIterationsError } from "@agentflow/core";
+import type { LoopDef, TasksMap } from "@ageflow/core";
+import { LoopMaxIterationsError } from "@ageflow/core";
 import { SessionManager } from "./session-manager.js";
 import type { CtxEntry, RunBatchesFn } from "./types-internal.js";
 

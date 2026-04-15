@@ -1,4 +1,4 @@
-import { BudgetExceededError } from "@agentflow/core";
+import { BudgetExceededError } from "@ageflow/core";
 import { describe, expect, it } from "vitest";
 import { BudgetTracker } from "../budget-tracker.js";
 

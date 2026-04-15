@@ -1,5 +1,5 @@
 {
-  "name": "@agentflow/runner-claude",
+  "name": "@ageflow/runner-claude",
   "version": "0.1.0",
   "type": "module",
   "private": false,
@@ -13,7 +13,7 @@
     "test": "vitest run",
     "lint": "biome check src/"
   },
-  "dependencies": { "@agentflow/core": "workspace:*" },
+  "dependencies": { "@ageflow/core": "workspace:*" },
   "devDependencies": {
     "@types/bun": "^1.1.0",
     "@types/node": "^22.0.0",

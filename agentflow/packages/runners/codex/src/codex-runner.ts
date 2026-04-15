@@ -1,9 +1,9 @@
-import { AgentFlowError, AgentHitlConflictError } from "@agentflow/core";
+import { AgentFlowError, AgentHitlConflictError } from "@ageflow/core";
 import type {
   Runner,
   RunnerSpawnArgs,
   RunnerSpawnResult,
-} from "@agentflow/core";
+} from "@ageflow/core";
 
 // ─── Errors ───────────────────────────────────────────────────────────────────
 

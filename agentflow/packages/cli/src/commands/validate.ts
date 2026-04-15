@@ -1,6 +1,6 @@
 import path from "node:path";
-import type { WorkflowDef } from "@agentflow/core";
-import { runPreflight } from "@agentflow/executor";
+import type { WorkflowDef } from "@ageflow/core";
+import { runPreflight } from "@ageflow/executor";
 import chalk from "chalk";
 import type { Command } from "commander";
 import {

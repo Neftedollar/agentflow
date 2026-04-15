@@ -1,5 +1,5 @@
-import { defineAgent, defineWorkflow } from "@agentflow/core";
-import type { TasksMap } from "@agentflow/core";
+import { defineAgent, defineWorkflow } from "@ageflow/core";
+import type { TasksMap } from "@ageflow/core";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { getReadyTasks, topologicalSort } from "../dag-resolver.js";

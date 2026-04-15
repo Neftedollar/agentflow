@@ -1,5 +1,5 @@
-import type { BudgetConfig } from "@agentflow/core";
-import { BudgetExceededError } from "@agentflow/core";
+import type { BudgetConfig } from "@ageflow/core";
+import { BudgetExceededError } from "@ageflow/core";
 
 /** Model pricing (USD per 1M tokens). Update when Anthropic/OpenAI change prices. */
 const MODEL_PRICES: Record<

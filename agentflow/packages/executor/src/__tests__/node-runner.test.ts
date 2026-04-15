@@ -2,8 +2,8 @@ import {
   AgentHitlConflictError,
   NodeMaxRetriesError,
   defineAgent,
-} from "@agentflow/core";
-import type { Runner, RunnerSpawnResult } from "@agentflow/core";
+} from "@ageflow/core";
+import type { Runner, RunnerSpawnResult } from "@ageflow/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { OutputValidationError } from "../errors.js";

@@ -1,5 +1,5 @@
 {
-  "name": "agentflow",
+  "name": "ageflow",
   "version": "0.1.0",
   "type": "module",
   "private": false,
@@ -15,8 +15,8 @@
     "lint": "biome check src/"
   },
   "dependencies": {
-    "@agentflow/core": "workspace:*",
-    "@agentflow/executor": "workspace:*",
+    "@ageflow/core": "workspace:*",
+    "@ageflow/executor": "workspace:*",
     "chalk": "^5.3.0",
     "ora": "^8.0.0",
     "boxen": "^8.0.0",

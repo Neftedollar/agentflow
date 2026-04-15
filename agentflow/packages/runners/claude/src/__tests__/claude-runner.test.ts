@@ -1,4 +1,4 @@
-import { AgentHitlConflictError } from "@agentflow/core";
+import { AgentHitlConflictError } from "@ageflow/core";
 import { describe, expect, it, vi } from "vitest";
 import { ClaudeRunner, ClaudeSubprocessError } from "../claude-runner.js";
 import type {

@@ -1,4 +1,4 @@
-import { getRunner, resolveAgentDef } from "@agentflow/core";
+import { getRunner, resolveAgentDef } from "@ageflow/core";
 import type {
   AgentDef,
   TaskDef,
@@ -6,7 +6,7 @@ import type {
   TasksMap,
   WorkflowDef,
   WorkflowMetrics,
-} from "@agentflow/core";
+} from "@ageflow/core";
 import { BudgetTracker } from "./budget-tracker.js";
 import { topologicalSort } from "./dag-resolver.js";
 import { RunnerNotRegisteredError } from "./errors.js";

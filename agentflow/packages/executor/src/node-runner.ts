@@ -3,8 +3,8 @@ import {
   NodeMaxRetriesError,
   TimeoutError,
   resolveAgentDef,
-} from "@agentflow/core";
-import type { AgentDef, AttemptRecord, Runner, TaskDef } from "@agentflow/core";
+} from "@ageflow/core";
+import type { AgentDef, AttemptRecord, Runner, TaskDef } from "@ageflow/core";
 import type { ZodType } from "zod";
 import { OutputValidationError } from "./errors.js";
 import { parseAgentOutput } from "./output-parser.js";
@@ -120,7 +120,7 @@ export async function runNode<
 
       // Build spawn args — only include optional properties when defined
       // (exactOptionalPropertyTypes requires we not pass explicit undefined)
-      const spawnArgs: import("@agentflow/core").RunnerSpawnArgs = {
+      const spawnArgs: import("@ageflow/core").RunnerSpawnArgs = {
         prompt,
         taskName,
       };

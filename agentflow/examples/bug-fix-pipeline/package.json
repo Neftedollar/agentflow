@@ -1,5 +1,5 @@
 {
-  "name": "@agentflow/example-bug-fix-pipeline",
+  "name": "@ageflow/example-bug-fix-pipeline",
   "version": "0.1.0",
   "type": "module",
   "private": true,
@@ -9,9 +9,9 @@
     "smoke": "PATH=\"$PWD/__mocks__:$PATH\" agentwf run workflow.ts"
   },
   "dependencies": {
-    "@agentflow/core": "workspace:*",
-    "@agentflow/runner-claude": "workspace:*",
-    "@agentflow/testing": "workspace:*"
+    "@ageflow/core": "workspace:*",
+    "@ageflow/runner-claude": "workspace:*",
+    "@ageflow/testing": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

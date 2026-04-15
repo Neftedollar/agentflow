@@ -163,7 +163,7 @@ export function shareSessionWith<
  * Must be called before running any workflow that uses this runner.
  *
  * @example
- * import { ClaudeRunner } from "@agentflow/runner-claude";
+ * import { ClaudeRunner } from "@ageflow/runner-claude";
  * registerRunner("claude", new ClaudeRunner());
  */
 export function registerRunner(name: string, runner: Runner): void {

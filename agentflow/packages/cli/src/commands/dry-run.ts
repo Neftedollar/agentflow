@@ -1,7 +1,7 @@
 import path from "node:path";
-import { resolveAgentDef } from "@agentflow/core";
-import type { AgentDef, TaskDef, TasksMap, WorkflowDef } from "@agentflow/core";
-import { topologicalSort } from "@agentflow/executor";
+import { resolveAgentDef } from "@ageflow/core";
+import type { AgentDef, TaskDef, TasksMap, WorkflowDef } from "@ageflow/core";
+import { topologicalSort } from "@ageflow/executor";
 import chalk from "chalk";
 import type { Command } from "commander";
 import { renderDryRunTask, renderError } from "../output/renderer.js";

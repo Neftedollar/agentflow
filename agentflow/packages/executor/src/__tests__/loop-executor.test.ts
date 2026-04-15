@@ -1,6 +1,6 @@
-import { defineAgent, sessionToken } from "@agentflow/core";
-import type { LoopDef, TasksMap } from "@agentflow/core";
-import { LoopMaxIterationsError } from "@agentflow/core";
+import { defineAgent, sessionToken } from "@ageflow/core";
+import type { LoopDef, TasksMap } from "@ageflow/core";
+import { LoopMaxIterationsError } from "@ageflow/core";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { LoopExecutor } from "../loop-executor.js";

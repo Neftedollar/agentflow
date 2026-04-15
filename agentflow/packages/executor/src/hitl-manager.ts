@@ -1,5 +1,5 @@
 import * as readline from "node:readline";
-import type { HITLConfig, WorkflowHooks } from "@agentflow/core";
+import type { HITLConfig, WorkflowHooks } from "@ageflow/core";
 import { HitlNotInteractiveError } from "./errors.js";
 
 export class HITLManager {

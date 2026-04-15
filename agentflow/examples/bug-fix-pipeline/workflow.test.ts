@@ -1,5 +1,5 @@
-import type { WorkflowDef } from "@agentflow/core";
-import { createTestHarness } from "@agentflow/testing";
+import type { WorkflowDef } from "@ageflow/core";
+import { createTestHarness } from "@ageflow/testing";
 import { describe, expect, it } from "vitest";
 import workflow from "./workflow.js";
 

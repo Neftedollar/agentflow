@@ -3,8 +3,8 @@ import type {
   TaskMetrics,
   WorkflowDef,
   WorkflowMetrics,
-} from "@agentflow/core";
-import { WorkflowExecutor } from "@agentflow/executor";
+} from "@ageflow/core";
+import { WorkflowExecutor } from "@ageflow/executor";
 import type { Command } from "commander";
 import {
   renderError,

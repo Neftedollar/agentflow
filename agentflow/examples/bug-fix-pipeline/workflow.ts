@@ -3,9 +3,9 @@ import {
   loop,
   registerRunner,
   sessionToken,
-} from "@agentflow/core";
-import type { CtxFor } from "@agentflow/core";
-import { ClaudeRunner } from "@agentflow/runner-claude";
+} from "@ageflow/core";
+import type { CtxFor } from "@ageflow/core";
+import { ClaudeRunner } from "@ageflow/runner-claude";
 import { analyzeAgent } from "./agents/analyze.js";
 import { evalAgent } from "./agents/eval.js";
 import { fixAgent } from "./agents/fix.js";
