@@ -1,0 +1,35 @@
+{
+  "name": "@ageflow/mcp-server",
+  "version": "0.1.0",
+  "description": "Expose ageflow workflows as MCP tools (stdio transport, progress streaming, HITL via elicitation).",
+  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/agentflow/packages/mcp-server",
+  "type": "module",
+  "private": false,
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "biome check src/"
+  },
+  "dependencies": {
+    "@ageflow/core": "workspace:*",
+    "@ageflow/executor": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod-to-json-schema": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "vitest": "^2.1.0",
+    "zod": "^3.23.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Neftedollar/ageflow.git"
+  },
+  "keywords": ["mcp", "ai", "agents", "workflow", "llm", "ageflow", "claude"],
+  "license": "MIT"
+}
