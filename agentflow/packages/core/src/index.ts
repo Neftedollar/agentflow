@@ -4,6 +4,7 @@
 // Types
 export type {
   AgentDef,
+  BoundCtx,
   ResolvedAgentDef,
   BudgetConfig,
   CtxFor,
@@ -42,6 +43,7 @@ export {
   getRunner,
   getRunners,
   loop,
+  registerRunner,
   resolveAgentDef,
   sessionToken,
   shareSessionWith,
@@ -66,3 +68,4 @@ export {
   ToolNotUsedError,
   ValidationError,
 } from "./errors.js";
+export type { AttemptRecord } from "./errors.js";

@@ -1,0 +1,16 @@
+{
+  "name": "@agentflow/runner-claude",
+  "version": "0.1.0",
+  "type": "module",
+  "private": false,
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "biome check src/"
+  },
+  "dependencies": { "@agentflow/core": "workspace:*" },
+  "devDependencies": { "@types/bun": "^1.1.0", "@types/node": "^22.0.0", "vitest": "^2.1.0" }
+}

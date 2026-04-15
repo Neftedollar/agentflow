@@ -289,8 +289,27 @@ export type CtxFor<T extends TasksMap, K extends keyof T> = {
 // ─── Task definition ──────────────────────────────────────────────────────────
 
 /**
+ * Typed ctx available inside a task's `input` function.
+ * Restricts access to only declared `dependsOn` keys.
+ * Output is `unknown` — cast to the expected type or use `CtxFor<T, K>` for full typing.
+ *
+ * Requires `dependsOn: [...] as const` to get key-level enforcement.
+ * Without `as const`, D[number] = string and all keys are accepted (no enforcement).
+ */
+export type BoundCtx<D extends readonly string[]> = {
+  readonly [P in D[number]]: { readonly output: unknown; readonly _source: string };
+};
+
+/**
  * A single task in a workflow.
- * D = tuple of dependsOn task keys (enables typed ctx in input function).
+ *
+ * @typeParam A - Agent definition
+ * @typeParam D - Tuple of dependsOn task keys (`as const` required for type enforcement)
+ *
+ * Type safety levels for the `input` callback:
+ * - With `dependsOn: ["a", "b"] as const` → ctx restricted to keys "a" | "b", output is unknown
+ * - Without `as const` → no key restriction (falls back to string index)
+ * - For fully-typed output use `CtxFor<typeof workflow.tasks, "taskName">` directly
  */
 export interface TaskDef<
   // biome-ignore lint/suspicious/noExplicitAny: structural constraint — any AgentDef shape
@@ -301,7 +320,7 @@ export interface TaskDef<
   readonly dependsOn?: D;
   readonly input?:
     | import("zod").infer<A extends { input: infer I extends ZodType } ? I : never>
-    | ((ctx: CtxFor<TasksMap, string>) => import("zod").infer<A extends { input: infer I extends ZodType } ? I : never>);
+    | ((ctx: BoundCtx<D>) => import("zod").infer<A extends { input: infer I extends ZodType } ? I : never>);
   readonly session?: SessionRef<RunnerOf<A>>;
   readonly hitl?: HITLConfig;
   readonly mustUse?: readonly string[];

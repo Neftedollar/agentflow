@@ -1,7 +1,7 @@
 import { describe, it, assertType, expectTypeOf } from "vitest";
 import { z } from "zod";
 import { defineAgent, resolveAgentDef } from "../builders.js";
-import type { AgentDef, RunnerOf, OutputOf, SessionToken, TaskDef } from "../types.js";
+import type { AgentDef, BoundCtx, RunnerOf, OutputOf, SessionToken, TaskDef } from "../types.js";
 
 // ─── Test agents ──────────────────────────────────────────────────────────────
 
@@ -95,5 +95,43 @@ describe("SessionToken phantom brand type safety", () => {
     };
     // Suppress unused variable warning
     void badTask;
+  });
+});
+
+describe("BoundCtx — dependsOn key enforcement", () => {
+  it("BoundCtx restricts ctx to declared keys only", () => {
+    // With literal deps D = ["analyze"], only "analyze" is valid
+    type Ctx = BoundCtx<readonly ["analyze"]>;
+    assertType<{ readonly analyze: { readonly output: unknown; readonly _source: string } }>({} as Ctx);
+  });
+
+  it("accessing an undeclared dep key is a type error", () => {
+    type Ctx = BoundCtx<readonly ["analyze"]>;
+    const ctx = {} as Ctx;
+
+    // @ts-expect-error — "fix" is not in dependsOn, should be a type error
+    void ctx.fix;
+  });
+
+  it("declared dep key compiles fine", () => {
+    type Ctx = BoundCtx<readonly ["analyze", "fix"]>;
+    const ctx = {} as Ctx;
+    void ctx.analyze.output;
+    void ctx.fix.output;
+  });
+
+  it("TaskDef input callback ctx is restricted to dependsOn keys", () => {
+    // Constructing a TaskDef with as-const dependsOn — ctx should be typed
+    const taskWithTypedCtx: TaskDef<typeof analyzeAgent, readonly ["prior"]> = {
+      agent: analyzeAgent,
+      dependsOn: ["prior"] as const,
+      input: (ctx) => {
+        void ctx.prior.output; // ✓ "prior" is in dependsOn
+        // @ts-expect-error — "other" is not in dependsOn
+        void ctx.other;
+        return { repoPath: "./src" };
+      },
+    };
+    void taskWithTypedCtx;
   });
 });

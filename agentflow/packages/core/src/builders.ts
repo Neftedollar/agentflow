@@ -159,6 +159,19 @@ export function shareSessionWith<
 }
 
 /**
+ * Register a runner implementation in the global registry.
+ * Must be called before running any workflow that uses this runner.
+ *
+ * @example
+ * import { ClaudeRunner } from "@agentflow/runner-claude";
+ * registerRunner("claude", new ClaudeRunner());
+ */
+export function registerRunner(name: string, runner: Runner): void {
+  validateStaticIdentifier(name, "runner name");
+  _runnerRegistry.set(name, runner);
+}
+
+/**
  * Get a runner from the registry by name.
  * Used by the executor — not intended for user code.
  */

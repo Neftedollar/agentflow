@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": ["packages/*", "packages/runners/*"],
   "packageManager": "bun@1.2.0",
   "scripts": {
     "build": "turbo run build",
