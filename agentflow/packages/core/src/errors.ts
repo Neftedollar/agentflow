@@ -18,7 +18,7 @@ export abstract class AgentFlowError extends Error {
       message: this.message,
       cause:
         this.cause instanceof Error
-          ? (this.cause as AgentFlowError).toJSON?.() ?? this.cause.message
+          ? ((this.cause as AgentFlowError).toJSON?.() ?? this.cause.message)
           : this.cause,
     };
   }
@@ -26,10 +26,10 @@ export abstract class AgentFlowError extends Error {
   static fromJSON(json: Record<string, unknown>): AgentFlowError {
     // Registry-based revival — extend in each subclass if needed
     const msg =
-      typeof json["message"] === "string" ? json["message"] : "Unknown error";
+      typeof json.message === "string" ? json.message : "Unknown error";
     const err = new GenericAgentFlowError(
       msg,
-      typeof json["code"] === "string" ? json["code"] : "unknown",
+      typeof json.code === "string" ? json.code : "unknown",
     );
     return err;
   }
@@ -63,7 +63,11 @@ export class NodeMaxRetriesError extends AgentFlowError {
     );
   }
   override toJSON(): Record<string, unknown> {
-    return { ...super.toJSON(), taskName: this.taskName, attempts: this.attempts };
+    return {
+      ...super.toJSON(),
+      taskName: this.taskName,
+      attempts: this.attempts,
+    };
   }
 }
 
@@ -74,7 +78,10 @@ export class LoopMaxIterationsError extends AgentFlowError {
     readonly maxIterations: number,
     options?: ErrorOptions,
   ) {
-    super(`Loop "${taskName}" exceeded max iterations (${maxIterations})`, options);
+    super(
+      `Loop "${taskName}" exceeded max iterations (${maxIterations})`,
+      options,
+    );
   }
 }
 
@@ -113,7 +120,10 @@ export class ValidationError extends AgentFlowError {
     readonly zodError: string,
     options?: ErrorOptions,
   ) {
-    super(`Output validation failed for task "${taskName}": ${zodError}`, options);
+    super(
+      `Output validation failed for task "${taskName}": ${zodError}`,
+      options,
+    );
   }
 }
 

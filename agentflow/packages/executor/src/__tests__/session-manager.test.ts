@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { z } from "zod";
 import { defineAgent, sessionToken, shareSessionWith } from "@agentflow/core";
 import type { TasksMap } from "@agentflow/core";
-import { SessionManager } from "../session-manager.js";
+import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { SessionCycleError, UnresolvedSessionRefError } from "../errors.js";
+import { SessionManager } from "../session-manager.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -14,7 +14,11 @@ const dummyAgent = defineAgent({
   prompt: () => "test",
 });
 
-function makeTask(session?: ReturnType<typeof sessionToken> | ReturnType<typeof shareSessionWith>) {
+function makeTask(
+  session?:
+    | ReturnType<typeof sessionToken>
+    | ReturnType<typeof shareSessionWith>,
+) {
   return {
     agent: dummyAgent,
     ...(session !== undefined ? { session } : {}),

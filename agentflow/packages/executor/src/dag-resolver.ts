@@ -75,7 +75,10 @@ export function topologicalSort(tasks: TasksMap): string[][] {
  * Returns tasks whose all dependsOn are in the completedSet.
  * Used by the executor to find the next batch to run.
  */
-export function getReadyTasks(completed: ReadonlySet<string>, tasks: TasksMap): string[] {
+export function getReadyTasks(
+  completed: ReadonlySet<string>,
+  tasks: TasksMap,
+): string[] {
   const ready: string[] = [];
 
   for (const [name, task] of Object.entries(tasks)) {

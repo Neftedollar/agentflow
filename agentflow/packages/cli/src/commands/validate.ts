@@ -1,13 +1,13 @@
 import path from "node:path";
-import type { Command } from "commander";
-import { runPreflight } from "@agentflow/executor";
 import type { WorkflowDef } from "@agentflow/core";
+import { runPreflight } from "@agentflow/executor";
+import chalk from "chalk";
+import type { Command } from "commander";
 import {
+  renderError,
   renderValidationErrors,
   renderWarnings,
-  renderError,
 } from "../output/renderer.js";
-import chalk from "chalk";
 
 export function registerValidateCommand(program: Command): void {
   program
@@ -19,7 +19,7 @@ export function registerValidateCommand(program: Command): void {
 
         let mod: Record<string, unknown>;
         try {
-          mod = await import(resolvedPath) as Record<string, unknown>;
+          mod = (await import(resolvedPath)) as Record<string, unknown>;
         } catch (importErr) {
           renderError(
             `Cannot import workflow file "${workflowFile}": ${importErr instanceof Error ? importErr.message : String(importErr)}`,
@@ -27,11 +27,13 @@ export function registerValidateCommand(program: Command): void {
           process.exit(1);
         }
 
-        const workflow = (mod["default"] ?? mod["workflow"]) as WorkflowDef | undefined;
+        const workflow = (mod.default ?? mod.workflow) as
+          | WorkflowDef
+          | undefined;
 
         if (workflow === undefined || !("tasks" in workflow)) {
           renderError(
-            `Invalid workflow file: must export a default WorkflowDef`,
+            "Invalid workflow file: must export a default WorkflowDef",
           );
           process.exit(1);
         }
@@ -46,7 +48,11 @@ export function registerValidateCommand(program: Command): void {
 
         if (result.errors.length > 0) {
           renderValidationErrors(result.errors);
-          process.stdout.write(chalk.red.bold(`\n✗ Validation failed (${result.errors.length} error(s))\n`));
+          process.stdout.write(
+            chalk.red.bold(
+              `\n✗ Validation failed (${result.errors.length} error(s))\n`,
+            ),
+          );
           process.exit(1);
         } else {
           process.stdout.write(chalk.green.bold("\n✓ Workflow is valid\n"));

@@ -1,6 +1,11 @@
-import { describe, it, expect } from "vitest";
+import {
+  defineAgent,
+  defineWorkflow,
+  sessionToken,
+  shareSessionWith,
+} from "@agentflow/core";
+import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { defineAgent, defineWorkflow, sessionToken, shareSessionWith } from "@agentflow/core";
 import { runPreflight } from "../preflight.js";
 import type { WhichFn } from "../preflight.js";
 
@@ -111,9 +116,11 @@ describe("runPreflight — runner validation", () => {
       },
     });
 
-    const result = await runPreflight(workflow, { whichFn: foundOnlyWhich("claude", "codex") });
-    const runnerErrors = result.errors.filter(
-      (e) => e.includes("not found on PATH"),
+    const result = await runPreflight(workflow, {
+      whichFn: foundOnlyWhich("claude", "codex"),
+    });
+    const runnerErrors = result.errors.filter((e) =>
+      e.includes("not found on PATH"),
     );
     expect(runnerErrors).toHaveLength(0);
   });
@@ -127,7 +134,11 @@ describe("runPreflight — DAG validation", () => {
       name: "test",
       tasks: {
         a: { agent: claudeAgent, input: { text: "a" } },
-        b: { agent: claudeAgent, dependsOn: ["a"] as const, input: { text: "b" } },
+        b: {
+          agent: claudeAgent,
+          dependsOn: ["a"] as const,
+          input: { text: "b" },
+        },
       },
     });
 
@@ -144,14 +155,24 @@ describe("runPreflight — DAG validation", () => {
       name: "test",
       tasks: {
         // biome-ignore lint/suspicious/noExplicitAny: intentional cycle for testing
-        a: { agent: claudeAgent, dependsOn: ["b"] as any, input: { text: "a" } },
+        a: {
+          agent: claudeAgent,
+          dependsOn: ["b"] as any,
+          input: { text: "a" },
+        },
         // biome-ignore lint/suspicious/noExplicitAny: intentional cycle for testing
-        b: { agent: claudeAgent, dependsOn: ["a"] as any, input: { text: "b" } },
+        b: {
+          agent: claudeAgent,
+          dependsOn: ["a"] as any,
+          input: { text: "b" },
+        },
       },
     });
 
     const result = await runPreflight(workflow, { whichFn: alwaysFoundWhich });
-    const cycleErrors = result.errors.filter((e) => e.includes("cycle") || e.includes("DAG cycle"));
+    const cycleErrors = result.errors.filter(
+      (e) => e.includes("cycle") || e.includes("DAG cycle"),
+    );
     expect(cycleErrors.length).toBeGreaterThan(0);
   });
 
@@ -160,7 +181,11 @@ describe("runPreflight — DAG validation", () => {
       name: "test",
       tasks: {
         // biome-ignore lint/suspicious/noExplicitAny: intentional unresolved dep for testing
-        a: { agent: claudeAgent, dependsOn: ["nonexistent"] as any, input: { text: "a" } },
+        a: {
+          agent: claudeAgent,
+          dependsOn: ["nonexistent"] as any,
+          input: { text: "a" },
+        },
       },
     });
 
@@ -181,7 +206,18 @@ describe("runPreflight — session ref validation", () => {
       name: "test",
       tasks: {
         a: { agent: claudeAgent, session: sess, input: { text: "a" } },
-        b: { agent: claudeAgent, session: shareSessionWith<{ a: typeof claudeAgent extends never ? never : { agent: typeof claudeAgent; input: { text: string } } }, "a">("a"), input: { text: "b" } },
+        b: {
+          agent: claudeAgent,
+          session: shareSessionWith<
+            {
+              a: typeof claudeAgent extends never
+                ? never
+                : { agent: typeof claudeAgent; input: { text: string } };
+            },
+            "a"
+          >("a"),
+          input: { text: "b" },
+        },
       },
     });
 
@@ -273,8 +309,8 @@ describe("runPreflight — cross-provider session warning", () => {
     });
 
     const result = await runPreflight(workflow, { whichFn: alwaysFoundWhich });
-    const crossProviderWarnings = result.warnings.filter(
-      (w) => w.includes("shared between different runners"),
+    const crossProviderWarnings = result.warnings.filter((w) =>
+      w.includes("shared between different runners"),
     );
     expect(crossProviderWarnings).toHaveLength(0);
   });
@@ -356,7 +392,9 @@ describe("runPreflight — static arg validation", () => {
     };
 
     // biome-ignore lint/suspicious/noExplicitAny: intentional bad-actor cast for test
-    const result = await runPreflight(workflow as any, { whichFn: alwaysFoundWhich });
+    const result = await runPreflight(workflow as any, {
+      whichFn: alwaysFoundWhich,
+    });
     const staticErrors = result.errors.filter((e) => e.includes("bad;runner"));
     expect(staticErrors.length).toBeGreaterThan(0);
   });
@@ -378,7 +416,9 @@ describe("runPreflight — static arg validation", () => {
     });
 
     const result = await runPreflight(workflow, { whichFn: alwaysFoundWhich });
-    const staticErrors = result.errors.filter((e) => e.includes("lower_case_var"));
+    const staticErrors = result.errors.filter((e) =>
+      e.includes("lower_case_var"),
+    );
     expect(staticErrors.length).toBeGreaterThan(0);
   });
 });

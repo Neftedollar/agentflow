@@ -1,18 +1,18 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { TaskMetrics, WorkflowMetrics } from "@agentflow/core";
-import {
-  renderHeader,
-  renderTaskComplete,
-  renderWorkflowComplete,
-  renderError,
-  renderTaskStart,
-  renderPreflightOk,
-  renderPreflightError,
-  renderTaskError,
-  renderWarnings,
-  renderValidationErrors,
-} from "../output/renderer.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatCliError } from "../output/errors.js";
+import {
+  renderError,
+  renderHeader,
+  renderPreflightError,
+  renderPreflightOk,
+  renderTaskComplete,
+  renderTaskError,
+  renderTaskStart,
+  renderValidationErrors,
+  renderWarnings,
+  renderWorkflowComplete,
+} from "../output/renderer.js";
 
 // ─── Silence stdout/stderr during tests ───────────────────────────────────────
 

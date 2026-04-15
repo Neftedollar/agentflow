@@ -1,4 +1,5 @@
 import type { ZodType } from "zod";
+import { validateStaticIdentifier } from "./schemas.js";
 import type {
   AgentDef,
   LoopDef,
@@ -11,7 +12,6 @@ import type {
   TasksMap,
   WorkflowDef,
 } from "./types.js";
-import { validateStaticIdentifier } from "./schemas.js";
 
 /** In-memory runner registry. Used by executor to find runner implementations. */
 const _runnerRegistry = new Map<string, Runner>();
@@ -47,9 +47,7 @@ export function defineAgent<
   const typeName = (config.output as any)._def?.typeName;
   if (typeName === "ZodAny" || typeName === "ZodUnknown") {
     console.warn(
-      `[agentflow] defineAgent runner="${config.runner}": output schema is ${typeName} — ` +
-        "prompt injection from agent stdout will pass through to downstream agents unsanitized. " +
-        "Use a specific Zod object schema.",
+      `[agentflow] defineAgent runner="${config.runner}": output schema is ${typeName} — prompt injection from agent stdout will pass through to downstream agents unsanitized. Use a specific Zod object schema.`,
     );
   }
 
@@ -155,7 +153,9 @@ export function shareSessionWith<
   T extends TasksMap,
   K extends keyof T & string,
 >(_taskName: K): ShareSessionRef<RunnerOfTask<T, K>> {
-  return { kind: "share", taskName: _taskName } as ShareSessionRef<RunnerOfTask<T, K>>;
+  return { kind: "share", taskName: _taskName } as ShareSessionRef<
+    RunnerOfTask<T, K>
+  >;
 }
 
 /**

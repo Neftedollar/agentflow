@@ -1,11 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
-import { z } from "zod";
 import { defineAgent, sessionToken } from "@agentflow/core";
-import type { TasksMap, LoopDef } from "@agentflow/core";
-import { LoopExecutor } from "../loop-executor.js";
+import type { LoopDef, TasksMap } from "@agentflow/core";
 import { LoopMaxIterationsError } from "@agentflow/core";
-import type { RunBatchesFn, CtxEntry } from "../types-internal.js";
+import { describe, expect, it, vi } from "vitest";
+import { z } from "zod";
+import { LoopExecutor } from "../loop-executor.js";
 import type { SessionManager } from "../session-manager.js";
+import type { CtxEntry, RunBatchesFn } from "../types-internal.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -62,7 +62,9 @@ describe("LoopExecutor", () => {
     const loopDef = makeLoopDef({
       until: (ctx) => {
         const c = ctx as Record<string, CtxEntry>;
-        return (c["task1"]?.output as { done: boolean } | undefined)?.done === true;
+        return (
+          (c.task1?.output as { done: boolean } | undefined)?.done === true
+        );
       },
       max: 10,
     });
@@ -83,9 +85,9 @@ describe("LoopExecutor", () => {
       max: 3,
     });
 
-    await expect(
-      executor.run(loopDef, {}, "stuck-loop"),
-    ).rejects.toThrow(LoopMaxIterationsError);
+    await expect(executor.run(loopDef, {}, "stuck-loop")).rejects.toThrow(
+      LoopMaxIterationsError,
+    );
     expect(runBatches).toHaveBeenCalledTimes(3);
   });
 
@@ -119,25 +121,31 @@ describe("LoopExecutor", () => {
     let iteration = 0;
     const handlesSeenAtStart: (string | undefined)[] = [];
 
-    const runBatches = vi.fn().mockImplementation(async (
-      _tasks: TasksMap,
-      _ctx: Record<string, CtxEntry>,
-      sm?: SessionManager,
-    ) => {
-      // Record the handle visible at the start of this iteration
-      handlesSeenAtStart.push(sm?.getHandleByToken("loop-session"));
-      // Simulate: inner task produces a session handle
-      sm?.setHandle("fix", `handle-iter-${iteration}`);
-      iteration++;
-      return { fix: { output: { done: iteration >= 2 }, _source: "agent" } };
-    });
+    const runBatches = vi
+      .fn()
+      .mockImplementation(
+        async (
+          _tasks: TasksMap,
+          _ctx: Record<string, CtxEntry>,
+          sm?: SessionManager,
+        ) => {
+          // Record the handle visible at the start of this iteration
+          handlesSeenAtStart.push(sm?.getHandleByToken("loop-session"));
+          // Simulate: inner task produces a session handle
+          sm?.setHandle("fix", `handle-iter-${iteration}`);
+          iteration++;
+          return {
+            fix: { output: { done: iteration >= 2 }, _source: "agent" },
+          };
+        },
+      );
 
     const executor = new LoopExecutor(runBatches as RunBatchesFn);
     const loopDef = makeLoopDef({
       context: undefined, // default = "fresh"
       until: (ctx) => {
         const c = ctx as Record<string, CtxEntry>;
-        return (c["fix"]?.output as { done: boolean } | undefined)?.done === true;
+        return (c.fix?.output as { done: boolean } | undefined)?.done === true;
       },
       tasks: innerTasks,
       max: 5,
@@ -162,25 +170,31 @@ describe("LoopExecutor", () => {
     let iteration = 0;
     const handlesSeenAtStart: (string | undefined)[] = [];
 
-    const runBatches = vi.fn().mockImplementation(async (
-      _tasks: TasksMap,
-      _ctx: Record<string, CtxEntry>,
-      sm?: SessionManager,
-    ) => {
-      // Record handle visible at start of this iteration
-      handlesSeenAtStart.push(sm?.getHandleByToken("persist-session"));
-      // Simulate: inner task produces a session handle
-      sm?.setHandle("fix", `handle-iter-${iteration}`);
-      iteration++;
-      return { fix: { output: { done: iteration >= 2 }, _source: "agent" } };
-    });
+    const runBatches = vi
+      .fn()
+      .mockImplementation(
+        async (
+          _tasks: TasksMap,
+          _ctx: Record<string, CtxEntry>,
+          sm?: SessionManager,
+        ) => {
+          // Record handle visible at start of this iteration
+          handlesSeenAtStart.push(sm?.getHandleByToken("persist-session"));
+          // Simulate: inner task produces a session handle
+          sm?.setHandle("fix", `handle-iter-${iteration}`);
+          iteration++;
+          return {
+            fix: { output: { done: iteration >= 2 }, _source: "agent" },
+          };
+        },
+      );
 
     const executor = new LoopExecutor(runBatches as RunBatchesFn);
     const loopDef = makeLoopDef({
       context: "persistent",
       until: (ctx) => {
         const c = ctx as Record<string, CtxEntry>;
-        return (c["fix"]?.output as { done: boolean } | undefined)?.done === true;
+        return (c.fix?.output as { done: boolean } | undefined)?.done === true;
       },
       tasks: innerTasks,
       max: 5,
@@ -196,11 +210,17 @@ describe("LoopExecutor", () => {
   });
 
   it("returns output of the final iteration", async () => {
-    const expectedOutput = { task1: { output: { done: true, value: 42 }, _source: "agent" } };
+    const expectedOutput = {
+      task1: { output: { done: true, value: 42 }, _source: "agent" },
+    };
     const runBatches = vi.fn().mockResolvedValue(expectedOutput);
     const executor = new LoopExecutor(runBatches as RunBatchesFn);
 
-    const result = await executor.run(makeLoopDef({ until: () => true }), {}, "result-loop");
+    const result = await executor.run(
+      makeLoopDef({ until: () => true }),
+      {},
+      "result-loop",
+    );
     expect(result).toEqual(expectedOutput);
   });
 });

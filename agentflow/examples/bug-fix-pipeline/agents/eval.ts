@@ -24,5 +24,9 @@ export const evalAgent = defineAgent({
 Patch: ${patch}
 Explanation: ${explanation}
 Return JSON: { satisfied: boolean, feedback: string, score: 0-10 }`,
-  retry: { max: 2, on: ["subprocess_error", "output_validation_error"], backoff: "exponential" },
+  retry: {
+    max: 2,
+    on: ["subprocess_error", "output_validation_error"],
+    backoff: "exponential",
+  },
 });

@@ -1,13 +1,13 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { z } from "zod";
 import {
   defineAgent,
   defineWorkflow,
-  registerRunner,
   getRunners,
+  registerRunner,
   unregisterRunner,
 } from "@agentflow/core";
 import type { Runner, RunnerSpawnResult } from "@agentflow/core";
+import { beforeEach, describe, expect, it } from "vitest";
+import { z } from "zod";
 import { createTestHarness } from "../test-harness.js";
 
 // ─── Test agents ──────────────────────────────────────────────────────────────
@@ -57,7 +57,9 @@ describe("createTestHarness", () => {
     harness.mockAgent("analyze", { issues: ["lint error", "type error"] });
 
     const result = await harness.run();
-    expect(result.outputs["analyze"]).toEqual({ issues: ["lint error", "type error"] });
+    expect(result.outputs.analyze).toEqual({
+      issues: ["lint error", "type error"],
+    });
   });
 
   it("run() returns output for two sequential tasks", async () => {
@@ -72,7 +74,7 @@ describe("createTestHarness", () => {
           agent: fixAgent,
           dependsOn: ["analyze"],
           input: (ctx) => ({
-            issues: (ctx["analyze"]?.output as { issues: string[] }).issues,
+            issues: (ctx.analyze?.output as { issues: string[] }).issues,
           }),
         },
       },
@@ -83,8 +85,8 @@ describe("createTestHarness", () => {
     harness.mockAgent("fix", { fixed: true });
 
     const result = await harness.run();
-    expect(result.outputs["analyze"]).toEqual({ issues: ["lint error"] });
-    expect(result.outputs["fix"]).toEqual({ fixed: true });
+    expect(result.outputs.analyze).toEqual({ issues: ["lint error"] });
+    expect(result.outputs.fix).toEqual({ fixed: true });
   });
 
   // ── getTask() stats ───────────────────────────────────────────────────────
@@ -160,11 +162,11 @@ describe("createTestHarness", () => {
 
     const result = await harness.run();
     // t1: callCount=1 → index 0 → "first"
-    expect(result.outputs["t1"]).toEqual({ val: "first" });
+    expect(result.outputs.t1).toEqual({ val: "first" });
     // t2: callCount=1 → index 0 → "first"
-    expect(result.outputs["t2"]).toEqual({ val: "first" });
+    expect(result.outputs.t2).toEqual({ val: "first" });
     // t3: callCount=1 → index 0 → "first"
-    expect(result.outputs["t3"]).toEqual({ val: "first" });
+    expect(result.outputs.t3).toEqual({ val: "first" });
   });
 
   it("single response repeats when task is called multiple times", async () => {
@@ -190,7 +192,7 @@ describe("createTestHarness", () => {
     harness.mockAgent("task", { result: "ok" });
 
     const result = await harness.run();
-    expect(result.outputs["task"]).toEqual({ result: "ok" });
+    expect(result.outputs.task).toEqual({ result: "ok" });
 
     const stats = harness.getTask("task");
     expect(stats.callCount).toBe(1);
@@ -217,7 +219,7 @@ describe("createTestHarness", () => {
     ]);
 
     const result = await harness.run();
-    expect(result.outputs["task"]).toEqual({ result: "recovered" });
+    expect(result.outputs.task).toEqual({ result: "recovered" });
 
     const stats = harness.getTask("task");
     // 2 calls: 1 throw + 1 success
@@ -269,7 +271,9 @@ describe("createTestHarness", () => {
 
     // Registry should be back to what it was before run()
     const registryAfter = new Map(getRunners());
-    expect(registryAfter.has("mock-harness")).toBe(registryBefore.has("mock-harness"));
+    expect(registryAfter.has("mock-harness")).toBe(
+      registryBefore.has("mock-harness"),
+    );
   });
 
   it("registry is restored after a run that throws", async () => {
@@ -289,7 +293,9 @@ describe("createTestHarness", () => {
     await expect(harness.run()).rejects.toThrow("fatal");
 
     const registryAfter = new Map(getRunners());
-    expect(registryAfter.has("mock-harness")).toBe(registryBefore.has("mock-harness"));
+    expect(registryAfter.has("mock-harness")).toBe(
+      registryBefore.has("mock-harness"),
+    );
   });
 
   it("registry is restored — pre-existing real runner is not removed", async () => {
@@ -347,6 +353,6 @@ describe("createTestHarness", () => {
     // Intentionally do NOT call mockAgent — default {} response is used
 
     const result = await harness.run();
-    expect(result.outputs["task"]).toEqual({});
+    expect(result.outputs.task).toEqual({});
   });
 });

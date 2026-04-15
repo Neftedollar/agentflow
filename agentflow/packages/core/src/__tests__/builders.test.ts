@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   defineAgent,
@@ -80,9 +80,7 @@ describe("defineAgent", () => {
       prompt: () => "test",
     });
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("ZodAny"),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("ZodAny"));
     warnSpy.mockRestore();
   });
 
@@ -96,9 +94,7 @@ describe("defineAgent", () => {
       prompt: () => "test",
     });
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("ZodUnknown"),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("ZodUnknown"));
     warnSpy.mockRestore();
   });
 
@@ -224,21 +220,25 @@ describe("sessionToken", () => {
   });
 
   it("throws on invalid runner name", () => {
-    expect(() => sessionToken("my-session", "invalid runner!" as string)).toThrow(
-      /invalid characters/,
-    );
+    expect(() =>
+      sessionToken("my-session", "invalid runner!" as string),
+    ).toThrow(/invalid characters/);
   });
 });
 
 describe("shareSessionWith", () => {
   it("creates ref with kind='share' and correct taskName", () => {
-    const ref = shareSessionWith<Record<string, never>, never>("analyze" as never);
+    const ref = shareSessionWith<Record<string, never>, never>(
+      "analyze" as never,
+    );
     expect(ref.kind).toBe("share");
     expect(ref.taskName).toBe("analyze");
   });
 
   it("creates correct taskName for different task names", () => {
-    const ref = shareSessionWith<Record<string, never>, never>("summarize" as never);
+    const ref = shareSessionWith<Record<string, never>, never>(
+      "summarize" as never,
+    );
     expect(ref.taskName).toBe("summarize");
   });
 });

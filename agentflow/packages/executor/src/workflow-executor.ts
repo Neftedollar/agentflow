@@ -1,12 +1,19 @@
 import { getRunner, resolveAgentDef } from "@agentflow/core";
-import type { AgentDef, TaskDef, TaskMetrics, TasksMap, WorkflowDef, WorkflowMetrics } from "@agentflow/core";
-import { RunnerNotRegisteredError } from "./errors.js";
+import type {
+  AgentDef,
+  TaskDef,
+  TaskMetrics,
+  TasksMap,
+  WorkflowDef,
+  WorkflowMetrics,
+} from "@agentflow/core";
+import { BudgetTracker } from "./budget-tracker.js";
 import { topologicalSort } from "./dag-resolver.js";
+import { RunnerNotRegisteredError } from "./errors.js";
+import { HITLManager } from "./hitl-manager.js";
+import { LoopExecutor } from "./loop-executor.js";
 import { runNode } from "./node-runner.js";
 import { SessionManager } from "./session-manager.js";
-import { HITLManager } from "./hitl-manager.js";
-import { BudgetTracker } from "./budget-tracker.js";
-import { LoopExecutor } from "./loop-executor.js";
 import type { CtxEntry, RunBatchesFn } from "./types-internal.js";
 
 export type { RunBatchesFn } from "./types-internal.js";
@@ -29,7 +36,10 @@ interface WorkflowExecutorOptions {
  *
  * Returns: array of groups, each group is an array of task names that must run sequentially.
  */
-function groupBySession(batch: readonly string[], sessionManager: SessionManager): string[][] {
+function groupBySession(
+  batch: readonly string[],
+  sessionManager: SessionManager,
+): string[][] {
   const groups: string[][] = [];
   // token name → group index
   const tokenToGroup = new Map<string, number>();
@@ -67,12 +77,14 @@ export class WorkflowExecutor<T extends TasksMap> {
     private readonly workflow: WorkflowDef<T>,
     options?: WorkflowExecutorOptions,
   ) {
-    this.sessionManager = options?.sessionManager ?? new SessionManager(workflow.tasks);
+    this.sessionManager =
+      options?.sessionManager ?? new SessionManager(workflow.tasks);
     this.hitlManager = options?.hitlManager ?? new HITLManager();
     this.budgetTracker = options?.budgetTracker ?? new BudgetTracker();
 
     // Bind runBatches so LoopExecutor can call it without circular import
-    const runBatchesBound: RunBatchesFn = (tasks, ctx, sm) => this._runBatches(tasks, ctx, sm);
+    const runBatchesBound: RunBatchesFn = (tasks, ctx, sm) =>
+      this._runBatches(tasks, ctx, sm);
     this.loopExecutor = new LoopExecutor(runBatchesBound);
   }
 
@@ -173,7 +185,11 @@ export class WorkflowExecutor<T extends TasksMap> {
 
             // Dispatch LoopDef to LoopExecutor
             if ("kind" in taskDef) {
-              const loopOutput = await this.loopExecutor.run(taskDef, ctx, taskName);
+              const loopOutput = await this.loopExecutor.run(
+                taskDef,
+                ctx,
+                taskName,
+              );
               ctx[taskName] = { output: loopOutput, _source: "loop" };
               continue;
             }
@@ -192,20 +208,23 @@ export class WorkflowExecutor<T extends TasksMap> {
             // Resolve input
             let resolvedInput: unknown;
             if (typeof task.input === "function") {
-              resolvedInput = (task.input as (ctx: Record<string, CtxEntry>) => unknown)(ctx);
+              resolvedInput = (
+                task.input as (ctx: Record<string, CtxEntry>) => unknown
+              )(ctx);
             } else {
               resolvedInput = task.input;
             }
 
             // Resolve HITL config (task-level overrides agent-level)
             const resolvedDef = resolveAgentDef(task.agent);
-            const hitlConfig = this.hitlManager.resolveConfig(resolvedDef.hitl, task.hitl);
+            const hitlConfig = this.hitlManager.resolveConfig(
+              resolvedDef.hitl,
+              task.hitl,
+            );
 
             // Apply permissions if mode is "permissions"
-            const { tools: filteredTools, permissions } = this.hitlManager.applyPermissions(
-              resolvedDef.tools,
-              hitlConfig,
-            );
+            const { tools: filteredTools, permissions } =
+              this.hitlManager.applyPermissions(resolvedDef.tools, hitlConfig);
 
             // Run HITL checkpoint if mode is "checkpoint"
             if (hitlConfig.mode === "checkpoint") {
@@ -213,7 +232,11 @@ export class WorkflowExecutor<T extends TasksMap> {
                 "message" in hitlConfig && hitlConfig.message !== undefined
                   ? hitlConfig.message
                   : `Task "${taskName}" requires approval before proceeding.`;
-              await this.hitlManager.runCheckpoint(taskName, checkpointMessage, hooks);
+              await this.hitlManager.runCheckpoint(
+                taskName,
+                checkpointMessage,
+                hooks,
+              );
             }
 
             // Get existing session handle for this task (use sm: may be loop-local)
@@ -237,7 +260,10 @@ export class WorkflowExecutor<T extends TasksMap> {
               const latencyMs = Date.now() - taskStart;
 
               // Store session handle after task completes (use sm: may be loop-local)
-              if (result.sessionHandle !== undefined && result.sessionHandle !== "") {
+              if (
+                result.sessionHandle !== undefined &&
+                result.sessionHandle !== ""
+              ) {
                 sm.setHandle(taskName, result.sessionHandle);
               }
 
@@ -248,7 +274,11 @@ export class WorkflowExecutor<T extends TasksMap> {
                 result.tokensIn,
                 result.tokensOut,
               );
-              this.budgetTracker.addCost(model, result.tokensIn, result.tokensOut);
+              this.budgetTracker.addCost(
+                model,
+                result.tokensIn,
+                result.tokensOut,
+              );
 
               // Check budget per-task after adding cost (I2 fix: catch overrun mid-batch)
               if (budget !== undefined && this.budgetTracker.exceeded(budget)) {
@@ -282,12 +312,20 @@ export class WorkflowExecutor<T extends TasksMap> {
               };
 
               // Fire onTaskComplete hook
-              hooks?.onTaskComplete?.(taskName as keyof T & string, result.output, taskMetrics);
+              hooks?.onTaskComplete?.(
+                taskName as keyof T & string,
+                result.output,
+                taskMetrics,
+              );
             } catch (err) {
               // Fire onTaskError hook
               if (err instanceof Error) {
                 const latencyMs = Date.now() - taskStart;
-                hooks?.onTaskError?.(taskName as keyof T & string, err, latencyMs);
+                hooks?.onTaskError?.(
+                  taskName as keyof T & string,
+                  err,
+                  latencyMs,
+                );
               }
               throw err;
             }

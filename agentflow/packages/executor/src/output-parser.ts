@@ -57,10 +57,7 @@ export function parseAgentOutput<O extends ZodType>(
   // Step 3: Zod validation — security boundary
   const result = schema.safeParse(parsed);
   if (!result.success) {
-    throw new OutputValidationError(
-      taskName,
-      result.error.message,
-    );
+    throw new OutputValidationError(taskName, result.error.message);
   }
 
   // biome-ignore lint/suspicious/noExplicitAny: inferred from generic O

@@ -19,7 +19,10 @@ export class HITLManager {
   applyPermissions(
     tools: readonly string[] | undefined,
     config: HITLConfig,
-  ): { tools: readonly string[] | undefined; permissions: Record<string, boolean> | undefined } {
+  ): {
+    tools: readonly string[] | undefined;
+    permissions: Record<string, boolean> | undefined;
+  } {
     if (config.mode !== "permissions") return { tools, permissions: undefined };
     const perms = config.permissions;
     const allowed = (tools ?? []).filter((t) => perms[t] === true);
@@ -50,8 +53,11 @@ export class HITLManager {
       type CheckpointHookExtended = (
         taskName: string,
         message: string,
-      ) => void | Promise<boolean | void>;
-      const hookResult = (hooks.onCheckpoint as CheckpointHookExtended)(taskName, message);
+      ) => undefined | Promise<boolean | undefined>;
+      const hookResult = (hooks.onCheckpoint as CheckpointHookExtended)(
+        taskName,
+        message,
+      );
       // If the hook returns a Promise, await it to get veto/approval
       if (hookResult instanceof Promise) {
         const resolved = await hookResult;
@@ -86,7 +92,9 @@ export class HITLManager {
         output: process.stdout,
       });
 
-      process.stdout.write(`[AgentFlow HITL] ${message}\nPress Enter to continue...`);
+      process.stdout.write(
+        `[AgentFlow HITL] ${message}\nPress Enter to continue...`,
+      );
       rl.once("line", () => {
         rl.close();
         resolve();

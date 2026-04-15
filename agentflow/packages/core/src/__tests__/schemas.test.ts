@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { safePath, validateStaticIdentifier } from "../schemas.js";
 
 describe("safePath()", () => {
@@ -170,23 +170,33 @@ describe("validateStaticIdentifier()", () => {
     });
 
     it("rejects 'my runner' (space)", () => {
-      expect(() => validateStaticIdentifier("my runner")).toThrow(/invalid characters/);
+      expect(() => validateStaticIdentifier("my runner")).toThrow(
+        /invalid characters/,
+      );
     });
 
     it("rejects 'server;rm' (semicolon)", () => {
-      expect(() => validateStaticIdentifier("server;rm")).toThrow(/invalid characters/);
+      expect(() => validateStaticIdentifier("server;rm")).toThrow(
+        /invalid characters/,
+      );
     });
 
     it("rejects '../path' (traversal)", () => {
-      expect(() => validateStaticIdentifier("../path")).toThrow(/invalid characters/);
+      expect(() => validateStaticIdentifier("../path")).toThrow(
+        /invalid characters/,
+      );
     });
 
     it("rejects 'name/path' (slash)", () => {
-      expect(() => validateStaticIdentifier("name/path")).toThrow(/invalid characters/);
+      expect(() => validateStaticIdentifier("name/path")).toThrow(
+        /invalid characters/,
+      );
     });
 
     it("rejects 'runner!' (bang)", () => {
-      expect(() => validateStaticIdentifier("runner!")).toThrow(/invalid characters/);
+      expect(() => validateStaticIdentifier("runner!")).toThrow(
+        /invalid characters/,
+      );
     });
   });
 });

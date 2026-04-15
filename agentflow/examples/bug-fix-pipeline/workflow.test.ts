@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { createTestHarness } from "@agentflow/testing";
 import type { WorkflowDef } from "@agentflow/core";
+import { createTestHarness } from "@agentflow/testing";
+import { describe, expect, it } from "vitest";
 import workflow from "./workflow.js";
 
 /**
@@ -11,7 +11,8 @@ import workflow from "./workflow.js";
 const workflowForTest: WorkflowDef = {
   ...(workflow as WorkflowDef),
   hooks: {
-    onCheckpoint: (_taskName: string, _message: string) => Promise.resolve(true) as Promise<boolean>,
+    onCheckpoint: (_taskName: string, _message: string) =>
+      Promise.resolve(true) as Promise<boolean>,
   },
 };
 
@@ -20,7 +21,14 @@ describe("bug-fix-pipeline", () => {
     const harness = createTestHarness(workflowForTest);
 
     harness.mockAgent("analyze", {
-      issues: [{ id: "i1", file: "src/app.ts", description: "Null pointer dereference", severity: "high" }],
+      issues: [
+        {
+          id: "i1",
+          file: "src/app.ts",
+          description: "Null pointer dereference",
+          severity: "high",
+        },
+      ],
       summary: "Found 1 critical issue",
     });
 
@@ -45,7 +53,7 @@ describe("bug-fix-pipeline", () => {
     const result = await harness.run();
 
     // Workflow completed
-    expect(result.outputs["summarize"]).toMatchObject({
+    expect(result.outputs.summarize).toMatchObject({
       report: expect.stringContaining("Fixed 1 critical issue"),
       fixedCount: 1,
       remainingCount: 0,
@@ -64,7 +72,14 @@ describe("bug-fix-pipeline", () => {
     const harness = createTestHarness(workflowForTest);
 
     harness.mockAgent("analyze", {
-      issues: [{ id: "i1", file: "src/app.ts", description: "Memory leak", severity: "high" }],
+      issues: [
+        {
+          id: "i1",
+          file: "src/app.ts",
+          description: "Memory leak",
+          severity: "high",
+        },
+      ],
       summary: "Found 1 issue",
     });
 
@@ -76,7 +91,11 @@ describe("bug-fix-pipeline", () => {
 
     harness.mockAgent("fix", [
       { patch: "- bad fix", explanation: "First attempt", confidence: 0.4 },
-      { patch: "+ correct fix", explanation: "Second attempt", confidence: 0.9 },
+      {
+        patch: "+ correct fix",
+        explanation: "Second attempt",
+        confidence: 0.9,
+      },
     ]);
 
     harness.mockAgent("summarize", {
@@ -87,7 +106,7 @@ describe("bug-fix-pipeline", () => {
 
     const result = await harness.run();
 
-    expect(result.outputs["summarize"]).toBeDefined();
+    expect(result.outputs.summarize).toBeDefined();
 
     // Fix ran twice (loop needed 2 iterations)
     const fixStats = harness.getTask("fix");
@@ -104,9 +123,17 @@ describe("bug-fix-pipeline", () => {
       issues: [],
       summary: "No issues found",
     });
-    harness.mockAgent("fix", { patch: "", explanation: "nothing to fix", confidence: 1.0 });
+    harness.mockAgent("fix", {
+      patch: "",
+      explanation: "nothing to fix",
+      confidence: 1.0,
+    });
     harness.mockAgent("eval", { satisfied: true, feedback: "ok", score: 10 });
-    harness.mockAgent("summarize", { report: "Clean codebase", fixedCount: 0, remainingCount: 0 });
+    harness.mockAgent("summarize", {
+      report: "Clean codebase",
+      fixedCount: 0,
+      remainingCount: 0,
+    });
 
     const result = await harness.run();
 

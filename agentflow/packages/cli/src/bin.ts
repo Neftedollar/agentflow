@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { program } from "commander";
-import { registerRunCommand } from "./commands/run.js";
-import { registerValidateCommand } from "./commands/validate.js";
 import { registerDryRunCommand } from "./commands/dry-run.js";
 import { registerInitCommand } from "./commands/init.js";
+import { registerRunCommand } from "./commands/run.js";
+import { registerValidateCommand } from "./commands/validate.js";
 
 program
   .name("agentwf")

@@ -1,7 +1,14 @@
-import { describe, it, assertType, expectTypeOf } from "vitest";
+import { assertType, describe, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 import { defineAgent, resolveAgentDef } from "../builders.js";
-import type { AgentDef, BoundCtx, RunnerOf, OutputOf, SessionToken, TaskDef } from "../types.js";
+import type {
+  AgentDef,
+  BoundCtx,
+  OutputOf,
+  RunnerOf,
+  SessionToken,
+  TaskDef,
+} from "../types.js";
 
 // ─── Test agents ──────────────────────────────────────────────────────────────
 
@@ -29,11 +36,16 @@ describe("defineAgent type inference", () => {
   });
 
   it("AgentDef is typed correctly", () => {
-    assertType<AgentDef<
-      z.ZodObject<{ repoPath: z.ZodString }, "strip">,
-      z.ZodObject<{ issues: z.ZodArray<z.ZodString>; count: z.ZodNumber }, "strip">,
-      "claude"
-    >>(analyzeAgent);
+    assertType<
+      AgentDef<
+        z.ZodObject<{ repoPath: z.ZodString }, "strip">,
+        z.ZodObject<
+          { issues: z.ZodArray<z.ZodString>; count: z.ZodNumber },
+          "strip"
+        >,
+        "claude"
+      >
+    >(analyzeAgent);
   });
 });
 
@@ -75,7 +87,10 @@ describe("resolveAgentDef types", () => {
 
 describe("SessionToken phantom brand type safety", () => {
   it("SessionToken<'claude'> is assignable to session field of claude agent task", () => {
-    const claudeToken: SessionToken<"claude"> = { kind: "token", name: "my-session" };
+    const claudeToken: SessionToken<"claude"> = {
+      kind: "token",
+      name: "my-session",
+    };
 
     // This should type-check fine
     assertType<TaskDef<typeof analyzeAgent>>({
@@ -85,7 +100,10 @@ describe("SessionToken phantom brand type safety", () => {
   });
 
   it("SessionToken<'claude'> is NOT assignable to session field of codex agent task", () => {
-    const claudeToken: SessionToken<"claude"> = { kind: "token", name: "my-session" };
+    const claudeToken: SessionToken<"claude"> = {
+      kind: "token",
+      name: "my-session",
+    };
 
     // Build the task object — session field should be a type error (cross-provider)
     const badTask: TaskDef<typeof codexAgent> = {
@@ -102,7 +120,9 @@ describe("BoundCtx — dependsOn key enforcement", () => {
   it("BoundCtx restricts ctx to declared keys only", () => {
     // With literal deps D = ["analyze"], only "analyze" is valid
     type Ctx = BoundCtx<readonly ["analyze"]>;
-    assertType<{ readonly analyze: { readonly output: unknown; readonly _source: string } }>({} as Ctx);
+    assertType<{
+      readonly analyze: { readonly output: unknown; readonly _source: string };
+    }>({} as Ctx);
   });
 
   it("accessing an undeclared dep key is a type error", () => {

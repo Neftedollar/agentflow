@@ -1,5 +1,5 @@
-import chalk from "chalk";
 import type { TaskMetrics, WorkflowMetrics } from "@agentflow/core";
+import chalk from "chalk";
 
 // ─── Header ───────────────────────────────────────────────────────────────────
 
@@ -15,12 +15,12 @@ export function renderHeader(command: string, workflowFile: string): string {
 
   const lines = [
     chalk.cyan(`┌─ AgentFlow ${"─".repeat(width - 14)}┐`),
-    chalk.cyan("│") + ` ${padded} ` + chalk.cyan("│"),
+    `${chalk.cyan("│")} ${padded} ${chalk.cyan("│")}`,
     chalk.cyan(`└${border}┘`),
   ];
 
   const output = lines.join("\n");
-  process.stdout.write(output + "\n");
+  process.stdout.write(`${output}\n`);
   return output;
 }
 
@@ -44,7 +44,10 @@ export function renderTaskStart(taskName: string): void {
  * Render task completion line with timing, token counts, and estimated cost.
  * Returns the rendered string for test assertions.
  */
-export function renderTaskComplete(taskName: string, metrics: TaskMetrics): string {
+export function renderTaskComplete(
+  taskName: string,
+  metrics: TaskMetrics,
+): string {
   const latencySec = (metrics.latencyMs / 1000).toFixed(1);
   const cost =
     metrics.estimatedCost > 0
@@ -58,13 +61,13 @@ export function renderTaskComplete(taskName: string, metrics: TaskMetrics): stri
     ) +
     cost;
 
-  process.stdout.write(line + "\n");
+  process.stdout.write(`${line}\n`);
   return line;
 }
 
 export function renderTaskError(taskName: string, error: Error): void {
   process.stdout.write(
-    chalk.red(`  ✗ ${taskName}`) + chalk.dim(`  ${error.message}`) + "\n",
+    `${chalk.red(`  ✗ ${taskName}`) + chalk.dim(`  ${error.message}`)}\n`,
   );
 }
 
@@ -76,18 +79,19 @@ export function renderTaskError(taskName: string, error: Error): void {
  */
 export function renderWorkflowComplete(metrics: WorkflowMetrics): string {
   const latencySec = (metrics.totalLatencyMs / 1000).toFixed(2);
-  const cost = metrics.totalEstimatedCost > 0
-    ? `  $${metrics.totalEstimatedCost.toFixed(4)}`
-    : "";
+  const cost =
+    metrics.totalEstimatedCost > 0
+      ? `  $${metrics.totalEstimatedCost.toFixed(4)}`
+      : "";
 
   const line =
     chalk.bold.green("\n✓ Workflow complete") +
     chalk.dim(
       `  ${metrics.taskCount} tasks · ${latencySec}s · ` +
-      `${metrics.totalTokensIn}/${metrics.totalTokensOut} tok${cost}`,
+        `${metrics.totalTokensIn}/${metrics.totalTokensOut} tok${cost}`,
     );
 
-  process.stdout.write(line + "\n");
+  process.stdout.write(`${line}\n`);
   return line;
 }
 
@@ -99,7 +103,7 @@ export function renderWorkflowComplete(metrics: WorkflowMetrics): string {
  */
 export function renderError(message: string): string {
   const line = chalk.red(`\n✗ Error: ${message}`);
-  process.stderr.write(line + "\n");
+  process.stderr.write(`${line}\n`);
   return line;
 }
 
@@ -123,9 +127,10 @@ export function renderDryRunTask(
 ): void {
   const depStr = deps.length > 0 ? ` (depends on: ${deps.join(", ")})` : "";
   process.stdout.write(
-    chalk.bold(`\n── Task: ${taskName}`) +
-    chalk.dim(` [${runnerName}]${depStr}`) +
-    "\n",
+    `${
+      chalk.bold(`\n── Task: ${taskName}`) +
+      chalk.dim(` [${runnerName}]${depStr}`)
+    }\n`,
   );
-  process.stdout.write(chalk.dim("Prompt:\n") + prompt + "\n");
+  process.stdout.write(`${chalk.dim("Prompt:\n") + prompt}\n`);
 }

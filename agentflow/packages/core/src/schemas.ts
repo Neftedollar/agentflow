@@ -1,5 +1,5 @@
-import { z } from "zod";
 import * as path from "node:path";
+import { z } from "zod";
 import { InvalidIdentifierError } from "./errors.js";
 
 const STATIC_IDENTIFIER_RE = /^[a-zA-Z0-9._-]+$/;
@@ -8,7 +8,10 @@ const STATIC_IDENTIFIER_RE = /^[a-zA-Z0-9._-]+$/;
  * Validates that a string is a safe static identifier for runner/model/mcp.server names.
  * Throws InvalidIdentifierError for unsafe values.
  */
-export function validateStaticIdentifier(name: string, field = "identifier"): void {
+export function validateStaticIdentifier(
+  name: string,
+  field = "identifier",
+): void {
   if (!name || !STATIC_IDENTIFIER_RE.test(name)) {
     throw new InvalidIdentifierError(field, name);
   }
@@ -42,7 +45,10 @@ export function safePath(opts?: {
   return z.string().superRefine((val, ctx) => {
     // Empty
     if (val.length === 0) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Path must not be empty" });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Path must not be empty",
+      });
       return;
     }
 
@@ -66,7 +72,10 @@ export function safePath(opts?: {
 
     // Null byte
     if (val.includes("\x00")) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Path must not contain null bytes" });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Path must not contain null bytes",
+      });
       return;
     }
 
@@ -81,21 +90,33 @@ export function safePath(opts?: {
     }
 
     // URL-like
-    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(val) || /^javascript:/i.test(val)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Path must not be a URL" });
+    if (
+      /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(val) ||
+      /^javascript:/i.test(val)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Path must not be a URL",
+      });
       return;
     }
 
     // UNC paths (Windows \\server\share)
     if (val.startsWith("\\\\")) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "UNC paths are not allowed" });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "UNC paths are not allowed",
+      });
       return;
     }
 
     // Single-leading backslash (Windows absolute path \Windows\foo).
     // path.isAbsolute() returns false for these on POSIX — check explicitly.
     if (val.startsWith("\\")) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Absolute paths are not allowed" });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Absolute paths are not allowed",
+      });
       return;
     }
 
@@ -132,7 +153,10 @@ export function safePath(opts?: {
     // Absolute path check
     if (path.isAbsolute(val)) {
       if (!allowAbsolute) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Absolute paths are not allowed" });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Absolute paths are not allowed",
+        });
         return;
       }
     }
@@ -153,7 +177,10 @@ export function safePath(opts?: {
 
     // Double-check with path.normalize
     const normalizedFull = path.normalize(val);
-    if (normalizedFull.startsWith("..") || normalizedFull.includes(`${path.sep}..`)) {
+    if (
+      normalizedFull.startsWith("..") ||
+      normalizedFull.includes(`${path.sep}..`)
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Path must not traverse above working directory",

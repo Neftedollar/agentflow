@@ -60,7 +60,10 @@ function sanitizeCtxData(data: unknown): unknown {
 
 // ─── Backoff calculation ──────────────────────────────────────────────────────
 
-function calculateBackoffMs(backoff: "exponential" | "linear" | "fixed", attempt: number): number {
+function calculateBackoffMs(
+  backoff: "exponential" | "linear" | "fixed",
+  attempt: number,
+): number {
   switch (backoff) {
     case "exponential": {
       const ms = 2 ** attempt * 1000;
@@ -86,13 +89,21 @@ export async function runNode<
   A extends AgentDef<any, any, any>,
 >(
   task: TaskDef<A>,
-  resolvedInput: import("zod").infer<A extends { input: infer I extends ZodType } ? I : ZodType>,
+  resolvedInput: import("zod").infer<
+    A extends { input: infer I extends ZodType } ? I : ZodType
+  >,
   runner: Runner,
   taskName: string,
   sessionHandle?: string,
   permissions?: Record<string, boolean>,
   filteredTools?: readonly string[],
-): Promise<NodeRunResult<import("zod").infer<A extends { output: infer O extends ZodType } ? O : ZodType>>> {
+): Promise<
+  NodeRunResult<
+    import("zod").infer<
+      A extends { output: infer O extends ZodType } ? O : ZodType
+    >
+  >
+> {
   const resolvedDef = resolveAgentDef(task.agent);
   const maxAttempts = resolvedDef.retry.max;
   const attempts: AttemptRecord[] = [];
@@ -109,7 +120,10 @@ export async function runNode<
 
       // Build spawn args — only include optional properties when defined
       // (exactOptionalPropertyTypes requires we not pass explicit undefined)
-      const spawnArgs: import("@agentflow/core").RunnerSpawnArgs = { prompt, taskName };
+      const spawnArgs: import("@agentflow/core").RunnerSpawnArgs = {
+        prompt,
+        taskName,
+      };
       if (resolvedDef.model !== undefined) {
         spawnArgs.model = resolvedDef.model;
       }
@@ -141,7 +155,9 @@ export async function runNode<
         spawnResult.stdout,
         resolvedDef.output,
         taskName,
-      ) as import("zod").infer<A extends { output: infer O extends ZodType } ? O : ZodType>;
+      ) as import("zod").infer<
+        A extends { output: infer O extends ZodType } ? O : ZodType
+      >;
 
       const latencyMs = Date.now() - startTime;
 
@@ -161,7 +177,11 @@ export async function runNode<
       }
 
       // Determine if this error kind is retryable
-      let errorCode: "subprocess_error" | "output_validation_error" | "timeout" | null = null;
+      let errorCode:
+        | "subprocess_error"
+        | "output_validation_error"
+        | "timeout"
+        | null = null;
       let errorMessage: string;
 
       if (err instanceof OutputValidationError) {
@@ -197,9 +217,14 @@ export async function runNode<
 
         // Apply backoff before next attempt (not after last attempt)
         if (attempt < maxAttempts - 1) {
-          const backoffMs = calculateBackoffMs(resolvedDef.retry.backoff, attempt);
+          const backoffMs = calculateBackoffMs(
+            resolvedDef.retry.backoff,
+            attempt,
+          );
           if (backoffMs > 0) {
-            await new Promise<void>((resolve) => setTimeout(resolve, backoffMs));
+            await new Promise<void>((resolve) =>
+              setTimeout(resolve, backoffMs),
+            );
           }
         }
       } else {

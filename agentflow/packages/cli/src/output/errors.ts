@@ -33,6 +33,6 @@ export function printCliError(
   hint?: string,
 ): string {
   const output = formatCliError(message, detail, hint);
-  process.stderr.write(output + "\n");
+  process.stderr.write(`${output}\n`);
   return output;
 }

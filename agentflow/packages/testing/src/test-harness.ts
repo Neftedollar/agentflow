@@ -1,9 +1,11 @@
-import {
-  registerRunner,
-  getRunners,
-  unregisterRunner,
+import { getRunners, registerRunner, unregisterRunner } from "@agentflow/core";
+import type {
+  Runner,
+  RunnerSpawnArgs,
+  TasksMap,
+  WorkflowDef,
+  WorkflowHooks,
 } from "@agentflow/core";
-import type { Runner, RunnerSpawnArgs, TasksMap, WorkflowDef, WorkflowHooks } from "@agentflow/core";
 import { WorkflowExecutor } from "@agentflow/executor";
 import type { WorkflowResult } from "@agentflow/executor";
 
@@ -87,7 +89,10 @@ function collectRunnerNames(tasks: TasksMap): Set<string> {
  */
 export function createTestHarness(workflow: WorkflowDef): TestHarness {
   const mocks = new Map<string, MockResponse[]>();
-  const stats = new Map<string, { callCount: number; successCount: number; outputs: unknown[] }>();
+  const stats = new Map<
+    string,
+    { callCount: number; successCount: number; outputs: unknown[] }
+  >();
 
   const mockRunner: Runner = {
     async validate(): Promise<{ ok: boolean; version: string }> {
@@ -100,16 +105,17 @@ export function createTestHarness(workflow: WorkflowDef): TestHarness {
       const taskName = args.taskName ?? "";
 
       // Initialise stats entry on first call
-      if (!stats.has(taskName)) {
-        stats.set(taskName, { callCount: 0, successCount: 0, outputs: [] });
+      let s = stats.get(taskName);
+      if (s === undefined) {
+        s = { callCount: 0, successCount: 0, outputs: [] };
+        stats.set(taskName, s);
       }
-      const s = stats.get(taskName)!;
       s.callCount++;
 
       // Resolve response from mock queue (last element repeats)
       const queue = mocks.get(taskName) ?? [{}];
       const idx = Math.min(s.callCount - 1, queue.length - 1);
-      const resp = queue[idx]!;
+      const resp = queue[idx] ?? {};
 
       if ("throws" in resp) {
         throw resp.throws;
@@ -166,15 +172,31 @@ export function createTestHarness(workflow: WorkflowDef): TestHarness {
           : {}),
         ...(workflowHooks?.onTaskComplete !== undefined
           ? {
-              onTaskComplete: (taskName: string, output: unknown, metrics: import("@agentflow/core").TaskMetrics) => {
-                workflowHooks.onTaskComplete?.(taskName as never, output, metrics);
+              onTaskComplete: (
+                taskName: string,
+                output: unknown,
+                metrics: import("@agentflow/core").TaskMetrics,
+              ) => {
+                workflowHooks.onTaskComplete?.(
+                  taskName as never,
+                  output,
+                  metrics,
+                );
               },
             }
           : {}),
         ...(workflowHooks?.onTaskError !== undefined
           ? {
-              onTaskError: (taskName: string, error: Error, latencyMs: number) => {
-                workflowHooks.onTaskError?.(taskName as never, error, latencyMs);
+              onTaskError: (
+                taskName: string,
+                error: Error,
+                latencyMs: number,
+              ) => {
+                workflowHooks.onTaskError?.(
+                  taskName as never,
+                  error,
+                  latencyMs,
+                );
               },
             }
           : {}),

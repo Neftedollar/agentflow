@@ -25,5 +25,9 @@ Find bugs, security issues, and code quality problems.
 Return a JSON object with:
 - issues: array of { id, file, description, severity }
 - summary: brief overview`,
-  retry: { max: 2, on: ["subprocess_error", "output_validation_error"], backoff: "exponential" },
+  retry: {
+    max: 2,
+    on: ["subprocess_error", "output_validation_error"],
+    backoff: "exponential",
+  },
 });

@@ -209,7 +209,10 @@ export interface ResolvedAgentDef<
   I extends ZodType = ZodType,
   O extends ZodType = ZodType,
   R extends string = string,
-> extends Omit<AgentDef<I, O, R>, "sanitizeInput" | "retry" | "timeoutMs" | "maxOutputBytes"> {
+> extends Omit<
+    AgentDef<I, O, R>,
+    "sanitizeInput" | "retry" | "timeoutMs" | "maxOutputBytes"
+  > {
   /** Always explicitly set to true or false after resolveAgentDef(). */
   readonly sanitizeInput: boolean;
   readonly retry: RetryConfig;
@@ -220,7 +223,10 @@ export interface ResolvedAgentDef<
 // ─── Task map types ───────────────────────────────────────────────────────────
 
 // biome-ignore lint/suspicious/noExplicitAny: structural constraint — any AgentDef shape
-export type TasksMap = Record<string, TaskDef<AgentDef<any, any, any>, readonly string[]> | LoopDef<TasksMap>>;
+export type TasksMap = Record<
+  string,
+  TaskDef<AgentDef<any, any, any>, readonly string[]> | LoopDef<TasksMap>
+>;
 
 /**
  * Extract the runner brand from an AgentDef.
@@ -229,12 +235,16 @@ export type TasksMap = Record<string, TaskDef<AgentDef<any, any, any>, readonly 
  * Uses property-based extraction to avoid TypeScript interface variance issues
  * with conditional `extends AgentDef<...>` matching.
  */
-export type RunnerOf<A> = A extends { runner: infer R extends string } ? R : never;
+export type RunnerOf<A> = A extends { runner: infer R extends string }
+  ? R
+  : never;
 
 /**
  * Extract the output Zod type from an AgentDef.
  */
-export type OutputZodOf<A> = A extends AgentDef<ZodType, infer O, string> ? O : never;
+export type OutputZodOf<A> = A extends AgentDef<ZodType, infer O, string>
+  ? O
+  : never;
 
 /**
  * Extract the typed output from an AgentDef.
@@ -254,18 +264,24 @@ export type InputOf<A> = A extends { input: infer I extends ZodType }
  * Extract the runner brand from a task in a TasksMap.
  * RunnerOfTask<T, K> = RunnerOf<T[K]["agent"]>
  */
-export type RunnerOfTask<T extends TasksMap, K extends keyof T> =
-  // biome-ignore lint/suspicious/noExplicitAny: structural infer
-  T[K] extends TaskDef<infer A, readonly string[]> ? RunnerOf<A> : never;
+export type RunnerOfTask<
+  T extends TasksMap,
+  K extends keyof T,
+> = T[K] extends TaskDef<infer A, readonly string[]> ? RunnerOf<A> : never; // biome-ignore lint/suspicious/noExplicitAny: structural infer
 
 /**
  * Extract the direct dependsOn keys of task K in workflow T.
  */
-export type DependsOnOf<T extends TasksMap, K extends keyof T> =
+export type DependsOnOf<
+  T extends TasksMap,
+  K extends keyof T,
+> = T[K] extends TaskDef<
   // biome-ignore lint/suspicious/noExplicitAny: structural infer
-  T[K] extends TaskDef<AgentDef<any, any, any>, infer D extends readonly string[]>
-    ? D[number] & keyof T
-    : never;
+  AgentDef<any, any, any>,
+  infer D extends readonly string[]
+>
+  ? D[number] & keyof T
+  : never;
 
 /**
  * Context available inside a task's `input` function.
@@ -274,7 +290,10 @@ export type DependsOnOf<T extends TasksMap, K extends keyof T> =
  */
 export type CtxFor<T extends TasksMap, K extends keyof T> = {
   // biome-ignore lint/suspicious/noExplicitAny: structural infer
-  readonly [P in DependsOnOf<T, K>]: T[P] extends TaskDef<infer A, readonly string[]>
+  readonly [P in DependsOnOf<T, K>]: T[P] extends TaskDef<
+    infer A,
+    readonly string[]
+  >
     ? {
         readonly output: OutputOf<A>;
         /** Source discriminant for executor sanitization decisions. */
@@ -303,7 +322,10 @@ export type CtxFor<T extends TasksMap, K extends keyof T> = {
  * Without `as const`, D[number] = string and all keys are accepted (no enforcement).
  */
 export type BoundCtx<D extends readonly string[]> = {
-  readonly [P in D[number]]: { readonly output: unknown; readonly _source: string };
+  readonly [P in D[number]]: {
+    readonly output: unknown;
+    readonly _source: string;
+  };
 };
 
 /**
@@ -325,8 +347,14 @@ export interface TaskDef<
   readonly agent: A;
   readonly dependsOn?: D;
   readonly input?:
-    | import("zod").infer<A extends { input: infer I extends ZodType } ? I : never>
-    | ((ctx: BoundCtx<D>) => import("zod").infer<A extends { input: infer I extends ZodType } ? I : never>);
+    | import("zod").infer<
+        A extends { input: infer I extends ZodType } ? I : never
+      >
+    | ((
+        ctx: BoundCtx<D>,
+      ) => import("zod").infer<
+        A extends { input: infer I extends ZodType } ? I : never
+      >);
   readonly session?: SessionRef<RunnerOf<A>>;
   readonly hitl?: HITLConfig;
   readonly mustUse?: readonly string[];
@@ -387,7 +415,10 @@ export interface WorkflowHooks<T extends TasksMap = TasksMap> {
    * Use this to send Telegram/Slack notifications before proceeding.
    */
   readonly onCheckpoint?: (taskName: keyof T & string, message: string) => void;
-  readonly onWorkflowComplete?: (result: unknown, summary: WorkflowMetrics) => void;
+  readonly onWorkflowComplete?: (
+    result: unknown,
+    summary: WorkflowMetrics,
+  ) => void;
 }
 
 export interface WorkflowDef<T extends TasksMap = TasksMap> {

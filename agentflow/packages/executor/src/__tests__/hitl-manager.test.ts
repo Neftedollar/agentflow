@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
-import { HITLManager } from "../hitl-manager.js";
-import { HitlNotInteractiveError } from "../errors.js";
 import type { WorkflowHooks } from "@agentflow/core";
+import { describe, expect, it, vi } from "vitest";
+import { HitlNotInteractiveError } from "../errors.js";
+import { HITLManager } from "../hitl-manager.js";
 
 describe("HITLManager", () => {
   // ─── resolveConfig ─────────────────────────────────────────────────────────
@@ -30,7 +30,7 @@ describe("HITLManager", () => {
     it("returns task-level permissions config", () => {
       const taskHitl = {
         mode: "permissions" as const,
-        permissions: { "bash": true, "read": false },
+        permissions: { bash: true, read: false },
       };
       const config = hm.resolveConfig(undefined, taskHitl);
       expect(config).toEqual(taskHitl);
@@ -55,45 +55,45 @@ describe("HITLManager", () => {
     });
 
     it("mode 'permissions' with all allowed → returns all tools", () => {
-      const result = hm.applyPermissions(
-        ["bash", "read", "write"],
-        { mode: "permissions", permissions: { bash: true, read: true, write: true } },
-      );
+      const result = hm.applyPermissions(["bash", "read", "write"], {
+        mode: "permissions",
+        permissions: { bash: true, read: true, write: true },
+      });
       expect(result.tools).toEqual(["bash", "read", "write"]);
     });
 
     it("mode 'permissions' with deny → filters out denied tools", () => {
-      const result = hm.applyPermissions(
-        ["bash", "read", "write"],
-        { mode: "permissions", permissions: { bash: true, read: false, write: true } },
-      );
+      const result = hm.applyPermissions(["bash", "read", "write"], {
+        mode: "permissions",
+        permissions: { bash: true, read: false, write: true },
+      });
       expect(result.tools).toEqual(["bash", "write"]);
       expect(result.tools).not.toContain("read");
     });
 
     it("mode 'permissions' with empty tools → returns empty array", () => {
-      const result = hm.applyPermissions(
-        undefined,
-        { mode: "permissions", permissions: { bash: true } },
-      );
+      const result = hm.applyPermissions(undefined, {
+        mode: "permissions",
+        permissions: { bash: true },
+      });
       expect(result.tools).toEqual([]);
     });
 
     it("mode 'permissions' → returns permissions map", () => {
       const perms = { bash: true, read: false };
-      const result = hm.applyPermissions(
-        ["bash"],
-        { mode: "permissions", permissions: perms },
-      );
+      const result = hm.applyPermissions(["bash"], {
+        mode: "permissions",
+        permissions: perms,
+      });
       expect(result.permissions).toEqual(perms);
     });
 
     it("deny-by-default: tool not in permissions map is blocked", () => {
       // A tool not listed in the permissions map: perms[t] is undefined, undefined !== true → blocked
-      const result = hm.applyPermissions(
-        ["bash", "unknown-tool"],
-        { mode: "permissions", permissions: { bash: true } },
-      );
+      const result = hm.applyPermissions(["bash", "unknown-tool"], {
+        mode: "permissions",
+        permissions: { bash: true },
+      });
       // "unknown-tool" is not explicitly true, so it is denied
       expect(result.tools).not.toContain("unknown-tool");
       expect(result.tools).toContain("bash");
@@ -106,7 +106,11 @@ describe("HITLManager", () => {
     it("hook returns true → resolves without TTY check", async () => {
       const hm = new HITLManager();
       const hooks: WorkflowHooks = {
-        onCheckpoint: vi.fn().mockReturnValue(Promise.resolve(true)) as WorkflowHooks["onCheckpoint"],
+        onCheckpoint: vi
+          .fn()
+          .mockReturnValue(
+            Promise.resolve(true),
+          ) as WorkflowHooks["onCheckpoint"],
       };
 
       await expect(
@@ -117,12 +121,19 @@ describe("HITLManager", () => {
     it("hook returns false → throws HitlNotInteractiveError (no TTY)", async () => {
       const hm = new HITLManager();
       const hooks: WorkflowHooks = {
-        onCheckpoint: vi.fn().mockReturnValue(Promise.resolve(false)) as WorkflowHooks["onCheckpoint"],
+        onCheckpoint: vi
+          .fn()
+          .mockReturnValue(
+            Promise.resolve(false),
+          ) as WorkflowHooks["onCheckpoint"],
       };
 
       // Ensure no TTY in test environment
       const originalIsTTY = process.stdin.isTTY;
-      Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+      Object.defineProperty(process.stdin, "isTTY", {
+        value: false,
+        configurable: true,
+      });
 
       try {
         await expect(
@@ -130,9 +141,15 @@ describe("HITLManager", () => {
         ).rejects.toThrow(HitlNotInteractiveError);
       } finally {
         if (originalIsTTY !== undefined) {
-          Object.defineProperty(process.stdin, "isTTY", { value: originalIsTTY, configurable: true });
+          Object.defineProperty(process.stdin, "isTTY", {
+            value: originalIsTTY,
+            configurable: true,
+          });
         } else {
-          Object.defineProperty(process.stdin, "isTTY", { value: undefined, configurable: true });
+          Object.defineProperty(process.stdin, "isTTY", {
+            value: undefined,
+            configurable: true,
+          });
         }
       }
     });
@@ -141,37 +158,54 @@ describe("HITLManager", () => {
       const hm = new HITLManager();
       // Synchronous void return — not approval
       const hooks: WorkflowHooks = {
-        onCheckpoint: vi.fn().mockReturnValue(undefined) as WorkflowHooks["onCheckpoint"],
+        onCheckpoint: vi
+          .fn()
+          .mockReturnValue(undefined) as WorkflowHooks["onCheckpoint"],
       };
 
-      Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+      Object.defineProperty(process.stdin, "isTTY", {
+        value: false,
+        configurable: true,
+      });
 
       try {
         await expect(
           hm.runCheckpoint("my-task", "Approve?", hooks),
         ).rejects.toThrow(HitlNotInteractiveError);
       } finally {
-        Object.defineProperty(process.stdin, "isTTY", { value: undefined, configurable: true });
+        Object.defineProperty(process.stdin, "isTTY", {
+          value: undefined,
+          configurable: true,
+        });
       }
     });
 
     it("no hook, no TTY → throws HitlNotInteractiveError", async () => {
       const hm = new HITLManager();
 
-      Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+      Object.defineProperty(process.stdin, "isTTY", {
+        value: false,
+        configurable: true,
+      });
 
       try {
         await expect(
           hm.runCheckpoint("my-task", "Approve?", undefined),
         ).rejects.toThrow(HitlNotInteractiveError);
       } finally {
-        Object.defineProperty(process.stdin, "isTTY", { value: undefined, configurable: true });
+        Object.defineProperty(process.stdin, "isTTY", {
+          value: undefined,
+          configurable: true,
+        });
       }
     });
 
     it("HitlNotInteractiveError includes taskName", async () => {
       const hm = new HITLManager();
-      Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+      Object.defineProperty(process.stdin, "isTTY", {
+        value: false,
+        configurable: true,
+      });
 
       let caught: HitlNotInteractiveError | undefined;
       try {
@@ -181,7 +215,10 @@ describe("HITLManager", () => {
           caught = e;
         }
       } finally {
-        Object.defineProperty(process.stdin, "isTTY", { value: undefined, configurable: true });
+        Object.defineProperty(process.stdin, "isTTY", {
+          value: undefined,
+          configurable: true,
+        });
       }
 
       expect(caught?.taskName).toBe("checkpoint-task");
@@ -194,13 +231,21 @@ describe("HITLManager", () => {
         onCheckpoint: hookFn as WorkflowHooks["onCheckpoint"],
       };
 
-      Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+      Object.defineProperty(process.stdin, "isTTY", {
+        value: false,
+        configurable: true,
+      });
 
       try {
-        await hm.runCheckpoint("my-task", "message", hooks).catch(() => {/* expected to throw */});
+        await hm.runCheckpoint("my-task", "message", hooks).catch(() => {
+          /* expected to throw */
+        });
         expect(hookFn).toHaveBeenCalledWith("my-task", "message");
       } finally {
-        Object.defineProperty(process.stdin, "isTTY", { value: undefined, configurable: true });
+        Object.defineProperty(process.stdin, "isTTY", {
+          value: undefined,
+          configurable: true,
+        });
       }
     });
   });

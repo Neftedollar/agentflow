@@ -1,5 +1,9 @@
 import { AgentFlowError, AgentHitlConflictError } from "@agentflow/core";
-import type { Runner, RunnerSpawnArgs, RunnerSpawnResult } from "@agentflow/core";
+import type {
+  Runner,
+  RunnerSpawnArgs,
+  RunnerSpawnResult,
+} from "@agentflow/core";
 
 // ─── Errors ───────────────────────────────────────────────────────────────────
 
@@ -66,10 +70,19 @@ export interface SpawnResult {
   exited: Promise<number>;
 }
 
-export type SpawnSyncFn = (cmd: string[], opts?: { stdout: string; stderr: string }) => SpawnSyncResult;
-export type SpawnFn = (cmd: string[], opts?: { stdout: string; stderr: string }) => SpawnResult;
+export type SpawnSyncFn = (
+  cmd: string[],
+  opts?: { stdout: string; stderr: string },
+) => SpawnSyncResult;
+export type SpawnFn = (
+  cmd: string[],
+  opts?: { stdout: string; stderr: string },
+) => SpawnResult;
 
-function defaultSpawnSync(cmd: string[], _opts?: { stdout: string; stderr: string }): SpawnSyncResult {
+function defaultSpawnSync(
+  cmd: string[],
+  _opts?: { stdout: string; stderr: string },
+): SpawnSyncResult {
   const result = Bun.spawnSync(cmd, {
     stdin: "ignore",
     stdout: "pipe",
@@ -83,7 +96,10 @@ function defaultSpawnSync(cmd: string[], _opts?: { stdout: string; stderr: strin
   };
 }
 
-function defaultSpawn(cmd: string[], _opts?: { stdout: string; stderr: string }): SpawnResult {
+function defaultSpawn(
+  cmd: string[],
+  _opts?: { stdout: string; stderr: string },
+): SpawnResult {
   const proc = Bun.spawn(cmd, {
     stdin: "ignore", // C5: prevent stdin inheritance / "Reading additional input..." prompt
     stdout: "pipe",
@@ -121,7 +137,8 @@ export class CodexRunner implements Runner {
     if (whichResult.exitCode !== 0) {
       return {
         ok: false,
-        error: "codex CLI not found on PATH. Install via: npm install -g @openai/codex",
+        error:
+          "codex CLI not found on PATH. Install via: npm install -g @openai/codex",
       };
     }
 
@@ -159,7 +176,14 @@ export class CodexRunner implements Runner {
     // Session resumption uses a positional subcommand, not a flag
     let cmd: string[];
     if (args.sessionHandle !== undefined && args.sessionHandle !== "") {
-      cmd = ["codex", "exec", ...subArgs, "resume", args.sessionHandle, finalPrompt];
+      cmd = [
+        "codex",
+        "exec",
+        ...subArgs,
+        "resume",
+        args.sessionHandle,
+        finalPrompt,
+      ];
     } else {
       cmd = ["codex", "exec", ...subArgs, finalPrompt];
     }
@@ -204,7 +228,7 @@ export class CodexRunner implements Runner {
       try {
         const parsed = JSON.parse(line) as CodexJsonLine;
 
-        switch (parsed["type"]) {
+        switch (parsed.type) {
           case "thread.started": {
             const ev = parsed as unknown as CodexThreadStarted;
             threadId = ev.thread_id ?? "";
@@ -213,7 +237,10 @@ export class CodexRunner implements Runner {
           case "item.completed": {
             const ev = parsed as unknown as CodexItemCompleted;
             // Take last agent_message — tool calls and reasoning emit earlier items
-            if (ev.item?.type === "agent_message" && ev.item.text !== undefined) {
+            if (
+              ev.item?.type === "agent_message" &&
+              ev.item.text !== undefined
+            ) {
               lastAgentMessage = ev.item.text;
             }
             break;

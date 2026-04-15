@@ -1,10 +1,10 @@
 import path from "node:path";
-import type { Command } from "commander";
-import { topologicalSort } from "@agentflow/executor";
 import { resolveAgentDef } from "@agentflow/core";
-import type { TasksMap, WorkflowDef, AgentDef, TaskDef } from "@agentflow/core";
-import { renderDryRunTask, renderError } from "../output/renderer.js";
+import type { AgentDef, TaskDef, TasksMap, WorkflowDef } from "@agentflow/core";
+import { topologicalSort } from "@agentflow/executor";
 import chalk from "chalk";
+import type { Command } from "commander";
+import { renderDryRunTask, renderError } from "../output/renderer.js";
 
 export function registerDryRunCommand(program: Command): void {
   program
@@ -16,7 +16,7 @@ export function registerDryRunCommand(program: Command): void {
 
         let mod: Record<string, unknown>;
         try {
-          mod = await import(resolvedPath) as Record<string, unknown>;
+          mod = (await import(resolvedPath)) as Record<string, unknown>;
         } catch (importErr) {
           renderError(
             `Cannot import workflow file "${workflowFile}": ${importErr instanceof Error ? importErr.message : String(importErr)}`,
@@ -24,16 +24,20 @@ export function registerDryRunCommand(program: Command): void {
           process.exit(1);
         }
 
-        const workflow = (mod["default"] ?? mod["workflow"]) as WorkflowDef | undefined;
+        const workflow = (mod.default ?? mod.workflow) as
+          | WorkflowDef
+          | undefined;
 
         if (workflow === undefined || !("tasks" in workflow)) {
-          renderError(`Invalid workflow file: must export a default WorkflowDef`);
+          renderError(
+            "Invalid workflow file: must export a default WorkflowDef",
+          );
           process.exit(1);
         }
 
         process.stdout.write(
           chalk.bold(`Dry-run: ${workflow.name}`) +
-          chalk.dim(` (${workflowFile})\n`),
+            chalk.dim(` (${workflowFile})\n`),
         );
 
         // Resolve execution order via topological sort
@@ -48,7 +52,9 @@ export function registerDryRunCommand(program: Command): void {
           if (batch === undefined) continue;
 
           process.stdout.write(
-            chalk.dim(`\nBatch ${batchIdx + 1} [parallel]: ${batch.join(", ")}\n`),
+            chalk.dim(
+              `\nBatch ${batchIdx + 1} [parallel]: ${batch.join(", ")}\n`,
+            ),
           );
 
           for (const taskName of batch) {
@@ -58,9 +64,10 @@ export function registerDryRunCommand(program: Command): void {
             if ("kind" in taskDef) {
               // LoopDef
               process.stdout.write(
-                chalk.bold(`\n── Loop: ${taskName}`) +
-                chalk.dim(` (max: ${taskDef.max} iterations)`) +
-                "\n",
+                `${
+                  chalk.bold(`\n── Loop: ${taskName}`) +
+                  chalk.dim(` (max: ${taskDef.max} iterations)`)
+                }\n`,
               );
               renderDryRunInner(taskDef.tasks);
             } else {
@@ -75,7 +82,9 @@ export function registerDryRunCommand(program: Command): void {
                 const placeholderInput = buildPlaceholder(task.agent.input);
                 prompt = resolved.prompt(placeholderInput);
               } catch {
-                prompt = chalk.dim("[prompt could not be rendered — depends on runtime context]");
+                prompt = chalk.dim(
+                  "[prompt could not be rendered — depends on runtime context]",
+                );
               }
 
               renderDryRunTask(taskName, resolved.runner, prompt, deps);
@@ -100,9 +109,7 @@ function renderDryRunInner(tasks: TasksMap): void {
       if (taskDef === undefined) continue;
 
       if ("kind" in taskDef) {
-        process.stdout.write(
-          chalk.bold(`    ── Loop: ${taskName}`) + "\n",
-        );
+        process.stdout.write(`${chalk.bold(`    ── Loop: ${taskName}`)}\n`);
         renderDryRunInner(taskDef.tasks);
       } else {
         // biome-ignore lint/suspicious/noExplicitAny: structural constraint
@@ -115,7 +122,9 @@ function renderDryRunInner(tasks: TasksMap): void {
           const placeholderInput = buildPlaceholder(task.agent.input);
           prompt = resolved.prompt(placeholderInput);
         } catch {
-          prompt = chalk.dim("[prompt could not be rendered — depends on runtime context]");
+          prompt = chalk.dim(
+            "[prompt could not be rendered — depends on runtime context]",
+          );
         }
 
         renderDryRunTask(`  ${taskName}`, resolved.runner, prompt, deps);
@@ -128,7 +137,9 @@ function renderDryRunInner(tasks: TasksMap): void {
  * Build a placeholder object from a Zod schema for prompt preview.
  * Produces "{field: <field>}" style objects for display purposes.
  */
-function buildPlaceholder(schema: import("zod").ZodType): Record<string, unknown> {
+function buildPlaceholder(
+  schema: import("zod").ZodType,
+): Record<string, unknown> {
   // biome-ignore lint/suspicious/noExplicitAny: introspecting Zod internals
   const def = (schema as any)._def;
   if (def?.typeName === "ZodObject") {

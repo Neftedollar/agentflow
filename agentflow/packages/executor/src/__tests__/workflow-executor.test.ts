@@ -1,5 +1,3 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { z } from "zod";
 import {
   defineAgent,
   defineWorkflow,
@@ -7,13 +5,18 @@ import {
   sessionToken,
 } from "@agentflow/core";
 import type { Runner, RunnerSpawnResult } from "@agentflow/core";
-import { WorkflowExecutor } from "../workflow-executor.js";
-import { RunnerNotRegisteredError } from "../errors.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { BudgetTracker } from "../budget-tracker.js";
+import { RunnerNotRegisteredError } from "../errors.js";
+import { WorkflowExecutor } from "../workflow-executor.js";
 
 // ─── Mock runner helpers ───────────────────────────────────────────────────────
 
-function makeSuccessResult(data: unknown, sessionHandle = "sess-abc"): RunnerSpawnResult {
+function makeSuccessResult(
+  data: unknown,
+  sessionHandle = "sess-abc",
+): RunnerSpawnResult {
   return {
     stdout: JSON.stringify(data),
     sessionHandle,
@@ -23,7 +26,10 @@ function makeSuccessResult(data: unknown, sessionHandle = "sess-abc"): RunnerSpa
 }
 
 function makeMockRunner(
-  spawnImpl: (args: { prompt: string; sessionHandle?: string }) => Promise<RunnerSpawnResult>,
+  spawnImpl: (args: {
+    prompt: string;
+    sessionHandle?: string;
+  }) => Promise<RunnerSpawnResult>,
 ): Runner {
   return {
     validate: vi.fn().mockResolvedValue({ ok: true }),
@@ -88,7 +94,9 @@ describe("WorkflowExecutor", () => {
         taskB: {
           agent: agentB,
           dependsOn: ["taskA"],
-          input: (ctx) => ({ upstream: (ctx["taskA"]?.output as { result: string }).result }),
+          input: (ctx) => ({
+            upstream: (ctx.taskA?.output as { result: string }).result,
+          }),
         },
       },
     });
@@ -96,8 +104,8 @@ describe("WorkflowExecutor", () => {
     const executor = new WorkflowExecutor(workflow);
     const result = await executor.run();
 
-    expect(result.outputs["taskA"]).toEqual({ result: "from-A" });
-    expect(result.outputs["taskB"]).toEqual({ final: "from-B" });
+    expect(result.outputs.taskA).toEqual({ result: "from-A" });
+    expect(result.outputs.taskB).toEqual({ final: "from-B" });
     // B's prompt should contain "from-A" (passed via input function)
     expect(capturedBInput).toContain("from-A");
   });
@@ -163,7 +171,12 @@ describe("WorkflowExecutor", () => {
     expect(onWorkflowComplete).toHaveBeenCalledTimes(1);
     const [outputs, metrics] = onWorkflowComplete.mock.calls[0] as [
       unknown,
-      { totalLatencyMs: number; taskCount: number; totalTokensIn: number; totalTokensOut: number },
+      {
+        totalLatencyMs: number;
+        taskCount: number;
+        totalTokensIn: number;
+        totalTokensOut: number;
+      },
     ];
     expect(outputs).toBeDefined();
     expect(metrics.taskCount).toBe(1);
@@ -215,7 +228,9 @@ describe("WorkflowExecutor", () => {
         taskB: {
           agent: agentB,
           dependsOn: ["taskA"],
-          input: (ctx) => ({ upstream: (ctx["taskA"]?.output as { result: string }).result }),
+          input: (ctx) => ({
+            upstream: (ctx.taskA?.output as { result: string }).result,
+          }),
         },
       },
       budget: { maxCost: 1.0, onExceed: "halt" }, // $1 limit, already exceeded
@@ -250,7 +265,9 @@ describe("WorkflowExecutor", () => {
         taskB: {
           agent: agentB,
           dependsOn: ["taskA"],
-          input: (ctx) => ({ upstream: (ctx["taskA"]?.output as { result: string }).result }),
+          input: (ctx) => ({
+            upstream: (ctx.taskA?.output as { result: string }).result,
+          }),
           session: tok,
         },
       },
@@ -273,7 +290,9 @@ describe("WorkflowExecutor", () => {
         taskB: {
           agent: agentB,
           dependsOn: ["taskA"],
-          input: (ctx) => ({ upstream: (ctx["taskA"]?.output as { result: string }).result }),
+          input: (ctx) => ({
+            upstream: (ctx.taskA?.output as { result: string }).result,
+          }),
         },
       },
     });

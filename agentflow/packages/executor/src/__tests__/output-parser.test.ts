@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { parseAgentOutput } from "../output-parser.js";
 import { OutputValidationError } from "../errors.js";
+import { parseAgentOutput } from "../output-parser.js";
 
 const schema = z.object({
   answer: z.string(),
@@ -16,30 +16,36 @@ describe("parseAgentOutput", () => {
   });
 
   it("parses JSON wrapped in ```json fence", () => {
-    const stdout = "```json\n{\"answer\": \"world\", \"count\": 7}\n```";
+    const stdout = '```json\n{"answer": "world", "count": 7}\n```';
     const result = parseAgentOutput(stdout, schema, "test-task");
     expect(result).toEqual({ answer: "world", count: 7 });
   });
 
   it("parses JSON wrapped in ``` fence (no language)", () => {
-    const stdout = "```\n{\"answer\": \"bare\", \"count\": 0}\n```";
+    const stdout = '```\n{"answer": "bare", "count": 0}\n```';
     const result = parseAgentOutput(stdout, schema, "test-task");
     expect(result).toEqual({ answer: "bare", count: 0 });
   });
 
   it("throws OutputValidationError for invalid JSON", () => {
     const stdout = "this is not json at all";
-    expect(() => parseAgentOutput(stdout, schema, "my-task")).toThrow(OutputValidationError);
+    expect(() => parseAgentOutput(stdout, schema, "my-task")).toThrow(
+      OutputValidationError,
+    );
   });
 
   it("includes 'Could not parse JSON' in error message for invalid JSON", () => {
     const stdout = "{ broken json }";
-    expect(() => parseAgentOutput(stdout, schema, "my-task")).toThrow(/Could not parse JSON/);
+    expect(() => parseAgentOutput(stdout, schema, "my-task")).toThrow(
+      /Could not parse JSON/,
+    );
   });
 
   it("throws OutputValidationError when JSON fails Zod schema validation", () => {
     const stdout = JSON.stringify({ answer: 123, count: "not-a-number" });
-    expect(() => parseAgentOutput(stdout, schema, "my-task")).toThrow(OutputValidationError);
+    expect(() => parseAgentOutput(stdout, schema, "my-task")).toThrow(
+      OutputValidationError,
+    );
   });
 
   it("includes schema error message in OutputValidationError", () => {
@@ -57,21 +63,27 @@ describe("parseAgentOutput", () => {
   });
 
   it("strips extra fields by Zod (strip mode)", () => {
-    const stdout = JSON.stringify({ answer: "hello", count: 1, extra: "unwanted" });
+    const stdout = JSON.stringify({
+      answer: "hello",
+      count: 1,
+      extra: "unwanted",
+    });
     const result = parseAgentOutput(stdout, schema, "test-task");
     expect(result).toEqual({ answer: "hello", count: 1 });
     expect("extra" in result).toBe(false);
   });
 
   it("handles whitespace around JSON", () => {
-    const stdout = "  \n" + JSON.stringify({ answer: "padded", count: 5 }) + "\n  ";
+    const stdout = `  \n${JSON.stringify({ answer: "padded", count: 5 })}\n  `;
     const result = parseAgentOutput(stdout, schema, "test-task");
     expect(result).toEqual({ answer: "padded", count: 5 });
   });
 
   it("throws OutputValidationError for invalid JSON in fence", () => {
     const stdout = "```json\n{broken}\n```";
-    expect(() => parseAgentOutput(stdout, schema, "my-task")).toThrow(OutputValidationError);
+    expect(() => parseAgentOutput(stdout, schema, "my-task")).toThrow(
+      OutputValidationError,
+    );
   });
 
   it("sets correct taskName in OutputValidationError", () => {
@@ -102,13 +114,15 @@ describe("parseAgentOutput", () => {
   it("extracts JSON from fence block preceded by prose (regression B2)", () => {
     // Regression test: agent output with explanation text before the code fence.
     // Common Claude pattern: "Here's the result:\n\n```json\n{...}\n```"
-    const stdout = "Here's the structured result:\n\n```json\n{\"answer\": \"prose\", \"count\": 3}\n```";
+    const stdout =
+      'Here\'s the structured result:\n\n```json\n{"answer": "prose", "count": 3}\n```';
     const result = parseAgentOutput(stdout, schema, "test-task");
     expect(result).toEqual({ answer: "prose", count: 3 });
   });
 
   it("extracts JSON from fence block followed by prose", () => {
-    const stdout = "```json\n{\"answer\": \"before\", \"count\": 1}\n```\n\nNote: this is the answer.";
+    const stdout =
+      '```json\n{"answer": "before", "count": 1}\n```\n\nNote: this is the answer.';
     const result = parseAgentOutput(stdout, schema, "test-task");
     expect(result).toEqual({ answer: "before", count: 1 });
   });

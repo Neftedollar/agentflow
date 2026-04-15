@@ -2,13 +2,13 @@ import { spawnSync } from "node:child_process";
 import type { TasksMap, WorkflowDef } from "@agentflow/core";
 import { validateStaticIdentifier } from "@agentflow/core";
 import { topologicalSort } from "./dag-resolver.js";
-import { SessionManager } from "./session-manager.js";
 import {
   CyclicDependencyError,
-  UnresolvedDependencyError,
   SessionCycleError,
+  UnresolvedDependencyError,
   UnresolvedSessionRefError,
 } from "./errors.js";
+import { SessionManager } from "./session-manager.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -92,7 +92,12 @@ function validateDAG(tasks: TasksMap, errors: string[]): void {
 
   // Recurse into loop inner tasks so inner cycles/unresolved deps surface at preflight
   for (const task of Object.values(tasks)) {
-    if (task !== undefined && typeof task === "object" && "kind" in task && task.kind === "loop") {
+    if (
+      task !== undefined &&
+      typeof task === "object" &&
+      "kind" in task &&
+      task.kind === "loop"
+    ) {
       validateDAG((task as { tasks: TasksMap }).tasks, errors);
     }
   }
@@ -130,7 +135,9 @@ function validateStaticArgs(tasks: TasksMap, errors: string[]): void {
     try {
       validateStaticIdentifier(agent.runner, "runner");
     } catch {
-      errors.push(`Task "${taskName}": runner "${agent.runner}" is not a valid static identifier`);
+      errors.push(
+        `Task "${taskName}": runner "${agent.runner}" is not a valid static identifier`,
+      );
     }
 
     // Validate model identifier
@@ -138,7 +145,9 @@ function validateStaticArgs(tasks: TasksMap, errors: string[]): void {
       try {
         validateStaticIdentifier(agent.model, "model");
       } catch {
-        errors.push(`Task "${taskName}": model "${agent.model}" is not a valid static identifier`);
+        errors.push(
+          `Task "${taskName}": model "${agent.model}" is not a valid static identifier`,
+        );
       }
     }
 
@@ -188,7 +197,10 @@ function validateEnvVars(tasks: TasksMap, warnings: string[]): void {
   }
 }
 
-function validateCrossProviderSessions(tasks: TasksMap, warnings: string[]): void {
+function validateCrossProviderSessions(
+  tasks: TasksMap,
+  warnings: string[],
+): void {
   // Build map: canonical token name → set of runner names that use it
   const tokenRunners = new Map<string, Set<string>>();
 

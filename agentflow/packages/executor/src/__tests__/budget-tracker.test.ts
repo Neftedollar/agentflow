@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { BudgetTracker } from "../budget-tracker.js";
 import { BudgetExceededError } from "@agentflow/core";
+import { describe, expect, it } from "vitest";
+import { BudgetTracker } from "../budget-tracker.js";
 
 describe("BudgetTracker", () => {
   // ─── costFor ───────────────────────────────────────────────────────────────
@@ -37,8 +37,16 @@ describe("BudgetTracker", () => {
     it("falls back to _default for unknown model", () => {
       const tracker = new BudgetTracker();
       // _default = $3.00/M input, $15.00/M output (same as sonnet)
-      const defaultCost = tracker.costFor("unknown-model-xyz", 1_000_000, 1_000_000);
-      const sonnetCost = tracker.costFor("claude-sonnet-4-6", 1_000_000, 1_000_000);
+      const defaultCost = tracker.costFor(
+        "unknown-model-xyz",
+        1_000_000,
+        1_000_000,
+      );
+      const sonnetCost = tracker.costFor(
+        "claude-sonnet-4-6",
+        1_000_000,
+        1_000_000,
+      );
       expect(defaultCost).toBeCloseTo(sonnetCost);
     });
 
@@ -67,7 +75,7 @@ describe("BudgetTracker", () => {
     it("accumulates costs from different models", () => {
       const tracker = new BudgetTracker();
       tracker.addCost("claude-sonnet-4-6", 1_000_000, 0); // $3.00
-      tracker.addCost("claude-opus-4-6", 1_000_000, 0);   // $15.00
+      tracker.addCost("claude-opus-4-6", 1_000_000, 0); // $15.00
       expect(tracker.total).toBeCloseTo(18.0);
     });
   });
@@ -130,7 +138,9 @@ describe("BudgetTracker", () => {
     it("returns false when under limit", () => {
       const tracker = new BudgetTracker();
       tracker.addCost("claude-haiku-4-5", 100, 100);
-      expect(tracker.exceeded({ maxCost: 100.0, onExceed: "halt" })).toBe(false);
+      expect(tracker.exceeded({ maxCost: 100.0, onExceed: "halt" })).toBe(
+        false,
+      );
     });
 
     it("returns true when over limit", () => {

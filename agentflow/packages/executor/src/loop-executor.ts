@@ -1,7 +1,7 @@
 import type { LoopDef, TasksMap } from "@agentflow/core";
 import { LoopMaxIterationsError } from "@agentflow/core";
 import { SessionManager } from "./session-manager.js";
-import type { RunBatchesFn, CtxEntry } from "./types-internal.js";
+import type { CtxEntry, RunBatchesFn } from "./types-internal.js";
 
 export class LoopExecutor {
   constructor(private readonly runBatches: RunBatchesFn) {}
@@ -28,7 +28,9 @@ export class LoopExecutor {
 
     // For persistent context: one SessionManager lives across all iterations so
     // handles naturally accumulate. For fresh: a new one is created each time.
-    const persistentSM = isPersistent ? new SessionManager(loopDef.tasks) : undefined;
+    const persistentSM = isPersistent
+      ? new SessionManager(loopDef.tasks)
+      : undefined;
 
     let lastOutput: unknown = undefined;
 
@@ -38,11 +40,11 @@ export class LoopExecutor {
 
       // Add feedback from last iteration (if applicable)
       if (iteration > 0 && lastOutput !== undefined) {
-        innerCtx["__loop_feedback__"] = { output: lastOutput, _source: "loop" };
+        innerCtx.__loop_feedback__ = { output: lastOutput, _source: "loop" };
       }
 
       // Select the session manager for this iteration (C1 fix: always loop-local)
-      const sm = isPersistent ? persistentSM! : new SessionManager(loopDef.tasks);
+      const sm = persistentSM ?? new SessionManager(loopDef.tasks);
 
       // Resolve input for this iteration
       let resolvedInput: unknown = undefined;
@@ -55,17 +57,25 @@ export class LoopExecutor {
             }
           }
           if (iteration > 0 && lastOutput !== undefined) {
-            inputCtx["feedback"] = lastOutput;
+            inputCtx.feedback = lastOutput;
           }
-          resolvedInput = (loopDef.input as (ctx: unknown) => unknown)(inputCtx);
+          resolvedInput = (loopDef.input as (ctx: unknown) => unknown)(
+            inputCtx,
+          );
         } else {
           resolvedInput = loopDef.input;
         }
       }
 
       // Merge resolved input into inner ctx if it's an object
-      if (resolvedInput !== undefined && typeof resolvedInput === "object" && resolvedInput !== null) {
-        for (const [k, v] of Object.entries(resolvedInput as Record<string, unknown>)) {
+      if (
+        resolvedInput !== undefined &&
+        typeof resolvedInput === "object" &&
+        resolvedInput !== null
+      ) {
+        for (const [k, v] of Object.entries(
+          resolvedInput as Record<string, unknown>,
+        )) {
           innerCtx[k] = { output: v, _source: "loop" };
         }
       }

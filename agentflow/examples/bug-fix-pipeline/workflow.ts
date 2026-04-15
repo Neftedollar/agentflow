@@ -1,9 +1,14 @@
-import { defineWorkflow, loop, sessionToken, registerRunner } from "@agentflow/core";
+import {
+  defineWorkflow,
+  loop,
+  registerRunner,
+  sessionToken,
+} from "@agentflow/core";
 import type { CtxFor } from "@agentflow/core";
 import { ClaudeRunner } from "@agentflow/runner-claude";
 import { analyzeAgent } from "./agents/analyze.js";
-import { fixAgent } from "./agents/fix.js";
 import { evalAgent } from "./agents/eval.js";
+import { fixAgent } from "./agents/fix.js";
 import { summarizeAgent } from "./agents/summarize.js";
 
 // Register runner (top-level side effect — runs when file is imported by agentwf or Node)
@@ -34,11 +39,13 @@ const fixLoop = loop({
   context: "persistent",
   until: (ctx: unknown) => {
     const c = ctx as Record<string, { output: { satisfied?: boolean } }>;
-    return c["eval"]?.output?.satisfied === true;
+    return c.eval?.output?.satisfied === true;
   },
   input: (ctx: unknown) => {
     const c = ctx as Record<string, { output: unknown }>;
-    const analyzeOut = c["analyze"]?.output as { issues?: IssueShape[] } | undefined;
+    const analyzeOut = c.analyze?.output as
+      | { issues?: IssueShape[] }
+      | undefined;
     // Pass the first issue into the loop as ctx["issue"] for fix and eval tasks
     const issue: IssueShape = analyzeOut?.issues?.[0] ?? {
       id: "none",
@@ -56,12 +63,21 @@ const fixLoop = loop({
       // ctx["__loop_feedback__"] carries the previous iteration's full output (iteration ≥ 2).
       input: (ctx: Record<string, { output: unknown }>) => {
         const c = ctx;
-        const issue = c["issue"]?.output as IssueShape | undefined;
+        const issue = c.issue?.output as IssueShape | undefined;
         // On retry: surface the previous patch so the agent knows what didn't work
-        const feedback = c["__loop_feedback__"]?.output as Record<string, { output: unknown }> | undefined;
-        const prevPatch = (feedback?.["fix"]?.output as { patch?: string } | undefined)?.patch;
+        const feedback = c.__loop_feedback__?.output as
+          | Record<string, { output: unknown }>
+          | undefined;
+        const prevPatch = (
+          feedback?.fix?.output as { patch?: string } | undefined
+        )?.patch;
         return {
-          issue: issue ?? { id: "none", file: "unknown", description: "no issues", severity: "low" as const },
+          issue: issue ?? {
+            id: "none",
+            file: "unknown",
+            description: "no issues",
+            severity: "low" as const,
+          },
           ...(prevPatch !== undefined ? { previousAttempt: prevPatch } : {}),
         };
       },
@@ -72,10 +88,17 @@ const fixLoop = loop({
       session: fixSession,
       input: (ctx: Record<string, { output: unknown }>) => {
         const c = ctx;
-        const issue = c["issue"]?.output as IssueShape | undefined;
-        const fixOut = c["fix"]?.output as { patch?: string; explanation?: string } | undefined;
+        const issue = c.issue?.output as IssueShape | undefined;
+        const fixOut = c.fix?.output as
+          | { patch?: string; explanation?: string }
+          | undefined;
         return {
-          issue: issue ?? { id: "none", file: "unknown", description: "no issues", severity: "low" as const },
+          issue: issue ?? {
+            id: "none",
+            file: "unknown",
+            description: "no issues",
+            severity: "low" as const,
+          },
           patch: fixOut?.patch ?? "",
           explanation: fixOut?.explanation ?? "",
         };
@@ -91,9 +114,15 @@ const fixLoop = loop({
 
 // Explicit task map type enables CtxFor usage without circular reference.
 type WorkflowTasks = {
-  analyze: { agent: typeof analyzeAgent; input: { repoPath: string; focus: string } };
+  analyze: {
+    agent: typeof analyzeAgent;
+    input: { repoPath: string; focus: string };
+  };
   fixLoop: typeof fixLoop;
-  summarize: { agent: typeof summarizeAgent; dependsOn: readonly ["analyze", "fixLoop"] };
+  summarize: {
+    agent: typeof summarizeAgent;
+    dependsOn: readonly ["analyze", "fixLoop"];
+  };
 };
 
 export default defineWorkflow({

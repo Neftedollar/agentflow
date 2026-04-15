@@ -1,7 +1,12 @@
-import { describe, it, expect, vi } from "vitest";
 import { AgentHitlConflictError } from "@agentflow/core";
+import { describe, expect, it, vi } from "vitest";
 import { CodexRunner, CodexSubprocessError } from "../codex-runner.js";
-import type { SpawnFn, SpawnResult, SpawnSyncFn, SpawnSyncResult } from "../codex-runner.js";
+import type {
+  SpawnFn,
+  SpawnResult,
+  SpawnSyncFn,
+  SpawnSyncResult,
+} from "../codex-runner.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -9,7 +14,11 @@ function encodeStr(s: string): Uint8Array {
   return new TextEncoder().encode(s);
 }
 
-function makeSpawnSyncResult(exitCode: number, stdout: string, stderr = ""): SpawnSyncResult {
+function makeSpawnSyncResult(
+  exitCode: number,
+  stdout: string,
+  stderr = "",
+): SpawnSyncResult {
   return {
     exitCode,
     stdout: encodeStr(stdout),
@@ -17,7 +26,11 @@ function makeSpawnSyncResult(exitCode: number, stdout: string, stderr = ""): Spa
   };
 }
 
-function makeSpawnResult(stdout: string, exitCode = 0, stderr = ""): SpawnResult {
+function makeSpawnResult(
+  stdout: string,
+  exitCode = 0,
+  stderr = "",
+): SpawnResult {
   const encoder = new TextEncoder();
 
   const makeStream = (bytes: Uint8Array): ReadableStream<Uint8Array> =>
@@ -49,10 +62,20 @@ function makeCodexEventStream(
   const lines = [
     JSON.stringify({ type: "thread.started", thread_id: threadId }),
     JSON.stringify({ type: "turn.started" }),
-    JSON.stringify({ type: "item.completed", item: { id: "item_0", type: "agent_message", text: agentMessage } }),
-    JSON.stringify({ type: "turn.completed", usage: { input_tokens: tokensIn, cached_input_tokens: 0, output_tokens: tokensOut } }),
+    JSON.stringify({
+      type: "item.completed",
+      item: { id: "item_0", type: "agent_message", text: agentMessage },
+    }),
+    JSON.stringify({
+      type: "turn.completed",
+      usage: {
+        input_tokens: tokensIn,
+        cached_input_tokens: 0,
+        output_tokens: tokensOut,
+      },
+    }),
   ];
-  return lines.join("\n") + "\n";
+  return `${lines.join("\n")}\n`;
 }
 
 // ─── validate() tests ─────────────────────────────────────────────────────────
@@ -78,7 +101,9 @@ describe("CodexRunner.validate()", () => {
     const spawnSync: SpawnSyncFn = vi
       .fn()
       .mockReturnValueOnce(makeSpawnSyncResult(0, "/usr/bin/codex"))
-      .mockReturnValueOnce(makeSpawnSyncResult(0, "0.59.0 (29a7fe0d-2b17-43e2-b3bb-8fed03d1ce03)"));
+      .mockReturnValueOnce(
+        makeSpawnSyncResult(0, "0.59.0 (29a7fe0d-2b17-43e2-b3bb-8fed03d1ce03)"),
+      );
 
     const runner = new CodexRunner({ spawnSync });
     const result = await runner.validate();
@@ -118,9 +143,16 @@ describe("CodexRunner.validate()", () => {
 describe("CodexRunner.spawn()", () => {
   it("parses real codex event stream correctly", async () => {
     const agentMessage = JSON.stringify({ answer: "42" });
-    const eventStream = makeCodexEventStream(agentMessage, "thread-abc", 100, 200);
+    const eventStream = makeCodexEventStream(
+      agentMessage,
+      "thread-abc",
+      100,
+      200,
+    );
 
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     const result = await runner.spawn({ prompt: "What is the answer?" });
@@ -137,16 +169,30 @@ describe("CodexRunner.spawn()", () => {
       JSON.stringify({ type: "thread.started", thread_id: "thread-multi" }),
       JSON.stringify({ type: "turn.started" }),
       // Tool call item — not agent_message, should be ignored
-      JSON.stringify({ type: "item.completed", item: { id: "item_0", type: "tool_call", text: "calling bash..." } }),
+      JSON.stringify({
+        type: "item.completed",
+        item: { id: "item_0", type: "tool_call", text: "calling bash..." },
+      }),
       // Intermediate reasoning item — should be ignored
-      JSON.stringify({ type: "item.completed", item: { id: "item_1", type: "reasoning", text: "thinking..." } }),
+      JSON.stringify({
+        type: "item.completed",
+        item: { id: "item_1", type: "reasoning", text: "thinking..." },
+      }),
       // Final agent_message — this is the result
-      JSON.stringify({ type: "item.completed", item: { id: "item_2", type: "agent_message", text: "Final answer" } }),
-      JSON.stringify({ type: "turn.completed", usage: { input_tokens: 50, output_tokens: 10, cached_input_tokens: 0 } }),
+      JSON.stringify({
+        type: "item.completed",
+        item: { id: "item_2", type: "agent_message", text: "Final answer" },
+      }),
+      JSON.stringify({
+        type: "turn.completed",
+        usage: { input_tokens: 50, output_tokens: 10, cached_input_tokens: 0 },
+      }),
     ];
-    const eventStream = lines.join("\n") + "\n";
+    const eventStream = `${lines.join("\n")}\n`;
 
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     const result = await runner.spawn({ prompt: "test" });
@@ -158,35 +204,44 @@ describe("CodexRunner.spawn()", () => {
 
   it("includes model flag when model is provided", async () => {
     const eventStream = makeCodexEventStream("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     await runner.spawn({ prompt: "test", model: "gpt-4o" });
 
-    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
+    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string[];
     expect(callArgs).toContain("--model");
     expect(callArgs).toContain("gpt-4o");
   });
 
   it("does NOT include model flag when model is not provided", async () => {
     const eventStream = makeCodexEventStream("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     await runner.spawn({ prompt: "test" });
 
-    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
+    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string[];
     expect(callArgs).not.toContain("--model");
   });
 
   it("uses 'codex exec resume <THREAD_ID>' subcommand for session resumption", async () => {
     const eventStream = makeCodexEventStream("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     await runner.spawn({ prompt: "continue", sessionHandle: "thread-xyz" });
 
-    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
+    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string[];
     // Correct shape: ["codex", "exec", "--json", "resume", "thread-xyz", "continue"]
     expect(callArgs).toContain("exec");
     expect(callArgs).toContain("resume");
@@ -198,23 +253,29 @@ describe("CodexRunner.spawn()", () => {
 
   it("does NOT include resume subcommand for empty sessionHandle", async () => {
     const eventStream = makeCodexEventStream("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     await runner.spawn({ prompt: "test", sessionHandle: "" });
 
-    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
+    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string[];
     expect(callArgs).not.toContain("resume");
   });
 
   it("always uses 'codex exec --json' invocation shape", async () => {
     const eventStream = makeCodexEventStream("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     await runner.spawn({ prompt: "test" });
 
-    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
+    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string[];
     expect(callArgs[0]).toBe("codex");
     expect(callArgs[1]).toBe("exec");
     expect(callArgs).toContain("--json");
@@ -225,7 +286,9 @@ describe("CodexRunner.spawn()", () => {
 
   it("prepends system prompt before user prompt", async () => {
     const eventStream = makeCodexEventStream("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     await runner.spawn({
@@ -233,7 +296,8 @@ describe("CodexRunner.spawn()", () => {
       systemPrompt: "You are a helpful assistant",
     });
 
-    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
+    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string[];
     const lastArg = callArgs[callArgs.length - 1] ?? "";
     expect(lastArg).toContain("You are a helpful assistant");
     expect(lastArg).toContain("User prompt here");
@@ -248,7 +312,9 @@ describe("CodexRunner.spawn()", () => {
       .mockReturnValue(makeSpawnResult("", 1, "permission denied"));
     const runner = new CodexRunner({ spawn: spawnFn });
 
-    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(CodexSubprocessError);
+    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(
+      CodexSubprocessError,
+    );
   });
 
   it("throws CodexSubprocessError with stderr content", async () => {
@@ -257,30 +323,49 @@ describe("CodexRunner.spawn()", () => {
       .mockReturnValue(makeSpawnResult("", 2, "authentication failed"));
     const runner = new CodexRunner({ spawn: spawnFn });
 
-    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow("authentication failed");
+    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(
+      "authentication failed",
+    );
   });
 
   it("throws AgentHitlConflictError on [y/n] in non-JSON stdout", async () => {
     const hitlOutput = "Do you want to proceed? [y/n]\n";
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(hitlOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(hitlOutput));
     const runner = new CodexRunner({ spawn: spawnFn });
 
-    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(AgentHitlConflictError);
+    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(
+      AgentHitlConflictError,
+    );
   });
 
   it("throws AgentHitlConflictError on (Y/n) in non-JSON stdout", async () => {
     const hitlOutput = "Continue? (Y/n)\n";
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(hitlOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(hitlOutput));
     const runner = new CodexRunner({ spawn: spawnFn });
 
-    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(AgentHitlConflictError);
+    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(
+      AgentHitlConflictError,
+    );
   });
 
   it("does NOT throw AgentHitlConflictError when agent_message text contains [y/n]", async () => {
     // Regression: HITL check must NOT scan JSON event content.
-    const agentMessage = JSON.stringify({ answer: "Please choose [y/n] to proceed" });
-    const eventStream = makeCodexEventStream(agentMessage, "thread-abc", 10, 20);
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
+    const agentMessage = JSON.stringify({
+      answer: "Please choose [y/n] to proceed",
+    });
+    const eventStream = makeCodexEventStream(
+      agentMessage,
+      "thread-abc",
+      10,
+      20,
+    );
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     const result = await runner.spawn({ prompt: "test" });
@@ -289,7 +374,9 @@ describe("CodexRunner.spawn()", () => {
 
   it("returns thread_id as sessionHandle", async () => {
     const eventStream = makeCodexEventStream("{}", "thread-42");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(eventStream));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(eventStream));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     const result = await runner.spawn({ prompt: "test" });
@@ -300,10 +387,18 @@ describe("CodexRunner.spawn()", () => {
     // Only turn events, no thread.started
     const lines = [
       JSON.stringify({ type: "turn.started" }),
-      JSON.stringify({ type: "item.completed", item: { id: "item_0", type: "agent_message", text: "hello" } }),
-      JSON.stringify({ type: "turn.completed", usage: { input_tokens: 5, output_tokens: 5, cached_input_tokens: 0 } }),
+      JSON.stringify({
+        type: "item.completed",
+        item: { id: "item_0", type: "agent_message", text: "hello" },
+      }),
+      JSON.stringify({
+        type: "turn.completed",
+        usage: { input_tokens: 5, output_tokens: 5, cached_input_tokens: 0 },
+      }),
     ];
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(lines.join("\n") + "\n"));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(`${lines.join("\n")}\n`));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     const result = await runner.spawn({ prompt: "test" });
@@ -313,7 +408,9 @@ describe("CodexRunner.spawn()", () => {
   it("falls back to raw stdout when no agent_message event found", async () => {
     // Unexpected output (not valid codex events) — return raw so upstream can surface clearly
     const rawOutput = "Some unexpected output without JSON events\n";
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(rawOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(rawOutput));
     const runner = new CodexRunner({ spawn: spawnFn });
 
     const result = await runner.spawn({ prompt: "test" });

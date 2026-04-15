@@ -1,7 +1,12 @@
-import { describe, it, expect, vi } from "vitest";
 import { AgentHitlConflictError } from "@agentflow/core";
+import { describe, expect, it, vi } from "vitest";
 import { ClaudeRunner, ClaudeSubprocessError } from "../claude-runner.js";
-import type { SpawnFn, SpawnResult, SpawnSyncFn, SpawnSyncResult } from "../claude-runner.js";
+import type {
+  SpawnFn,
+  SpawnResult,
+  SpawnSyncFn,
+  SpawnSyncResult,
+} from "../claude-runner.js";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -9,7 +14,11 @@ function encodeStr(s: string): Uint8Array {
   return new TextEncoder().encode(s);
 }
 
-function makeSpawnSyncResult(exitCode: number, stdout: string, stderr = ""): SpawnSyncResult {
+function makeSpawnSyncResult(
+  exitCode: number,
+  stdout: string,
+  stderr = "",
+): SpawnSyncResult {
   return {
     exitCode,
     stdout: encodeStr(stdout),
@@ -17,7 +26,11 @@ function makeSpawnSyncResult(exitCode: number, stdout: string, stderr = ""): Spa
   };
 }
 
-function makeSpawnResult(stdout: string, exitCode = 0, stderr = ""): SpawnResult {
+function makeSpawnResult(
+  stdout: string,
+  exitCode = 0,
+  stderr = "",
+): SpawnResult {
   const encoder = new TextEncoder();
 
   const makeStream = (bytes: Uint8Array): ReadableStream<Uint8Array> =>
@@ -119,7 +132,9 @@ describe("ClaudeRunner.spawn()", () => {
     const resultJson = JSON.stringify({ answer: "42" });
     const jsonlOutput = makeJsonlOutput(resultJson, "sess-abc", 100, 200);
 
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(jsonlOutput));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
     const result = await runner.spawn({ prompt: "What is the answer?" });
@@ -137,7 +152,9 @@ describe("ClaudeRunner.spawn()", () => {
       `${JSON.stringify({ type: "result", result: firstResult, session_id: "sess-1", usage: { input_tokens: 5, output_tokens: 5 } })}\n` +
       `${JSON.stringify({ type: "result", result: secondResult, session_id: "sess-2", usage: { input_tokens: 10, output_tokens: 10 } })}\n`;
 
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(jsonlOutput));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
     const result = await runner.spawn({ prompt: "test" });
@@ -147,54 +164,68 @@ describe("ClaudeRunner.spawn()", () => {
 
   it("includes model flag when model is provided", async () => {
     const jsonlOutput = makeJsonlOutput("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(jsonlOutput));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
     await runner.spawn({ prompt: "test", model: "claude-opus-4-6" });
 
-    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
+    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string[];
     expect(callArgs).toContain("--model");
     expect(callArgs).toContain("claude-opus-4-6");
   });
 
   it("includes allowedTools when tools are provided", async () => {
     const jsonlOutput = makeJsonlOutput("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(jsonlOutput));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
     await runner.spawn({ prompt: "test", tools: ["bash", "read"] });
 
-    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
+    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string[];
     expect(callArgs).toContain("--allowedTools");
     expect(callArgs).toContain("bash,read");
   });
 
   it("includes resume flag when sessionHandle is provided", async () => {
     const jsonlOutput = makeJsonlOutput("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(jsonlOutput));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
     await runner.spawn({ prompt: "test", sessionHandle: "sess-xyz" });
 
-    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
+    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string[];
     expect(callArgs).toContain("--resume");
     expect(callArgs).toContain("sess-xyz");
   });
 
   it("does NOT include resume flag for empty sessionHandle", async () => {
     const jsonlOutput = makeJsonlOutput("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(jsonlOutput));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
     await runner.spawn({ prompt: "test", sessionHandle: "" });
 
-    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
+    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string[];
     expect(callArgs).not.toContain("--resume");
   });
 
   it("includes disallowedTools for denied permissions", async () => {
     const jsonlOutput = makeJsonlOutput("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(jsonlOutput));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
     await runner.spawn({
@@ -202,7 +233,8 @@ describe("ClaudeRunner.spawn()", () => {
       permissions: { bash: false, read: true, write: false },
     });
 
-    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
+    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string[];
     expect(callArgs).toContain("--disallowedTools");
     const disallowedIdx = callArgs.indexOf("--disallowedTools");
     const disallowedValue = callArgs[disallowedIdx + 1] ?? "";
@@ -213,7 +245,9 @@ describe("ClaudeRunner.spawn()", () => {
 
   it("prepends system prompt before user prompt", async () => {
     const jsonlOutput = makeJsonlOutput("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(jsonlOutput));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
     await runner.spawn({
@@ -221,7 +255,8 @@ describe("ClaudeRunner.spawn()", () => {
       systemPrompt: "You are a helpful assistant",
     });
 
-    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
+    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string[];
     const lastArg = callArgs[callArgs.length - 1] ?? "";
     expect(lastArg).toContain("You are a helpful assistant");
     expect(lastArg).toContain("User prompt here");
@@ -237,7 +272,9 @@ describe("ClaudeRunner.spawn()", () => {
       .mockReturnValue(makeSpawnResult("", 1, "permission denied"));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
-    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(ClaudeSubprocessError);
+    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(
+      ClaudeSubprocessError,
+    );
   });
 
   it("throws ClaudeSubprocessError with stderr content", async () => {
@@ -246,28 +283,40 @@ describe("ClaudeRunner.spawn()", () => {
       .mockReturnValue(makeSpawnResult("", 2, "authentication failed"));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
-    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow("authentication failed");
+    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(
+      "authentication failed",
+    );
   });
 
   it("throws AgentHitlConflictError on [y/n] in stdout", async () => {
     const hitlOutput = "Do you want to proceed? [y/n]\n";
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(hitlOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(hitlOutput));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
-    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(AgentHitlConflictError);
+    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(
+      AgentHitlConflictError,
+    );
   });
 
   it("throws AgentHitlConflictError on (Y/n) in stdout", async () => {
     const hitlOutput = "Continue? (Y/n)\n";
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(hitlOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(hitlOutput));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
-    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(AgentHitlConflictError);
+    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(
+      AgentHitlConflictError,
+    );
   });
 
   it("extracts session handle from result line", async () => {
     const jsonlOutput = makeJsonlOutput("{}", "session-42");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(jsonlOutput));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
     const result = await runner.spawn({ prompt: "test" });
@@ -280,7 +329,9 @@ describe("ClaudeRunner.spawn()", () => {
       result: "{}",
       usage: { input_tokens: 5, output_tokens: 5 },
     });
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(resultLine));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(resultLine));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
     const result = await runner.spawn({ prompt: "test" });
@@ -289,7 +340,9 @@ describe("ClaudeRunner.spawn()", () => {
 
   it("handles output with no JSONL result line (raw stdout fallback)", async () => {
     const rawOutput = "Some raw text without JSON\n";
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(rawOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(rawOutput));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
     const result = await runner.spawn({ prompt: "test" });
@@ -302,9 +355,13 @@ describe("ClaudeRunner.spawn()", () => {
   it("does NOT throw AgentHitlConflictError when result content contains [y/n] text", async () => {
     // Regression test for B1: HITL check must NOT scan the JSON result content.
     // An agent response whose result field happens to say "answer [y/n]" is valid output.
-    const resultContent = JSON.stringify({ answer: "Please choose [y/n] to proceed" });
+    const resultContent = JSON.stringify({
+      answer: "Please choose [y/n] to proceed",
+    });
     const jsonlOutput = makeJsonlOutput(resultContent, "sess-abc", 10, 20);
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(jsonlOutput));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
     // Should succeed — [y/n] is inside JSON, not a bare interactive prompt
@@ -314,21 +371,28 @@ describe("ClaudeRunner.spawn()", () => {
 
   it("still throws AgentHitlConflictError when [y/n] appears as a bare non-JSON line", async () => {
     // This simulates an actual interactive prompt leaking from stderr/non-JSON stdout
-    const barePromptOutput = 'Do you want to continue? [y/n]\n';
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(barePromptOutput));
+    const barePromptOutput = "Do you want to continue? [y/n]\n";
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(barePromptOutput));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
-    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(AgentHitlConflictError);
+    await expect(runner.spawn({ prompt: "test" })).rejects.toThrow(
+      AgentHitlConflictError,
+    );
   });
 
   it("always includes --output-format json --print flags", async () => {
     const jsonlOutput = makeJsonlOutput("{}");
-    const spawnFn: SpawnFn = vi.fn().mockReturnValue(makeSpawnResult(jsonlOutput));
+    const spawnFn: SpawnFn = vi
+      .fn()
+      .mockReturnValue(makeSpawnResult(jsonlOutput));
     const runner = new ClaudeRunner({ spawn: spawnFn });
 
     await runner.spawn({ prompt: "test" });
 
-    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string[];
+    const callArgs = (spawnFn as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as string[];
     expect(callArgs).toContain("--output-format");
     expect(callArgs).toContain("json");
     expect(callArgs).toContain("--print");

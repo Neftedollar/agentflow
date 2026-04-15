@@ -24,5 +24,9 @@ ${issue.description}
 ${previousAttempt ? `\nPrevious attempt was rejected. Try a different approach.\nPrevious: ${previousAttempt}` : ""}
 Return JSON: { patch: "diff content", explanation: "why this fixes it", confidence: 0.0-1.0 }`,
   hitl: { mode: "checkpoint", message: "Review this fix before applying?" },
-  retry: { max: 2, on: ["subprocess_error", "output_validation_error"], backoff: "exponential" },
+  retry: {
+    max: 2,
+    on: ["subprocess_error", "output_validation_error"],
+    backoff: "exponential",
+  },
 });

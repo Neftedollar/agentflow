@@ -109,7 +109,11 @@ export class SessionManager {
     }
 
     const targetDef = tasks[targetTaskName];
-    if (targetDef === undefined || "kind" in targetDef || targetDef.session === undefined) {
+    if (
+      targetDef === undefined ||
+      "kind" in targetDef ||
+      targetDef.session === undefined
+    ) {
       throw new UnresolvedSessionRefError(taskName, targetTaskName);
     }
 

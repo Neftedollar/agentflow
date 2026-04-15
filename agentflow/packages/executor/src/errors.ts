@@ -31,8 +31,7 @@ export class HitlNotInteractiveError extends AgentFlowError {
     options?: ErrorOptions,
   ) {
     super(
-      `Task "${taskName}" requires HITL checkpoint but no TTY is available and no onCheckpoint hook approved. ` +
-        `In headless mode, provide an onCheckpoint hook that returns true to approve.`,
+      `Task "${taskName}" requires HITL checkpoint but no TTY is available and no onCheckpoint hook approved. In headless mode, provide an onCheckpoint hook that returns true to approve.`,
       options,
     );
   }
@@ -45,7 +44,10 @@ export class OutputValidationError extends AgentFlowError {
     readonly reason: string,
     options?: ErrorOptions,
   ) {
-    super(`Output validation failed for task "${taskName}": ${reason}`, options);
+    super(
+      `Output validation failed for task "${taskName}": ${reason}`,
+      options,
+    );
   }
 }
 

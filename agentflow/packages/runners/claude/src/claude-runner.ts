@@ -1,5 +1,9 @@
 import { AgentFlowError, AgentHitlConflictError } from "@agentflow/core";
-import type { Runner, RunnerSpawnArgs, RunnerSpawnResult } from "@agentflow/core";
+import type {
+  Runner,
+  RunnerSpawnArgs,
+  RunnerSpawnResult,
+} from "@agentflow/core";
 
 // ─── Errors ───────────────────────────────────────────────────────────────────
 
@@ -45,10 +49,19 @@ export interface SpawnResult {
   exited: Promise<number>;
 }
 
-export type SpawnSyncFn = (cmd: string[], opts?: { stdout: string; stderr: string }) => SpawnSyncResult;
-export type SpawnFn = (cmd: string[], opts?: { stdout: string; stderr: string }) => SpawnResult;
+export type SpawnSyncFn = (
+  cmd: string[],
+  opts?: { stdout: string; stderr: string },
+) => SpawnSyncResult;
+export type SpawnFn = (
+  cmd: string[],
+  opts?: { stdout: string; stderr: string },
+) => SpawnResult;
 
-function defaultSpawnSync(cmd: string[], _opts?: { stdout: string; stderr: string }): SpawnSyncResult {
+function defaultSpawnSync(
+  cmd: string[],
+  _opts?: { stdout: string; stderr: string },
+): SpawnSyncResult {
   const result = Bun.spawnSync(cmd, {
     stdin: "ignore",
     stdout: "pipe",
@@ -62,7 +75,10 @@ function defaultSpawnSync(cmd: string[], _opts?: { stdout: string; stderr: strin
   };
 }
 
-function defaultSpawn(cmd: string[], _opts?: { stdout: string; stderr: string }): SpawnResult {
+function defaultSpawn(
+  cmd: string[],
+  _opts?: { stdout: string; stderr: string },
+): SpawnResult {
   const proc = Bun.spawn(cmd, {
     stdin: "ignore", // prevent stdin inheritance / interactive prompt leakage
     stdout: "pipe",
@@ -100,7 +116,8 @@ export class ClaudeRunner implements Runner {
     if (whichResult.exitCode !== 0) {
       return {
         ok: false,
-        error: "claude CLI not found on PATH. Install via: npm install -g @anthropic-ai/claude-code",
+        error:
+          "claude CLI not found on PATH. Install via: npm install -g @anthropic-ai/claude-code",
       };
     }
 
@@ -187,7 +204,7 @@ export class ClaudeRunner implements Runner {
     for (const line of lines) {
       try {
         const parsed = JSON.parse(line) as ClaudeJsonLine;
-        if (parsed["type"] === "result") {
+        if (parsed.type === "result") {
           resultLine = parsed as unknown as ClaudeResultLine;
         }
       } catch {

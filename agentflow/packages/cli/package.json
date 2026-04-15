@@ -4,7 +4,9 @@
   "type": "module",
   "private": false,
   "bin": { "agentwf": "./dist/bin.js" },
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  },
   "files": ["dist"],
   "scripts": {
     "build": "tsc",

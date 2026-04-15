@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   AgentFlowError,
   AgentHitlConflictError,
@@ -31,8 +31,16 @@ describe("AgentFlowError base class", () => {
 
 describe("NodeMaxRetriesError", () => {
   const attempts = [
-    { attempt: 1, error: "subprocess failed", errorCode: "subprocess_error" as const },
-    { attempt: 2, error: "validation failed", errorCode: "output_validation_error" as const },
+    {
+      attempt: 1,
+      error: "subprocess failed",
+      errorCode: "subprocess_error" as const,
+    },
+    {
+      attempt: 2,
+      error: "validation failed",
+      errorCode: "output_validation_error" as const,
+    },
   ];
 
   it("is instanceof Error and AgentFlowError", () => {
@@ -56,11 +64,11 @@ describe("NodeMaxRetriesError", () => {
   it("toJSON includes taskName and attempts", () => {
     const err = new NodeMaxRetriesError("myTask", attempts);
     const json = err.toJSON();
-    expect(json["name"]).toBe("NodeMaxRetriesError");
-    expect(json["code"]).toBe("node_max_retries");
-    expect(json["message"]).toContain("myTask");
-    expect(json["taskName"]).toBe("myTask");
-    expect(json["attempts"]).toEqual(attempts);
+    expect(json.name).toBe("NodeMaxRetriesError");
+    expect(json.code).toBe("node_max_retries");
+    expect(json.message).toContain("myTask");
+    expect(json.taskName).toBe("myTask");
+    expect(json.attempts).toEqual(attempts);
   });
 });
 
@@ -85,9 +93,9 @@ describe("LoopMaxIterationsError", () => {
   it("toJSON returns serializable object", () => {
     const err = new LoopMaxIterationsError("fixLoop", 5);
     const json = err.toJSON();
-    expect(json["name"]).toBe("LoopMaxIterationsError");
-    expect(json["code"]).toBe("loop_max_iterations");
-    expect(json["message"]).toBeTruthy();
+    expect(json.name).toBe("LoopMaxIterationsError");
+    expect(json.code).toBe("loop_max_iterations");
+    expect(json.message).toBeTruthy();
   });
 });
 
@@ -144,9 +152,9 @@ describe("ValidationError", () => {
   it("toJSON returns serializable object", () => {
     const err = new ValidationError("task1", "zod error details");
     const json = err.toJSON();
-    expect(json["name"]).toBe("ValidationError");
-    expect(json["code"]).toBe("validation_error");
-    expect(typeof json["message"]).toBe("string");
+    expect(json.name).toBe("ValidationError");
+    expect(json.code).toBe("validation_error");
+    expect(typeof json.message).toBe("string");
   });
 });
 
@@ -176,7 +184,10 @@ describe("PreFlightError", () => {
   });
 
   it("includes errors in message", () => {
-    const err = new PreFlightError(["runner not found", "budget invalid"], ["model deprecated"]);
+    const err = new PreFlightError(
+      ["runner not found", "budget invalid"],
+      ["model deprecated"],
+    );
     expect(err.message).toContain("runner not found");
     expect(err.message).toContain("budget invalid");
   });
@@ -203,9 +214,9 @@ describe("PathTraversalError", () => {
   it("toJSON returns serializable object with name, code, message", () => {
     const err = new PathTraversalError("../secret", "traversal detected");
     const json = err.toJSON();
-    expect(json["name"]).toBe("PathTraversalError");
-    expect(json["code"]).toBe("path_traversal");
-    expect(typeof json["message"]).toBe("string");
+    expect(json.name).toBe("PathTraversalError");
+    expect(json.code).toBe("path_traversal");
+    expect(typeof json.message).toBe("string");
   });
 });
 

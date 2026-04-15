@@ -1,7 +1,7 @@
-import path from "node:path";
 import fs from "node:fs";
-import type { Command } from "commander";
+import path from "node:path";
 import chalk from "chalk";
+import type { Command } from "commander";
 import { renderError } from "../output/renderer.js";
 
 const WORKFLOW_TEMPLATE = `import { defineAgent, defineWorkflow, registerRunner } from "@agentflow/core";
@@ -64,7 +64,10 @@ export function registerInitCommand(program: Command): void {
         fs.mkdirSync(path.join(projectDir, "agents"), { recursive: true });
 
         // Write workflow.ts
-        const workflowContent = WORKFLOW_TEMPLATE.replace("WORKFLOW_NAME", name);
+        const workflowContent = WORKFLOW_TEMPLATE.replace(
+          "WORKFLOW_NAME",
+          name,
+        );
         fs.writeFileSync(path.join(projectDir, "workflow.ts"), workflowContent);
 
         // Write agents/.gitkeep so the directory is tracked by git
@@ -77,9 +80,9 @@ export function registerInitCommand(program: Command): void {
             version: "0.1.0",
             type: "module",
             scripts: {
-              run: `agentwf run workflow.ts`,
-              validate: `agentwf validate workflow.ts`,
-              "dry-run": `agentwf dry-run workflow.ts`,
+              run: "agentwf run workflow.ts",
+              validate: "agentwf validate workflow.ts",
+              "dry-run": "agentwf dry-run workflow.ts",
             },
             dependencies: {
               "@agentflow/core": "latest",
@@ -99,10 +102,10 @@ export function registerInitCommand(program: Command): void {
 
         process.stdout.write(
           chalk.bold("\nNext steps:\n") +
-          chalk.dim(`  cd ${name}\n`) +
-          chalk.dim("  bun install\n") +
-          chalk.dim("  agentwf validate workflow.ts\n") +
-          chalk.dim("  agentwf run workflow.ts\n"),
+            chalk.dim(`  cd ${name}\n`) +
+            chalk.dim("  bun install\n") +
+            chalk.dim("  agentwf validate workflow.ts\n") +
+            chalk.dim("  agentwf run workflow.ts\n"),
         );
       } catch (err) {
         renderError(err instanceof Error ? err.message : String(err));

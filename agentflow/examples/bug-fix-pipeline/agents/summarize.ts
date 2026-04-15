@@ -25,5 +25,9 @@ export const summarizeAgent = defineAgent({
 Original issues found: ${originalIssues.length}
 Fix result: ${JSON.stringify(fixResult)}
 Return JSON: { report: string, fixedCount: number, remainingCount: number }`,
-  retry: { max: 2, on: ["subprocess_error", "output_validation_error"], backoff: "exponential" },
+  retry: {
+    max: 2,
+    on: ["subprocess_error", "output_validation_error"],
+    backoff: "exponential",
+  },
 });
