@@ -136,9 +136,10 @@ export function renderDryRunTask(
   process.stdout.write(`${chalk.dim("Prompt:\n") + prompt}\n`);
   if (outputShape !== undefined) {
     process.stdout.write(
-      chalk.dim("Output shape:\n") +
-        chalk.dim(JSON.stringify(outputShape, null, 2)) +
-        "\n",
+      `${
+        chalk.dim("Output shape:\n") +
+        chalk.dim(JSON.stringify(outputShape, null, 2))
+      }\n`,
     );
   }
 }

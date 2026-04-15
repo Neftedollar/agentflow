@@ -94,7 +94,13 @@ export function registerDryRunCommand(program: Command): void {
                 outputShape = undefined;
               }
 
-              renderDryRunTask(taskName, resolved.runner, prompt, deps, outputShape);
+              renderDryRunTask(
+                taskName,
+                resolved.runner,
+                prompt,
+                deps,
+                outputShape,
+              );
             }
           }
         }
@@ -141,7 +147,13 @@ function renderDryRunInner(tasks: TasksMap): void {
           outputShape = undefined;
         }
 
-        renderDryRunTask(`  ${taskName}`, resolved.runner, prompt, deps, outputShape);
+        renderDryRunTask(
+          `  ${taskName}`,
+          resolved.runner,
+          prompt,
+          deps,
+          outputShape,
+        );
       }
     }
   }
