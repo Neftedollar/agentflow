@@ -88,14 +88,15 @@ describe("HITLManager", () => {
       expect(result.permissions).toEqual(perms);
     });
 
-    it("deny-by-default: tool not in permissions map is NOT filtered (perms[t] !== false)", () => {
-      // A tool not listed in permissions map: perms[t] is undefined, undefined !== false = true → allowed
+    it("deny-by-default: tool not in permissions map is blocked", () => {
+      // A tool not listed in the permissions map: perms[t] is undefined, undefined !== true → blocked
       const result = hm.applyPermissions(
         ["bash", "unknown-tool"],
         { mode: "permissions", permissions: { bash: true } },
       );
-      // "unknown-tool" is not explicitly false, so it passes
-      expect(result.tools).toContain("unknown-tool");
+      // "unknown-tool" is not explicitly true, so it is denied
+      expect(result.tools).not.toContain("unknown-tool");
+      expect(result.tools).toContain("bash");
     });
   });
 

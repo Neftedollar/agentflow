@@ -22,7 +22,7 @@ export class HITLManager {
   ): { tools: readonly string[] | undefined; permissions: Record<string, boolean> | undefined } {
     if (config.mode !== "permissions") return { tools, permissions: undefined };
     const perms = config.permissions;
-    const allowed = (tools ?? []).filter((t) => perms[t] !== false);
+    const allowed = (tools ?? []).filter((t) => perms[t] === true);
     return {
       tools: allowed,
       permissions: Object.fromEntries(Object.entries(perms)),

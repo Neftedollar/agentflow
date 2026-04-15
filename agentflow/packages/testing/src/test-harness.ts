@@ -89,17 +89,15 @@ export function createTestHarness(workflow: WorkflowDef): TestHarness {
   const mocks = new Map<string, MockResponse[]>();
   const stats = new Map<string, { callCount: number; successCount: number; outputs: unknown[] }>();
 
-  // Shared mutable ref — updated by onTaskStart hook so MockRunner.spawn() knows
-  // which task is currently executing without needing to parse the prompt.
-  const currentTask = { value: "" };
-
   const mockRunner: Runner = {
     async validate(): Promise<{ ok: boolean; version: string }> {
       return { ok: true, version: "mock-1.0.0" };
     },
 
-    async spawn(_args: RunnerSpawnArgs) {
-      const taskName = currentTask.value;
+    async spawn(args: RunnerSpawnArgs) {
+      // taskName is set by the executor on every spawn call — safe under parallel execution
+      // because it comes from the call site, not shared mutable state.
+      const taskName = args.taskName ?? "";
 
       // Initialise stats entry on first call
       if (!stats.has(taskName)) {
@@ -154,16 +152,18 @@ export function createTestHarness(workflow: WorkflowDef): TestHarness {
         registerRunner(name, mockRunner);
       }
 
-      // Build merged hooks that update currentTask before delegating to workflow hooks
       const workflowHooks = workflow.hooks as WorkflowHooks | undefined;
 
       // Build hooks object carefully — exactOptionalPropertyTypes means we cannot
       // assign `undefined` to an optional property; we must omit the key instead.
       const harnessHooks: WorkflowHooks = {
-        onTaskStart: (taskName: string) => {
-          currentTask.value = taskName;
-          workflowHooks?.onTaskStart?.(taskName as never);
-        },
+        ...(workflowHooks?.onTaskStart !== undefined
+          ? {
+              onTaskStart: (taskName: string) => {
+                workflowHooks.onTaskStart?.(taskName as never);
+              },
+            }
+          : {}),
         ...(workflowHooks?.onTaskComplete !== undefined
           ? {
               onTaskComplete: (taskName: string, output: unknown, metrics: import("@agentflow/core").TaskMetrics) => {

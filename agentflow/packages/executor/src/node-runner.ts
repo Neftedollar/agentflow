@@ -109,7 +109,7 @@ export async function runNode<
 
       // Build spawn args — only include optional properties when defined
       // (exactOptionalPropertyTypes requires we not pass explicit undefined)
-      const spawnArgs: import("@agentflow/core").RunnerSpawnArgs = { prompt };
+      const spawnArgs: import("@agentflow/core").RunnerSpawnArgs = { prompt, taskName };
       if (resolvedDef.model !== undefined) {
         spawnArgs.model = resolvedDef.model;
       }

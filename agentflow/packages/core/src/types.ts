@@ -81,6 +81,12 @@ export interface RunnerSpawnArgs {
    * Runners MUST prepend this BEFORE the user prompt.
    */
   systemPrompt?: string;
+  /**
+   * Logical task name that triggered this spawn call.
+   * Passed by the executor so runners and test harnesses can route by task
+   * without relying on shared mutable state (safe under parallel execution).
+   */
+  taskName?: string;
 }
 
 export interface RunnerSpawnResult {

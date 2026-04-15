@@ -89,6 +89,13 @@ function validateDAG(tasks: TasksMap, errors: string[]): void {
       throw err;
     }
   }
+
+  // Recurse into loop inner tasks so inner cycles/unresolved deps surface at preflight
+  for (const task of Object.values(tasks)) {
+    if (task !== undefined && typeof task === "object" && "kind" in task && task.kind === "loop") {
+      validateDAG((task as { tasks: TasksMap }).tasks, errors);
+    }
+  }
 }
 
 function validateSessionRefs(tasks: TasksMap, errors: string[]): void {
