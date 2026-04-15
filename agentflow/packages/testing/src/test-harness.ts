@@ -1,13 +1,13 @@
-import { getRunners, registerRunner, unregisterRunner } from "@agentflow/core";
+import { getRunners, registerRunner, unregisterRunner } from "@ageflow/core";
 import type {
   Runner,
   RunnerSpawnArgs,
   TasksMap,
   WorkflowDef,
   WorkflowHooks,
-} from "@agentflow/core";
-import { WorkflowExecutor } from "@agentflow/executor";
-import type { WorkflowResult } from "@agentflow/executor";
+} from "@ageflow/core";
+import { WorkflowExecutor } from "@ageflow/executor";
+import type { WorkflowResult } from "@ageflow/executor";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -175,7 +175,7 @@ export function createTestHarness(workflow: WorkflowDef): TestHarness {
               onTaskComplete: (
                 taskName: string,
                 output: unknown,
-                metrics: import("@agentflow/core").TaskMetrics,
+                metrics: import("@ageflow/core").TaskMetrics,
               ) => {
                 workflowHooks.onTaskComplete?.(
                   taskName as never,

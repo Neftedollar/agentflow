@@ -1,4 +1,4 @@
-import type { TasksMap } from "@agentflow/core";
+import type { TasksMap } from "@ageflow/core";
 import type { SessionManager } from "./session-manager.js";
 
 /**

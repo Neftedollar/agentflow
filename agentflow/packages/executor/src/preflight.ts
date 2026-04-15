@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import type { TasksMap, WorkflowDef } from "@agentflow/core";
-import { validateStaticIdentifier } from "@agentflow/core";
+import type { TasksMap, WorkflowDef } from "@ageflow/core";
+import { validateStaticIdentifier } from "@ageflow/core";
 import { topologicalSort } from "./dag-resolver.js";
 import {
   CyclicDependencyError,

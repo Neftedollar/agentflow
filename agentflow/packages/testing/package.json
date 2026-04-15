@@ -1,5 +1,5 @@
 {
-  "name": "@agentflow/testing",
+  "name": "@ageflow/testing",
   "version": "0.1.0",
   "type": "module",
   "private": false,
@@ -14,8 +14,8 @@
     "lint": "biome check src/"
   },
   "dependencies": {
-    "@agentflow/core": "workspace:*",
-    "@agentflow/executor": "workspace:*"
+    "@ageflow/core": "workspace:*",
+    "@ageflow/executor": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

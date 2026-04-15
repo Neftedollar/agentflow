@@ -3,8 +3,8 @@ import {
   defineWorkflow,
   registerRunner,
   sessionToken,
-} from "@agentflow/core";
-import type { Runner, RunnerSpawnResult } from "@agentflow/core";
+} from "@ageflow/core";
+import type { Runner, RunnerSpawnResult } from "@ageflow/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { BudgetTracker } from "../budget-tracker.js";

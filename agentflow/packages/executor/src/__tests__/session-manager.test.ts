@@ -1,5 +1,5 @@
-import { defineAgent, sessionToken, shareSessionWith } from "@agentflow/core";
-import type { TasksMap } from "@agentflow/core";
+import { defineAgent, sessionToken, shareSessionWith } from "@ageflow/core";
+import type { TasksMap } from "@ageflow/core";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { SessionCycleError, UnresolvedSessionRefError } from "../errors.js";

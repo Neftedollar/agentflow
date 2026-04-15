@@ -1,4 +1,4 @@
-import { AgentFlowError } from "@agentflow/core";
+import { AgentFlowError } from "@ageflow/core";
 
 export class SessionCycleError extends AgentFlowError {
   readonly code = "session_cycle" as const;

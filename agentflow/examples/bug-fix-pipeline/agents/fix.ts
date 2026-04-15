@@ -1,4 +1,4 @@
-import { defineAgent } from "@agentflow/core";
+import { defineAgent } from "@ageflow/core";
 import { z } from "zod";
 
 export const fixAgent = defineAgent({

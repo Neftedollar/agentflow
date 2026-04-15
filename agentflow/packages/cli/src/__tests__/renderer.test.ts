@@ -1,4 +1,4 @@
-import type { TaskMetrics, WorkflowMetrics } from "@agentflow/core";
+import type { TaskMetrics, WorkflowMetrics } from "@ageflow/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatCliError } from "../output/errors.js";
 import {

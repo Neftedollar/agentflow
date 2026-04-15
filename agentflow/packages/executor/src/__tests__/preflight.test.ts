@@ -3,7 +3,7 @@ import {
   defineWorkflow,
   sessionToken,
   shareSessionWith,
-} from "@agentflow/core";
+} from "@ageflow/core";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { runPreflight } from "../preflight.js";

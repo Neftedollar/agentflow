@@ -1,4 +1,4 @@
-import type { WorkflowHooks } from "@agentflow/core";
+import type { WorkflowHooks } from "@ageflow/core";
 import { describe, expect, it, vi } from "vitest";
 import { HitlNotInteractiveError } from "../errors.js";
 import { HITLManager } from "../hitl-manager.js";

@@ -4,8 +4,8 @@ import {
   getRunners,
   registerRunner,
   unregisterRunner,
-} from "@agentflow/core";
-import type { Runner, RunnerSpawnResult } from "@agentflow/core";
+} from "@ageflow/core";
+import type { Runner, RunnerSpawnResult } from "@ageflow/core";
 import { beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createTestHarness } from "../test-harness.js";

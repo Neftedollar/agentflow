@@ -1,4 +1,4 @@
-import type { TaskMetrics, WorkflowMetrics } from "@agentflow/core";
+import type { TaskMetrics, WorkflowMetrics } from "@ageflow/core";
 import chalk from "chalk";
 
 // ─── Header ───────────────────────────────────────────────────────────────────

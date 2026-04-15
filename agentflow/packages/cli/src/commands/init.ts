@@ -4,8 +4,8 @@ import chalk from "chalk";
 import type { Command } from "commander";
 import { renderError } from "../output/renderer.js";
 
-const WORKFLOW_TEMPLATE = `import { defineAgent, defineWorkflow, registerRunner } from "@agentflow/core";
-import { ClaudeRunner } from "@agentflow/runner-claude";
+const WORKFLOW_TEMPLATE = `import { defineAgent, defineWorkflow, registerRunner } from "@ageflow/core";
+import { ClaudeRunner } from "@ageflow/runner-claude";
 import { z } from "zod";
 
 // Register runners before the workflow is executed
@@ -85,9 +85,9 @@ export function registerInitCommand(program: Command): void {
               "dry-run": "agentwf dry-run workflow.ts",
             },
             dependencies: {
-              "@agentflow/core": "latest",
-              "@agentflow/executor": "latest",
-              "@agentflow/runner-claude": "latest",
+              "@ageflow/core": "latest",
+              "@ageflow/executor": "latest",
+              "@ageflow/runner-claude": "latest",
               zod: "^3.23.0",
             },
           },
