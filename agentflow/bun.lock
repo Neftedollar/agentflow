@@ -12,13 +12,12 @@
       },
     },
     "examples/bug-fix-pipeline": {
-      "name": "@agentflow/example-bug-fix-pipeline",
+      "name": "@ageflow/example-bug-fix-pipeline",
       "version": "0.1.0",
       "dependencies": {
-        "@agentflow/core": "workspace:*",
-        "@agentflow/executor": "workspace:*",
-        "@agentflow/runner-claude": "workspace:*",
-        "@agentflow/testing": "workspace:*",
+        "@ageflow/core": "workspace:*",
+        "@ageflow/runner-claude": "workspace:*",
+        "@ageflow/testing": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -27,14 +26,14 @@
       },
     },
     "packages/cli": {
-      "name": "agentflow",
+      "name": "ageflow",
       "version": "0.1.0",
       "bin": {
         "agentwf": "./dist/bin.js",
       },
       "dependencies": {
-        "@agentflow/core": "workspace:*",
-        "@agentflow/executor": "workspace:*",
+        "@ageflow/core": "workspace:*",
+        "@ageflow/executor": "workspace:*",
         "boxen": "^8.0.0",
         "chalk": "^5.3.0",
         "commander": "^12.0.0",
@@ -47,7 +46,7 @@
       },
     },
     "packages/core": {
-      "name": "@agentflow/core",
+      "name": "@ageflow/core",
       "version": "0.1.0",
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -59,10 +58,10 @@
       },
     },
     "packages/executor": {
-      "name": "@agentflow/executor",
+      "name": "@ageflow/executor",
       "version": "0.1.0",
       "dependencies": {
-        "@agentflow/core": "workspace:*",
+        "@ageflow/core": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -71,10 +70,10 @@
       },
     },
     "packages/runners/claude": {
-      "name": "@agentflow/runner-claude",
+      "name": "@ageflow/runner-claude",
       "version": "0.1.0",
       "dependencies": {
-        "@agentflow/core": "workspace:*",
+        "@ageflow/core": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "^1.1.0",
@@ -83,10 +82,10 @@
       },
     },
     "packages/runners/codex": {
-      "name": "@agentflow/runner-codex",
+      "name": "@ageflow/runner-codex",
       "version": "0.1.0",
       "dependencies": {
-        "@agentflow/core": "workspace:*",
+        "@ageflow/core": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "^1.1.0",
@@ -95,11 +94,11 @@
       },
     },
     "packages/testing": {
-      "name": "@agentflow/testing",
+      "name": "@ageflow/testing",
       "version": "0.1.0",
       "dependencies": {
-        "@agentflow/core": "workspace:*",
-        "@agentflow/executor": "workspace:*",
+        "@ageflow/core": "workspace:*",
+        "@ageflow/executor": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -112,17 +111,17 @@
     "zod": "^3.23.0",
   },
   "packages": {
-    "@agentflow/core": ["@agentflow/core@workspace:packages/core"],
+    "@ageflow/core": ["@ageflow/core@workspace:packages/core"],
 
-    "@agentflow/example-bug-fix-pipeline": ["@agentflow/example-bug-fix-pipeline@workspace:examples/bug-fix-pipeline"],
+    "@ageflow/example-bug-fix-pipeline": ["@ageflow/example-bug-fix-pipeline@workspace:examples/bug-fix-pipeline"],
 
-    "@agentflow/executor": ["@agentflow/executor@workspace:packages/executor"],
+    "@ageflow/executor": ["@ageflow/executor@workspace:packages/executor"],
 
-    "@agentflow/runner-claude": ["@agentflow/runner-claude@workspace:packages/runners/claude"],
+    "@ageflow/runner-claude": ["@ageflow/runner-claude@workspace:packages/runners/claude"],
 
-    "@agentflow/runner-codex": ["@agentflow/runner-codex@workspace:packages/runners/codex"],
+    "@ageflow/runner-codex": ["@ageflow/runner-codex@workspace:packages/runners/codex"],
 
-    "@agentflow/testing": ["@agentflow/testing@workspace:packages/testing"],
+    "@ageflow/testing": ["@ageflow/testing@workspace:packages/testing"],
 
     "@biomejs/biome": ["@biomejs/biome@1.9.4", "", { "optionalDependencies": { "@biomejs/cli-darwin-arm64": "1.9.4", "@biomejs/cli-darwin-x64": "1.9.4", "@biomejs/cli-linux-arm64": "1.9.4", "@biomejs/cli-linux-arm64-musl": "1.9.4", "@biomejs/cli-linux-x64": "1.9.4", "@biomejs/cli-linux-x64-musl": "1.9.4", "@biomejs/cli-win32-arm64": "1.9.4", "@biomejs/cli-win32-x64": "1.9.4" }, "bin": { "biome": "bin/biome" } }, "sha512-1rkd7G70+o9KkTn5KLmDYXihGoTaIGO9PIIN2ZB7UJxFrWw04CZHPYiMRjYsaDvVV7hP1dYNRLxSANLaBFGpog=="],
 
@@ -272,7 +271,7 @@
 
     "@vitest/utils": ["@vitest/utils@2.1.9", "", { "dependencies": { "@vitest/pretty-format": "2.1.9", "loupe": "^3.1.2", "tinyrainbow": "^1.2.0" } }, "sha512-v0psaMSkNJ3A2NMrUEHFRzJtDPFn+/VWZ5WxImB21T9fjucJRmS7xCS3ppEnARb9y11OAzaD+P2Ps+b+BGX5iQ=="],
 
-    "agentflow": ["agentflow@workspace:packages/cli"],
+    "ageflow": ["ageflow@workspace:packages/cli"],
 
     "ansi-align": ["ansi-align@3.0.1", "", { "dependencies": { "string-width": "^4.1.0" } }, "sha512-IOfwwBF5iczOjp/WeY4YxyjqAFMQoZufdQWDd19SEExbVLNXqvpzSJ/M7Za4/sCPmQ0+GRquoA7bGcINcxew6w=="],
 
