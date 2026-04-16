@@ -1,6 +1,7 @@
 import type { Logger } from "@ageflow/core";
 import { spawnMockMcpServer } from "@ageflow/testing";
 import { describe, expect, it, vi } from "vitest";
+import pkg from "../../package.json";
 import {
   McpServerStartFailedError,
   McpToolCallFailedError,
@@ -8,7 +9,6 @@ import {
   startMcpClients,
 } from "../mcp-client.js";
 import { RUNNER_VERSION } from "../types.js";
-import pkg from "../../package.json";
 
 // Helper: wait for a number of milliseconds
 function delay(ms: number): Promise<void> {

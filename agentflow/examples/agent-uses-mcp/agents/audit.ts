@@ -23,11 +23,7 @@ export function auditAgent(runner: "claude" | "codex" | "api") {
         {
           name: "filesystem",
           command: "npx",
-          args: [
-            "-y",
-            "@modelcontextprotocol/server-filesystem",
-            ".",
-          ],
+          args: ["-y", "@modelcontextprotocol/server-filesystem", "."],
           tools: ["read_file", "list_directory"],
           refine: {
             read_file: z.object({ path: safePath() }),
