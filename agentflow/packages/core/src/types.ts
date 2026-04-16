@@ -89,6 +89,17 @@ export interface RunnerSpawnArgs {
   taskName?: string;
 }
 
+/**
+ * Observability record for a single tool invocation performed by a runner.
+ * Non-normative — runners that do not perform tool calls omit this.
+ */
+export interface ToolCallRecord {
+  readonly name: string;
+  readonly args: Readonly<Record<string, unknown>>;
+  readonly result: unknown;
+  readonly durationMs: number;
+}
+
 export interface RunnerSpawnResult {
   /**
    * Raw UNTRUSTED stdout. The executor MUST zod.parse() against AgentDef.output
@@ -98,6 +109,12 @@ export interface RunnerSpawnResult {
   readonly sessionHandle: string;
   readonly tokensIn: number;
   readonly tokensOut: number;
+  /**
+   * Tool-call observability trail. Runners that do not perform tool calls
+   * (e.g. subprocess runners) MAY omit this. Executor passes through to
+   * `TaskMetrics` / `ExecutionTrace` when present.
+   */
+  readonly toolCalls?: readonly ToolCallRecord[];
 }
 
 /**

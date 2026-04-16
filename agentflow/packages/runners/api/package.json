@@ -1,0 +1,27 @@
+{
+  "name": "@ageflow/runner-api",
+  "version": "0.1.0",
+  "description": "OpenAI-compatible HTTP runner for ageflow (OpenAI, Groq, Together, Ollama, vLLM, LM Studio, Azure).",
+  "type": "module",
+  "private": false,
+  "sideEffects": false,
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "biome check src/"
+  },
+  "dependencies": {
+    "@ageflow/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "vitest": "^2.1.0",
+    "zod": "^3.23.0"
+  },
+  "license": "MIT"
+}

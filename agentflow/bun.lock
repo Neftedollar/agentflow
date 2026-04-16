@@ -116,6 +116,18 @@
         "zod": "^3.23.0",
       },
     },
+    "packages/runners/api": {
+      "name": "@ageflow/runner-api",
+      "version": "0.1.0",
+      "dependencies": {
+        "@ageflow/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^22.0.0",
+        "vitest": "^2.1.0",
+        "zod": "^3.23.0",
+      },
+    },
     "packages/runners/claude": {
       "name": "@ageflow/runner-claude",
       "version": "0.1.0",
@@ -171,6 +183,8 @@
     "@ageflow/executor": ["@ageflow/executor@workspace:packages/executor"],
 
     "@ageflow/mcp-server": ["@ageflow/mcp-server@workspace:packages/mcp-server"],
+
+    "@ageflow/runner-api": ["@ageflow/runner-api@workspace:packages/runners/api"],
 
     "@ageflow/runner-claude": ["@ageflow/runner-claude@workspace:packages/runners/claude"],
 
