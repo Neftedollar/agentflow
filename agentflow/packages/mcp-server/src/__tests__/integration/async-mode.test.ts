@@ -1,4 +1,9 @@
-import { defineAgent, defineWorkflow, registerRunner, unregisterRunner } from "@ageflow/core";
+import {
+  defineAgent,
+  defineWorkflow,
+  registerRunner,
+  unregisterRunner,
+} from "@ageflow/core";
 import type { RunnerSpawnArgs, RunnerSpawnResult } from "@ageflow/core";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -416,7 +421,9 @@ describe("async mode: input injection (#84 item 10)", () => {
       const resultRes = await h.callTool("get_workflow_result", { jobId });
       expect(resultRes.isError).toBe(false);
       if (!resultRes.isError) {
-        const output = (resultRes.structuredContent as { output: { a: string } }).output;
+        const output = (
+          resultRes.structuredContent as { output: { a: string } }
+        ).output;
         expect(output.a).toContain("query:Charlie");
       }
     } finally {
@@ -470,7 +477,9 @@ describe("async mode: input injection (#84 item 10)", () => {
       const resultRes = await h.callTool("get_workflow_result", { jobId });
       expect(resultRes.isError).toBe(false);
       if (!resultRes.isError) {
-        const output = (resultRes.structuredContent as { output: { a: string } }).output;
+        const output = (
+          resultRes.structuredContent as { output: { a: string } }
+        ).output;
         // Must be "hello, Charlie!" — NOT "hello, hi!" (which would indicate the
         // static task.input { q: "hi" } was used instead of the runtime arg).
         expect(output.a).toBe("hello, Charlie!");
