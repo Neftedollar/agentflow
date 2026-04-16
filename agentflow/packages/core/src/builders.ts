@@ -2,7 +2,10 @@ import type { ZodType } from "zod";
 import { validateStaticIdentifier } from "./schemas.js";
 import type {
   AgentDef,
+  AgentMcpConfig,
   LoopDef,
+  MCPConfig,
+  McpServerConfig,
   ResolvedAgentDef,
   RetryConfig,
   Runner,
@@ -62,6 +65,22 @@ const DEFAULT_RETRY: RetryConfig = {
 };
 
 /**
+ * Migrate a legacy MCPConfig entry to the new McpServerConfig shape.
+ * Best-effort: command defaults to "npx" with inferred args when not available
+ * in the legacy shape. Users should migrate to `mcp.servers` for full control.
+ *
+ * @internal
+ */
+function migrateLegacyMcpEntry(legacy: MCPConfig): McpServerConfig {
+  return {
+    name: legacy.server,
+    // v0.1 MCPConfig had no `command` field — default to npx
+    command: "npx",
+    args: legacy.args,
+  };
+}
+
+/**
  * Resolve an AgentDef to its fully-defaulted form for executor consumption.
  * Executors MUST consume ResolvedAgentDef — never raw AgentDef.
  */
@@ -79,8 +98,25 @@ export function resolveAgentDef<
   if (retryTimeoutMs !== undefined) {
     (resolvedRetry as { timeoutMs?: number }).timeoutMs = retryTimeoutMs;
   }
+
+  // Resolve mcp: new mcp field wins; legacy mcps is a deprecated alias.
+  let resolvedMcp: AgentMcpConfig | undefined = def.mcp;
+  if (
+    resolvedMcp === undefined &&
+    def.mcps !== undefined &&
+    def.mcps.length > 0
+  ) {
+    console.warn(
+      `[agentflow] runner="${def.runner}": the \`mcps\` field is deprecated — migrate to \`mcp: { servers: [...] }\`. See docs/superpowers/specs/2026-04-16-agents-use-mcp-design.md`,
+    );
+    resolvedMcp = {
+      servers: def.mcps.map(migrateLegacyMcpEntry),
+    };
+  }
+
   return {
     ...def,
+    mcp: resolvedMcp,
     sanitizeInput: def.sanitizeInput ?? true,
     retry: resolvedRetry,
     timeoutMs: def.timeoutMs ?? 300_000,

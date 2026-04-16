@@ -249,15 +249,15 @@ export const McpServerConfigSchema = z
       .min(1)
       .refine((v) => STATIC_IDENTIFIER_RE_SCHEMA.test(v), {
         message:
-          'MCP server name must match /^[a-zA-Z0-9._-]+$/ (no path separators)',
+          "MCP server name must match /^[a-zA-Z0-9._-]+$/ (no path separators)",
       }),
-    command: z.string().min(1, 'command must not be empty'),
+    command: z.string().min(1, "command must not be empty"),
     args: z.array(z.string()).readonly().optional(),
     env: z.record(z.string(), z.string()).optional(),
     cwd: z.string().optional(),
     tools: z.array(z.string()).readonly().optional(),
     // refine is a runtime ZodType map — not Zod-validated itself (opaque)
-    transport: z.literal('stdio').optional(),
+    transport: z.literal("stdio").optional(),
     mcpCallTimeoutMs: z.number().int().positive().optional(),
     reusePerRunner: z.boolean().optional(),
   })
