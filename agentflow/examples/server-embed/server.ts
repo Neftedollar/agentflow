@@ -56,7 +56,13 @@ const server = createServer(async (req, res) => {
       body += c;
     });
     req.on("end", () => {
-      const approved = JSON.parse(body).approved === true;
+      let approved: boolean;
+      try {
+        approved = JSON.parse(body).approved === true;
+      } catch {
+        res.writeHead(400).end("invalid JSON");
+        return;
+      }
       try {
         runner.resume(runId, approved);
         res.writeHead(204).end();

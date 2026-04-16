@@ -6,6 +6,8 @@
  * pauses at the HITL checkpoint until onCheckpoint resolves.
  */
 
+import { createServer } from "node:http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { registerRunner, unregisterRunner } from "@ageflow/core";
 import type { Runner as AgentRunner } from "@ageflow/core";
 import { createRunner } from "@ageflow/server";
@@ -64,6 +66,58 @@ describe("server-embed demo", () => {
     }
     expect(events).toContain("checkpoint");
     expect(events[events.length - 1]).toBe("workflow:error");
+    runner.close();
+  });
+});
+
+// ─── Helpers for HTTP-level tests ─────────────────────────────────────────────
+
+function buildResumeHandler(
+  runner: ReturnType<typeof createRunner>,
+): (req: IncomingMessage, res: ServerResponse) => void {
+  return (req, res) => {
+    const runId = (req.url ?? "").split("/")[2] ?? "";
+    let body = "";
+    req.on("data", (c: string) => {
+      body += c;
+    });
+    req.on("end", () => {
+      let approved: boolean;
+      try {
+        approved = JSON.parse(body).approved === true;
+      } catch {
+        res.writeHead(400).end("invalid JSON");
+        return;
+      }
+      try {
+        runner.resume(runId, approved);
+        res.writeHead(204).end();
+      } catch (err) {
+        res.writeHead(404).end(String(err));
+      }
+    });
+  };
+}
+
+describe("P2-5: resume endpoint — malformed JSON returns 400", () => {
+  it("returns 400 when body is not valid JSON", async () => {
+    const runner = createRunner();
+    const handler = buildResumeHandler(runner);
+    const srv = createServer(handler);
+    await new Promise<void>((resolve) => srv.listen(0, resolve));
+    const port = (srv.address() as { port: number }).port;
+
+    const res = await fetch(
+      `http://localhost:${port}/runs/nonexistent/resume`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{ not valid json ",
+      },
+    );
+    expect(res.status).toBe(400);
+
+    await new Promise<void>((resolve) => srv.close(() => resolve()));
     runner.close();
   });
 });
