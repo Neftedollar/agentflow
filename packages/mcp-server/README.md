@@ -12,7 +12,7 @@ v0.2.0 — stdio transport, workflow-as-tool, progress streaming, HITL via elici
 agentwf mcp serve ./workflow.ts
 ```
 
-See the root `agentflow/packages/cli/README.md` for CLI options.
+See the root `packages/cli/README.md` for CLI options.
 
 ## Claude Desktop config
 

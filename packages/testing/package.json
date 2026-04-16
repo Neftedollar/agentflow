@@ -1,13 +1,15 @@
 {
-  "name": "@ageflow/runner-api",
+  "name": "@ageflow/testing",
   "version": "0.3.0",
-  "description": "OpenAI-compatible HTTP runner for ageflow (OpenAI, Groq, Together, Ollama, vLLM, LM Studio, Azure).",
-  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/agentflow/packages/runners/api",
+  "description": "Test harness for ageflow workflows — mock agents, inspect call counts, no API calls needed",
+  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/testing",
   "type": "module",
   "private": false,
-  "sideEffects": false,
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "files": ["dist"],
   "scripts": {
@@ -18,10 +20,10 @@
   },
   "dependencies": {
     "@ageflow/core": "workspace:*",
+    "@ageflow/executor": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
   "devDependencies": {
-    "@ageflow/testing": "workspace:*",
     "@types/node": "^22.0.0",
     "vitest": "^2.1.0",
     "zod": "^3.23.0"
@@ -37,11 +39,9 @@
     "llm",
     "dsl",
     "typescript",
+    "claude",
     "openai",
-    "groq",
-    "ollama",
-    "multi-agent",
-    "api-runner"
+    "multi-agent"
   ],
   "license": "MIT"
 }

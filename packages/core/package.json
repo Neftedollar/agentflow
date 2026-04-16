@@ -1,30 +1,32 @@
 {
-  "name": "@ageflow/runner-codex",
+  "name": "@ageflow/core",
   "version": "0.3.0",
-  "description": "OpenAI Codex CLI subprocess runner for ageflow",
-  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/agentflow/packages/runners/codex",
+  "description": "Type-safe DSL for multi-agent AI workflows — defineAgent, defineWorkflow, loop, sessionToken",
+  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/core",
   "type": "module",
   "private": false,
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": ["dist"],
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
     "lint": "biome check src/"
   },
-  "dependencies": {
-    "@ageflow/core": "workspace:*"
+  "peerDependencies": {
+    "zod": ">=3.23.0 <4.0.0"
   },
   "devDependencies": {
-    "@types/bun": "^1.1.0",
     "@types/node": "^22.0.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "zod": "^3.23.0"
   },
   "repository": {
     "type": "git",

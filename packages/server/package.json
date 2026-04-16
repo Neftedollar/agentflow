@@ -1,18 +1,13 @@
 {
-  "name": "@ageflow/cli",
+  "name": "@ageflow/server",
   "version": "0.3.0",
-  "description": "CLI for ageflow — agentwf run / validate / dry-run / init",
-  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/agentflow/packages/cli",
+  "description": "Embeddable execution surface for ageflow workflows: stream, fire-and-forget, async HITL, cancellation.",
+  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/server",
   "type": "module",
   "private": false,
-  "bin": {
-    "agentwf": "./dist/bin.js"
-  },
+  "sideEffects": false,
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
   },
   "files": ["dist"],
   "scripts": {
@@ -23,12 +18,7 @@
   },
   "dependencies": {
     "@ageflow/core": "workspace:*",
-    "@ageflow/executor": "workspace:*",
-    "@ageflow/mcp-server": "workspace:*",
-    "chalk": "^5.3.0",
-    "ora": "^8.0.0",
-    "boxen": "^8.0.0",
-    "commander": "^12.0.0"
+    "@ageflow/executor": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -46,9 +36,15 @@
     "llm",
     "dsl",
     "typescript",
-    "claude",
-    "openai",
-    "multi-agent"
+    "server",
+    "sse",
+    "streaming",
+    "hitl",
+    "human-in-the-loop",
+    "cancellation",
+    "abortcontroller",
+    "multi-agent",
+    "ageflow"
   ],
   "license": "MIT"
 }

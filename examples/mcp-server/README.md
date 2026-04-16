@@ -35,7 +35,7 @@ Add this snippet to your `claude_desktop_config.json` (usually at `~/Library/App
       "args": [
         "run",
         "--cwd",
-        "/absolute/path/to/agentflow/examples/mcp-server",
+        "/absolute/path/to/examples/mcp-server",
         "serve"
       ],
       "env": {}

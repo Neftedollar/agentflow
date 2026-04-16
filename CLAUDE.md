@@ -23,7 +23,7 @@ TypeScript embedded DSL + local CLI executor for multi-agent AI workflows.
 - This file (already loaded)
 
 **If task involves code:**
-- `agentflow/CLAUDE.md` — architecture, build, tests (once the repo is created)
+- See "Code Workspace" section below for build, test, and architecture guidance
 
 **If you are orchestrator (CEO Mode / Autonomous):**
 - `docs/process.md` — **operational manual** (pipelines, gates, escalation, retry). Source of truth.
@@ -42,8 +42,9 @@ TypeScript embedded DSL + local CLI executor for multi-agent AI workflows.
 
 ```
 agents-workflow/          ← this workspace
-├── agentflow/            ← main code repo (Bun monorepo)
-│   └── CLAUDE.md         ← read when working with code
+├── packages/             ← Bun monorepo (core entry)
+├── examples/             ← example workflows
+├── dogfooding/           ← dogfooding workflows
 ├── docs/
 │   ├── process.md        ← operational manual
 │   ├── role-capabilities.md
@@ -53,6 +54,10 @@ agents-workflow/          ← this workspace
 │           └── 2026-04-15-agentflow-design.md
 ├── .claude/
 │   └── commands/         ← slash commands
+├── package.json          ← monorepo root
+├── tsconfig.base.json
+├── turbo.json
+├── biome.json
 └── CLAUDE.md             ← this file
 ```
 
@@ -122,7 +127,50 @@ GitHub issues (repo TBD — to be created when agentflow monorepo is set up).
 ## Rules
 
 - **Confirm intent**: on ambiguous requests — clarify before acting.
-- **Code**: all code changes in `agentflow/`. Read its CLAUDE.md.
+- **Code**: all code changes in `packages/`. Modify only via git worktree.
 - **Worktree**: modify code only via git worktree. Main directory = read-only for pipeline.
 - **Don't overengineer**: implementation plan phases 1→6, follow order.
 - **Type safety everywhere**: non-functional requirement — every DSL call must be type-safe end-to-end.
+
+---
+
+## Code Workspace
+
+Bun monorepo. Main entry: `packages/core/`.
+
+### Commands
+- `bun install` — install deps
+- `bun run build` — build all packages
+- `bun run test` — run all tests
+- `bun run typecheck` — type-check all packages
+- `bun run lint` — lint with Biome
+
+### Package dependency order (critical path)
+```
+core ← executor ← cli
+core ← runners/claude
+core ← runners/codex
+core ← testing
+executor ← testing
+runners/* ← executor (via RunnerRegistry)
+core ← server
+executor ← server
+server ← mcp-server   ← @ageflow/mcp-server depends on @ageflow/server (async job mode, Phase 11 #18)
+```
+
+### Packages (v1)
+- `@ageflow/core` — types, Zod schemas, DSL builders
+- `@ageflow/executor` — DAG executor, loop, session, HITL, budget, pre-flight
+- `@ageflow/runner-claude` — Claude CLI subprocess runner
+- `@ageflow/runner-codex` — Codex CLI subprocess runner
+- `@ageflow/runner-api` — OpenAI-compatible HTTP runner
+- `@ageflow/testing` — test harness (`createTestHarness`)
+- `@ageflow/server` — embeddable execution surface — streaming events, async HITL, cancellation
+- `@ageflow/mcp-server` — MCP transport layer; depends on `@ageflow/server` for async job mode (createRunner, RunHandle)
+- `agentflow` (CLI) — `agentwf run/validate/dry-run/init`
+
+### Development phases
+- Phase 1 complete: @agentflow/core
+- Phases 2-6: executor, runners, testing, CLI, examples
+- Phase 7+: @ageflow/server (#26)
+- Phase 7: agents use MCP servers (#19) — MCP integration across all 3 runners, API runner in-process MCP client; new `@modelcontextprotocol/sdk` runtime dep on `@ageflow/runner-api` and `@ageflow/testing`

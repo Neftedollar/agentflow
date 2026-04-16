@@ -989,7 +989,7 @@ Run tests → green.
   "name": "@ageflow/server",
   "version": "0.1.0",
   "description": "Embeddable execution surface for ageflow workflows: stream, fire-and-forget, async HITL, cancellation.",
-  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/agentflow/packages/server",
+  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/server",
   "type": "module",
   "private": false,
   "sideEffects": false,

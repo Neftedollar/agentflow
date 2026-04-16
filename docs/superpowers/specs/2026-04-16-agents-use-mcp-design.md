@@ -525,7 +525,7 @@ using `@modelcontextprotocol/sdk`. Parameterised: crash, hang,
 - `claude-runner` / `codex-runner` tests behind
   `CLAUDE_CLI_AVAILABLE=1` / `CODEX_CLI_AVAILABLE=1`.
 
-**Dogfooding.** `agentflow/examples/mcp-filesystem-audit/` uses the
+**Dogfooding.** `examples/mcp-filesystem-audit/` uses the
 filesystem MCP server. Acceptance: the *same* config passes under
 `claude`, `codex`, and `api` runners (only `runner:` string differs).
 

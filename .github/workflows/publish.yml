@@ -13,9 +13,6 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: agentflow
 
     steps:
       - uses: actions/checkout@v4
@@ -34,36 +31,36 @@ jobs:
 
       - name: Publish @ageflow/core
         run: npm publish --access public --provenance
-        working-directory: agentflow/packages/core
+        working-directory: packages/core
 
       - name: Publish @ageflow/executor
         run: npm publish --access public --provenance
-        working-directory: agentflow/packages/executor
+        working-directory: packages/executor
 
       - name: Publish @ageflow/runner-claude
         run: npm publish --access public --provenance
-        working-directory: agentflow/packages/runners/claude
+        working-directory: packages/runners/claude
 
       - name: Publish @ageflow/runner-codex
         run: npm publish --access public --provenance
-        working-directory: agentflow/packages/runners/codex
+        working-directory: packages/runners/codex
 
       - name: Publish @ageflow/runner-api
         run: npm publish --access public --provenance
-        working-directory: agentflow/packages/runners/api
+        working-directory: packages/runners/api
 
       - name: Publish @ageflow/testing
         run: npm publish --access public --provenance
-        working-directory: agentflow/packages/testing
+        working-directory: packages/testing
 
       - name: Publish @ageflow/mcp-server
         run: npm publish --access public --provenance
-        working-directory: agentflow/packages/mcp-server
+        working-directory: packages/mcp-server
 
       - name: Publish @ageflow/server
         run: npm publish --access public --provenance
-        working-directory: agentflow/packages/server
+        working-directory: packages/server
 
       - name: Publish @ageflow/cli
         run: npm publish --access public --provenance
-        working-directory: agentflow/packages/cli
+        working-directory: packages/cli

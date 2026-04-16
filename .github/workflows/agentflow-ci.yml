@@ -2,17 +2,22 @@ name: AgentFlow CI
 on:
   push:
     paths:
-      - 'agentflow/**'
+      - 'packages/**'
+      - 'tsconfig.base.json'
+      - 'turbo.json'
+      - 'biome.json'
+      - 'package.json'
   pull_request:
     paths:
-      - 'agentflow/**'
+      - 'packages/**'
+      - 'tsconfig.base.json'
+      - 'turbo.json'
+      - 'biome.json'
+      - 'package.json'
 
 jobs:
   ci:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: agentflow
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2

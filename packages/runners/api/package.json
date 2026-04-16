@@ -1,8 +1,8 @@
 {
-  "name": "@ageflow/server",
+  "name": "@ageflow/runner-api",
   "version": "0.3.0",
-  "description": "Embeddable execution surface for ageflow workflows: stream, fire-and-forget, async HITL, cancellation.",
-  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/agentflow/packages/server",
+  "description": "OpenAI-compatible HTTP runner for ageflow (OpenAI, Groq, Together, Ollama, vLLM, LM Studio, Azure).",
+  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/runners/api",
   "type": "module",
   "private": false,
   "sideEffects": false,
@@ -18,9 +18,10 @@
   },
   "dependencies": {
     "@ageflow/core": "workspace:*",
-    "@ageflow/executor": "workspace:*"
+    "@modelcontextprotocol/sdk": "^1.0.0"
   },
   "devDependencies": {
+    "@ageflow/testing": "workspace:*",
     "@types/node": "^22.0.0",
     "vitest": "^2.1.0",
     "zod": "^3.23.0"
@@ -36,15 +37,11 @@
     "llm",
     "dsl",
     "typescript",
-    "server",
-    "sse",
-    "streaming",
-    "hitl",
-    "human-in-the-loop",
-    "cancellation",
-    "abortcontroller",
+    "openai",
+    "groq",
+    "ollama",
     "multi-agent",
-    "ageflow"
+    "api-runner"
   ],
   "license": "MIT"
 }

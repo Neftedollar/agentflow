@@ -73,7 +73,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "ageflow-dev-pipeline": {
       "command": "agentwf",
-      "args": ["mcp", "serve", "/absolute/path/to/agentflow/dogfooding/workflow.ts"]
+      "args": ["mcp", "serve", "/absolute/path/to/dogfooding/workflow.ts"]
     }
   }
 }

@@ -1,8 +1,8 @@
 {
-  "name": "@ageflow/testing",
+  "name": "@ageflow/executor",
   "version": "0.3.0",
-  "description": "Test harness for ageflow workflows — mock agents, inspect call counts, no API calls needed",
-  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/agentflow/packages/testing",
+  "description": "DAG executor, loop runner, session manager, HITL, budget tracker, and preflight checks for ageflow",
+  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/executor",
   "type": "module",
   "private": false,
   "exports": {
@@ -20,8 +20,7 @@
   },
   "dependencies": {
     "@ageflow/core": "workspace:*",
-    "@ageflow/executor": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "zod-to-json-schema": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

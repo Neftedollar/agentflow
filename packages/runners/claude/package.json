@@ -1,8 +1,8 @@
 {
-  "name": "@ageflow/executor",
+  "name": "@ageflow/runner-claude",
   "version": "0.3.0",
-  "description": "DAG executor, loop runner, session manager, HITL, budget tracker, and preflight checks for ageflow",
-  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/agentflow/packages/executor",
+  "description": "Claude CLI subprocess runner for ageflow",
+  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/runners/claude",
   "type": "module",
   "private": false,
   "exports": {
@@ -19,13 +19,12 @@
     "lint": "biome check src/"
   },
   "dependencies": {
-    "@ageflow/core": "workspace:*",
-    "zod-to-json-schema": "^3.23.0"
+    "@ageflow/core": "workspace:*"
   },
   "devDependencies": {
+    "@types/bun": "^1.1.0",
     "@types/node": "^22.0.0",
-    "vitest": "^2.1.0",
-    "zod": "^3.23.0"
+    "vitest": "^2.1.0"
   },
   "repository": {
     "type": "git",
