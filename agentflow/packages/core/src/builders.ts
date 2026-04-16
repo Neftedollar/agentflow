@@ -72,12 +72,16 @@ const DEFAULT_RETRY: RetryConfig = {
  * @internal
  */
 function migrateLegacyMcpEntry(legacy: MCPConfig): McpServerConfig {
-  return {
+  const config: McpServerConfig = {
     name: legacy.server,
     // v0.1 MCPConfig had no `command` field — default to npx
     command: "npx",
-    args: legacy.args,
   };
+  if (legacy.args !== undefined) {
+    // exactOptionalPropertyTypes: only set when defined
+    return { ...config, args: legacy.args };
+  }
+  return config;
 }
 
 /**
@@ -114,14 +118,18 @@ export function resolveAgentDef<
     };
   }
 
-  return {
+  const resolved: ResolvedAgentDef<I, O, R> = {
     ...def,
-    mcp: resolvedMcp,
     sanitizeInput: def.sanitizeInput ?? true,
     retry: resolvedRetry,
     timeoutMs: def.timeoutMs ?? 300_000,
     maxOutputBytes: def.maxOutputBytes ?? 1_048_576,
   };
+  if (resolvedMcp !== undefined) {
+    // exactOptionalPropertyTypes: only set when defined
+    (resolved as { mcp?: AgentMcpConfig }).mcp = resolvedMcp;
+  }
+  return resolved;
 }
 
 /**

@@ -102,6 +102,15 @@ export {
 } from "./errors.js";
 export type { AttemptRecord } from "./errors.js";
 
+// MCP allowlist helpers
+export {
+  filterMcpTools,
+  isMcpToolPermitted,
+  mcpToolFqn,
+  parseMcpToolFqn,
+} from "./mcp-allowlist.js";
+export type { McpToolDescriptor } from "./mcp-allowlist.js";
+
 // MCP defaults
 export {
   resolveMcpConfig,
