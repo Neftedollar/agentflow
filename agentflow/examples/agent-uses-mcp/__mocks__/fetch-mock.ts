@@ -17,7 +17,7 @@ export function mockFetch(
         message: {
           role: "assistant",
           content: JSON.stringify({
-            summary: "Found 3 files in /tmp/workdir via filesystem MCP.",
+            summary: "Found 3 files in .",
             fileCount: 3,
           }),
         },

@@ -49,7 +49,7 @@ AGENTFLOW_MOCK=1 bun run demo:api
 each runner that supports subprocess MCP servers.
 
 The server exposes `read_file` and `list_directory` tools scoped to
-`/tmp/workdir`. AgentFlow applies a `safePath()` Zod refinement on both tools'
+`.` (current working directory). AgentFlow applies a `safePath()` Zod refinement on both tools'
 `path` argument before the call is dispatched, blocking:
 
 - path traversal (`../`)
@@ -69,7 +69,7 @@ model — all others are filtered before reaching the prompt.
 | `tools: ["read_file", "list_directory"]` | Tool allowlist — any tool not listed is denied before it reaches the model |
 | `refine: { read_file: z.object({ path: safePath() }), ... }` | Per-argument Zod refinement run before each tool call; rejects traversal, absolute paths, env vars |
 | `sanitizeInput: true` (default) | Strips prompt-injection patterns from upstream agent outputs before interpolation |
-| Subprocess scoping | The filesystem server is started with `/tmp/workdir` as its root — it cannot serve files outside that directory |
+| Subprocess scoping | The filesystem server is started with `.` (current working directory) as its root — it cannot serve files outside that directory |
 
 ---
 

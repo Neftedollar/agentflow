@@ -31,6 +31,25 @@ describe("McpServerConfigSchema", () => {
     ).toThrow();
   });
 
+  it("rejects names containing '__' (FQN delimiter)", () => {
+    const result = McpServerConfigSchema.safeParse({
+      name: "a__b",
+      command: "x",
+    });
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.error)).toContain(
+      "MCP server name cannot contain '__' (reserved as FQN delimiter)",
+    );
+  });
+
+  it("accepts single-underscore names like 'github_enterprise'", () => {
+    const result = McpServerConfigSchema.safeParse({
+      name: "github_enterprise",
+      command: "npx",
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("rejects unknown transport values", () => {
     expect(() =>
       McpServerConfigSchema.parse({
