@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/runner-claude",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Claude CLI subprocess runner for ageflow",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/agentflow/packages/runners/claude",
   "type": "module",

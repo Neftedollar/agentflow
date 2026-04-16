@@ -32,3 +32,4 @@ executor ← server
 ## Phase 1 complete: @agentflow/core
 ## Phases 2-6: executor, runners, testing, CLI, examples
 ## Phase 7+: @ageflow/server (#26)
+## Phase 7: agents use MCP servers (#19) — MCP integration across all 3 runners, API runner in-process MCP client; new `@modelcontextprotocol/sdk` runtime dep on `@ageflow/runner-api` and `@ageflow/testing`
