@@ -145,7 +145,14 @@ export function createRunner(config: RunnerConfig = {}): Runner {
                 void
               >
             ).next();
-            if (!step.done) options?.onEvent?.(step.value);
+            if (!step.done) {
+              try {
+                options?.onEvent?.(step.value);
+              } catch {
+                // onEvent exceptions must not exit the drain loop — the run
+                // must still reach a terminal state so the registry TTL fires.
+              }
+            }
           } while (!step.done);
           options?.onComplete?.(step.value);
         } catch (err) {

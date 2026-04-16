@@ -84,6 +84,25 @@ describe("fire()", () => {
     }
   });
 
+  it("P2-3: run reaches done state even when onEvent throws", async () => {
+    const runner = createRunner();
+    // onEvent throws on every call — must not prevent run from completing
+    const done = new Promise<void>((resolve) => {
+      runner.fire(
+        wf,
+        {},
+        {
+          onEvent: () => {
+            throw new Error("onEvent kaboom");
+          },
+          onComplete: () => resolve(),
+        },
+      );
+    });
+    await done;
+    runner.close();
+  });
+
   it("returns a RunHandle synchronously with state=running", () => {
     const runner = createRunner();
     const handle = runner.fire(wf, {});
