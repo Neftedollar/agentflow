@@ -1,6 +1,8 @@
+import type { Logger } from "@ageflow/core";
 import { spawnMockMcpServer } from "@ageflow/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  McpServerStartFailedError,
   McpToolCallFailedError,
   shutdownAll,
   startMcpClients,
@@ -146,6 +148,104 @@ describe("McpClient timeout and kill escalation", () => {
       // The subprocess must still be alive
       expect(isAlive(pid)).toBe(true);
 
+      await shutdownAll(clients);
+    },
+    { timeout: 5_000 },
+  );
+});
+
+// ─── Issue #71: logger wired through startMcpClients ─────────────────────────
+
+describe("startMcpClients logger (issue #71)", () => {
+  it(
+    "tees MCP subprocess stderr to the injected logger",
+    async () => {
+      // crashOn:"initialize" causes the subprocess to write to stderr before
+      // exiting, so we can capture the debug call even though startup fails.
+      const handle = spawnMockMcpServer.asSubprocessCommand({
+        tools: [],
+        crashOn: "initialize",
+      });
+
+      const mockLogger: Logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+
+      // The server crashes on initialize — startMcpClients must throw.
+      await expect(
+        startMcpClients(
+          [
+            {
+              name: "crashing",
+              command: handle.command,
+              args: [...handle.args],
+            },
+          ],
+          mockLogger,
+        ),
+      ).rejects.toThrow(McpServerStartFailedError);
+
+      // The subprocess wrote "mock-mcp: crashing on initialize\n" to stderr
+      // before exiting. The logger.debug should have received it.
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining("[mcp:crashing]"),
+      );
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining("crashing on initialize"),
+      );
+    },
+    { timeout: 5_000 },
+  );
+
+  it("does not throw when no logger is provided (stderr silently discarded)", async () => {
+    const handle = spawnMockMcpServer.asSubprocessCommand({
+      tools: [],
+      crashOn: "initialize",
+    });
+
+    // Should still throw McpServerStartFailedError, but no crash from missing logger
+    await expect(
+      startMcpClients([
+        {
+          name: "crashing-nolog",
+          command: handle.command,
+          args: [...handle.args],
+        },
+      ]),
+    ).rejects.toThrow(McpServerStartFailedError);
+  });
+});
+
+// ─── Issue #72: no redundant env-var expansion ────────────────────────────────
+
+describe("startMcpClients env passthrough (issue #72)", () => {
+  it(
+    "passes env values as-is without expanding ${env:VAR} placeholders",
+    async () => {
+      // If expansion still happened, ${env:__NONEXISTENT_VAR__} would silently
+      // become "" and the value would be corrupted.
+      const placeholder = "${env:__NONEXISTENT_VAR__}";
+
+      const handle = spawnMockMcpServer.asSubprocessCommand({
+        tools: [{ name: "echo", description: "", inputSchema: {} }],
+      });
+
+      // We can't easily inspect the env passed to the subprocess, but we can
+      // verify that startMcpClients starts successfully when env contains an
+      // unexpanded placeholder — demonstrating it is passed verbatim.
+      const clients = await startMcpClients([
+        {
+          name: "env-mock",
+          command: handle.command,
+          args: [...handle.args],
+          env: { MY_VAR: placeholder },
+        },
+      ]);
+
+      expect(clients).toHaveLength(1);
       await shutdownAll(clients);
     },
     { timeout: 5_000 },

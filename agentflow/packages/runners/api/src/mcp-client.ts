@@ -232,16 +232,7 @@ async function startOne(
   logger?: Logger,
 ): Promise<McpClientImpl> {
   const env: Record<string, string> = cfg.env
-    ? Object.fromEntries(
-        Object.entries(cfg.env).map(([k, v]) => [
-          k,
-          // Basic ${env:VAR} substitution (already resolved by executor; kept for safety)
-          v.replace(
-            /\$\{env:([^}]+)\}/g,
-            (_, name: string) => process.env[name] ?? "",
-          ),
-        ]),
-      )
+    ? Object.fromEntries(Object.entries(cfg.env))
     : {};
 
   const hasEnv = Object.keys(env).length > 0;
