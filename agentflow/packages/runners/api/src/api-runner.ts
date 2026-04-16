@@ -80,6 +80,17 @@ export class ApiRunner implements Runner {
 
     const toolSchemas = toolsToSchemas(this.tools, args.tools);
 
+    // P1-3: filter the runtime registry to the caller's allowlist so that
+    // tools not in args.tools cannot be executed even if the model names them.
+    const filteredRegistry =
+      args.tools !== undefined
+        ? Object.fromEntries(
+            Object.entries(this.tools).filter(([name]) =>
+              (args.tools as string[]).includes(name),
+            ),
+          )
+        : this.tools;
+
     const loop = await runToolLoop({
       baseUrl: this.baseUrl,
       apiKey: this.apiKey,
@@ -88,7 +99,7 @@ export class ApiRunner implements Runner {
       model,
       messages: initialMessages,
       tools: toolSchemas,
-      registry: this.tools,
+      registry: filteredRegistry,
       maxRounds: this.maxToolRounds,
       requestTimeout: this.requestTimeout,
     });

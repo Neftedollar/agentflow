@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiRunner } from "../api-runner.js";
+import { ToolNotFoundError } from "../errors.js";
 import type { ChatCompletionResponse } from "../openai-types.js";
 import { InMemorySessionStore } from "../session-store.js";
 
@@ -117,6 +118,114 @@ describe("ApiRunner.spawn", () => {
       messages: Array<{ role: string; content: string }>;
     };
     expect(body.messages[0]).toEqual({ role: "system", content: "be concise" });
+  });
+});
+
+describe("P1-3: tool registry filtered by args.tools allowlist", () => {
+  it("throws ToolNotFoundError when model calls a tool not in args.tools allowlist", async () => {
+    // Registry has 3 tools: a, b, c.  spawn is called with args.tools = ["a", "b"].
+    // The mock LLM response requests tool "c" — must throw ToolNotFoundError.
+    const toolCallResponse: ChatCompletionResponse = {
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: "call1",
+                type: "function",
+                function: { name: "c", arguments: "{}" },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+      usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
+    };
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResp(toolCallResponse));
+
+    const runner = new ApiRunner({
+      baseUrl: "https://example.test/v1",
+      apiKey: "k",
+      defaultModel: "gpt-4o",
+      fetch: fetchMock as unknown as typeof fetch,
+      tools: {
+        a: { description: "tool a", parameters: {}, execute: async () => "a" },
+        b: { description: "tool b", parameters: {}, execute: async () => "b" },
+        c: { description: "tool c", parameters: {}, execute: async () => "c" },
+      },
+    });
+
+    // Only allow tools "a" and "b" — "c" is not in the allowlist
+    await expect(
+      runner.spawn({ prompt: "use tool c", tools: ["a", "b"] }),
+    ).rejects.toThrow(ToolNotFoundError);
+  });
+
+  it("allows calling a tool that is in the allowlist", async () => {
+    // Registry has a, b, c. spawn with args.tools = ["a"]. Model calls "a" — ok.
+    const toolCallThenStop: ChatCompletionResponse[] = [
+      {
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                {
+                  id: "call1",
+                  type: "function",
+                  function: { name: "a", arguments: "{}" },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+        ],
+        usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 },
+      },
+      {
+        choices: [
+          {
+            message: { role: "assistant", content: "done" },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 5, completion_tokens: 3, total_tokens: 8 },
+      },
+    ];
+
+    let callIdx = 0;
+    const fetchMock = vi.fn().mockImplementation(() => {
+      const resp = toolCallThenStop[callIdx++];
+      return Promise.resolve(jsonResp(resp));
+    });
+
+    const runner = new ApiRunner({
+      baseUrl: "https://example.test/v1",
+      apiKey: "k",
+      defaultModel: "gpt-4o",
+      fetch: fetchMock as unknown as typeof fetch,
+      tools: {
+        a: {
+          description: "tool a",
+          parameters: {},
+          execute: async () => "result-a",
+        },
+        b: { description: "tool b", parameters: {}, execute: async () => "b" },
+        c: { description: "tool c", parameters: {}, execute: async () => "c" },
+      },
+    });
+
+    const result = await runner.spawn({ prompt: "use a", tools: ["a"] });
+    expect(result.stdout).toBe("done");
+    expect(result.toolCalls.length).toBe(1);
+    expect(result.toolCalls[0]?.name).toBe("a");
   });
 });
 
