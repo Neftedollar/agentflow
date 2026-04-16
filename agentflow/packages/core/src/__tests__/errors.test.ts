@@ -5,6 +5,8 @@ import {
   BudgetExceededError,
   GenericAgentFlowError,
   LoopMaxIterationsError,
+  McpServerStartFailedError,
+  McpToolNotPermittedError,
   NodeMaxRetriesError,
   PathTraversalError,
   PreFlightError,
@@ -256,6 +258,20 @@ describe("TimeoutError", () => {
     const err = new TimeoutError("task1", 30_000);
     expect(err.message).toContain("task1");
     expect(err.message).toContain("30000");
+  });
+});
+
+describe("MCP error hierarchy", () => {
+  it("McpToolNotPermittedError carries server + tool names", () => {
+    const err = new McpToolNotPermittedError("filesystem", "exec_anywhere");
+    expect(err.code).toBe("mcp_tool_not_permitted");
+    expect(err.message).toContain("filesystem/exec_anywhere");
+  });
+
+  it("McpServerStartFailedError is retriable (mcp_server_start_failed code)", () => {
+    const err = new McpServerStartFailedError("github", "ENOENT");
+    expect(err.code).toBe("mcp_server_start_failed");
+    expect(["subprocess_error", "mcp_server_start_failed"]).toContain(err.code);
   });
 });
 
