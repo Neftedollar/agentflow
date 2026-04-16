@@ -232,6 +232,86 @@ try {
 }
 ```
 
+## Using MCP servers
+
+Pass MCP server configuration via `mcp.servers` on any `defineAgent` call. The
+API runner spawns each server as a stdio subprocess via
+`@modelcontextprotocol/sdk`. Tools are discovered at spawn time and registered
+in the tool-loop under the fully-qualified name `mcp__<server>__<tool>`.
+
+```ts
+import { defineAgent, safePath } from "@ageflow/core";
+import { z } from "zod";
+
+const fileAgent = defineAgent({
+  runner: "api",
+  model: "gpt-4o-mini",
+  input: z.object({ query: z.string() }),
+  output: z.object({ result: z.string() }),
+  prompt: ({ query }) => query,
+  mcp: {
+    servers: [
+      {
+        name: "filesystem",
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"],
+        // Allowlist — only these tools are exposed to the model
+        tools: ["read_file", "list_directory"],
+        // Refine — validate path args before forwarding to the server
+        refine: {
+          read_file: z.object({ path: safePath("/workspace") }),
+        },
+        // ${env:VAR} is resolved at launch time by the executor
+        env: { NODE_ENV: "${env:NODE_ENV}" },
+        // Keep this server alive across spawn() calls on the same runner instance
+        reusePerRunner: true,
+      },
+    ],
+  },
+});
+```
+
+**Allowlist** (`tools`): when set, only the listed tools are added to the
+tool-loop registry. Unlisted tools never reach the model, and a post-dispatch
+guard rejects unexpected call attempts.
+
+**Refine** (`refine`): a map of tool name → Zod schema. Arguments are validated
+against the schema before the call is dispatched. Use `safePath()` to prevent
+path traversal.
+
+**Environment expansion** (`env`): values of the form `${env:VAR}` are replaced
+with the corresponding process environment variable at launch time.
+
+### `reusePerRunner` — server lifecycle pooling
+
+By default each `spawn()` call starts its own MCP server subprocesses and stops
+them when the call completes. Set `reusePerRunner: true` on a server to keep it
+alive in a per-runner pool and reuse it across all `spawn()` calls on the same
+`ApiRunner` instance. This avoids repeated cold-start overhead for servers that
+are expensive to initialize.
+
+```ts
+// Server stays up across calls — warm on every spawn()
+{ name: "filesystem", command: "npx", args: [...], reusePerRunner: true }
+```
+
+### `runner.shutdown()` — draining the pool
+
+Call `runner.shutdown()` after all tasks are complete to gracefully stop pooled
+servers. The workflow executor calls this automatically on workflow
+completion / abort (Phase 7+). If you manage the runner manually:
+
+```ts
+const runner = new ApiRunner({ baseUrl: "...", apiKey: "..." });
+
+try {
+  await runner.spawn({ ... });
+  await runner.spawn({ ... });
+} finally {
+  await runner.shutdown(); // stops all reusePerRunner servers
+}
+```
+
 ## API reference
 
 ### `new ApiRunner(config: ApiRunnerConfig)`
@@ -249,6 +329,12 @@ error (network, 4xx, 5xx) — never throws.
 Executes a prompt, optionally resuming a session, and loops until the model
 produces a non-tool-call response. Returns `stdout` (final text), `sessionHandle`,
 `tokensIn`, `tokensOut`, and `toolCalls`.
+
+### `runner.shutdown(): Promise<void>`
+
+Stops all pooled MCP server subprocesses (`reusePerRunner: true`) and clears
+the pool. Per-spawn servers are already stopped by `spawn()` itself — only the
+pool requires an explicit `shutdown()` call. Safe to call more than once.
 
 ## License
 

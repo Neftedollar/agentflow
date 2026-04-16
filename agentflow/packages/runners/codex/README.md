@@ -53,6 +53,53 @@ Any model supported by your `codex` CLI version:
 | o4-mini | `o4-mini` |
 | o3 | `o3` |
 
+## Using MCP servers
+
+Pass MCP server configuration via `mcp.servers` on any `defineAgent` call. The
+Codex runner emits `-c mcp_servers.<name>.command=...` overrides to the Codex
+CLI — no external config file is required.
+
+```ts
+import { defineAgent, safePath } from "@ageflow/core";
+import { z } from "zod";
+
+const fileAgent = defineAgent({
+  runner: "codex",
+  model: "o4-mini",
+  input: z.object({ query: z.string() }),
+  output: z.object({ result: z.string() }),
+  prompt: ({ query }) => query,
+  mcp: {
+    servers: [
+      {
+        name: "filesystem",
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"],
+        // Allowlist — only these tools are exposed to the model
+        tools: ["read_file", "list_directory"],
+        // Refine — validate path args before forwarding to the server
+        refine: {
+          read_file: z.object({ path: safePath("/workspace") }),
+        },
+        // ${env:VAR} is resolved at launch time by the executor
+        env: { NODE_ENV: "${env:NODE_ENV}" },
+      },
+    ],
+  },
+});
+```
+
+**Allowlist** (`tools`): when set, the tool names are forwarded via
+`-c mcp_servers.filesystem.tools=["read_file","list_directory"]`. Unlisted
+tools are denied before they reach the model.
+
+**Refine** (`refine`): a map of tool name → Zod schema. Arguments are validated
+against the schema before the call is dispatched. Use `safePath()` to prevent
+path traversal.
+
+**Environment expansion** (`env`): values of the form `${env:VAR}` are replaced
+with the corresponding process environment variable at launch time.
+
 ## License
 
 MIT
