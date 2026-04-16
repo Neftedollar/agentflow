@@ -29,6 +29,22 @@
     "type": "git",
     "url": "https://github.com/Neftedollar/ageflow.git"
   },
-  "keywords": ["ai", "agents", "workflow", "server", "sse", "hitl", "ageflow"],
+  "keywords": [
+    "ai",
+    "agents",
+    "workflow",
+    "llm",
+    "dsl",
+    "typescript",
+    "server",
+    "sse",
+    "streaming",
+    "hitl",
+    "human-in-the-loop",
+    "cancellation",
+    "abortcontroller",
+    "multi-agent",
+    "ageflow"
+  ],
   "license": "MIT"
 }

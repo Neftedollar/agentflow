@@ -16,6 +16,19 @@ core ← runners/codex
 core ← testing
 executor ← testing
 runners/* ← executor (via RunnerRegistry)
+core ← server
+executor ← server
+
+## Packages (v1)
+- `@ageflow/core` — types, Zod schemas, DSL builders
+- `@ageflow/executor` — DAG executor, loop, session, HITL, budget, pre-flight
+- `@ageflow/runner-claude` — Claude CLI subprocess runner
+- `@ageflow/runner-codex` — Codex CLI subprocess runner
+- `@ageflow/runner-api` — OpenAI-compatible HTTP runner
+- `@ageflow/testing` — test harness (`createTestHarness`)
+- `@ageflow/server` — embeddable execution surface — streaming events, async HITL, cancellation
+- `agentflow` (CLI) — `agentwf run/validate/dry-run/init`
 
 ## Phase 1 complete: @agentflow/core
 ## Phases 2-6: executor, runners, testing, CLI, examples
+## Phase 7+: @ageflow/server (#26)
