@@ -4,7 +4,11 @@ import {
   registerRunner,
   unregisterRunner,
 } from "@ageflow/core";
-import type { RunnerSpawnArgs, RunnerSpawnResult } from "@ageflow/core";
+import type {
+  RunnerSpawnArgs,
+  RunnerSpawnResult,
+  WorkflowDef,
+} from "@ageflow/core";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { ErrorCode } from "../../errors.js";
@@ -485,6 +489,129 @@ describe("async mode: input injection (#84 item 10)", () => {
         expect(output.a).toBe("hello, Charlie!");
       }
     } finally {
+      h.dispose?.();
+    }
+  });
+});
+
+describe("async mode: ceiling + HITL composition (#84 item 11)", () => {
+  /**
+   * Verifies that the async path applies composeCeilings before calling
+   * runner.fire(). With cliCeilings: { maxCostUsd: 0.1 }, the composed workflow
+   * must have budget.maxCost === 0.1.
+   *
+   * Uses _testOnComposedWorkflow to capture the workflow passed to runner.fire()
+   * without needing to intercept the executor itself.
+   */
+  it("CLI ceiling override flows through to the composed workflow on the async path", async () => {
+    const h = createMcpServer({
+      workflow,
+      cliCeilings: { maxCostUsd: 0.1 },
+      hitlStrategy: "auto",
+      async: true,
+    });
+
+    let captured: WorkflowDef | undefined;
+    h._testOnComposedWorkflow = (wf) => {
+      captured = wf;
+    };
+    h._testRunExecutor = async () => ({ a: "ok" });
+
+    const startRes = await h.callTool("start_ask", { q: "hello" });
+    expect(startRes.isError).toBe(false);
+
+    // _testOnComposedWorkflow is called synchronously during start, before fire()
+    // returns, so `captured` is available immediately after callTool resolves.
+    expect(captured).toBeDefined();
+    expect(captured?.budget).toBeDefined();
+    // CLI override of 0.1 must be present in the composed workflow's budget.
+    expect(captured?.budget?.maxCost).toBe(0.1);
+
+    h.dispose?.();
+  });
+
+  /**
+   * Verifies that the async path respects the HITL strategy ("fail") by wiring
+   * an onCheckpoint resolver into runner.fire(). With hitlStrategy: "fail", any
+   * checkpoint encountered during execution must be rejected, causing the run
+   * to fail.
+   *
+   * Uses a real workflow with hitl: { mode: "checkpoint" } on the agent so the
+   * executor actually fires a checkpoint event during task execution.
+   */
+  it("hitlStrategy 'fail' rejects checkpoints on the async path (job ends in failed state)", async () => {
+    const RUNNER_NAME = "fake-hitl-test";
+
+    // Agent with a mandatory checkpoint gate.
+    const checkpointAgent = defineAgent({
+      runner: RUNNER_NAME,
+      input: z.object({ q: z.string() }),
+      output: z.object({ a: z.string() }),
+      prompt: ({ q }) => `q:${q}`,
+      // biome-ignore lint/suspicious/noExplicitAny: HITLConfig type exists in core
+      hitl: { mode: "checkpoint" } as any,
+    });
+
+    const checkpointWorkflow = defineWorkflow({
+      name: "ask",
+      tasks: { t: { agent: checkpointAgent, input: { q: "hi" } } },
+    });
+
+    // Register a fake runner — spawn should NOT be called since the checkpoint
+    // fires before the task runs and "fail" strategy rejects it.
+    let spawnCalled = false;
+    registerRunner(RUNNER_NAME, {
+      validate: async () => ({ ok: true }),
+      spawn: async (_args: RunnerSpawnArgs): Promise<RunnerSpawnResult> => {
+        spawnCalled = true;
+        return {
+          stdout: JSON.stringify({ a: "done" }),
+          sessionHandle: "",
+          tokensIn: 0,
+          tokensOut: 0,
+        };
+      },
+    });
+
+    const h = createMcpServer({
+      workflow: checkpointWorkflow,
+      cliCeilings: {},
+      hitlStrategy: "fail",
+      async: true,
+    });
+
+    try {
+      const startRes = await h.callTool("start_ask", { q: "gate" });
+      expect(startRes.isError).toBe(false);
+      if (startRes.isError) throw new Error("start failed");
+
+      const jobId = (startRes.structuredContent as { jobId: string }).jobId;
+
+      // Poll until the job leaves "running" state. With "fail" strategy, the
+      // checkpoint is rejected immediately and the job transitions to "failed".
+      let state = "running";
+      for (let i = 0; i < 50 && state === "running"; i++) {
+        await new Promise<void>((r) => setTimeout(r, 10));
+        const statusRes = await h.callTool("get_workflow_status", { jobId });
+        if (!statusRes.isError) {
+          state = (statusRes.structuredContent as { state: string }).state;
+        }
+      }
+
+      // The job must fail — checkpoint was rejected by the "fail" strategy.
+      expect(state).toBe("failed");
+
+      // Verify spawn was never called (checkpoint blocked execution before spawn).
+      expect(spawnCalled).toBe(false);
+
+      // get_workflow_result must return WORKFLOW_FAILED.
+      const resultRes = await h.callTool("get_workflow_result", { jobId });
+      expect(resultRes.isError).toBe(true);
+      if (resultRes.isError) {
+        expect(resultRes.structuredContent.errorCode).toBe("WORKFLOW_FAILED");
+      }
+    } finally {
+      unregisterRunner(RUNNER_NAME);
       h.dispose?.();
     }
   });

@@ -21,6 +21,7 @@ export const ASYNC_OBSERVER_TOOL_NAMES = [
 ] as const;
 import { type McpConnectionLike, buildMcpHooks } from "./hitl-bridge.js";
 import {
+  type DispatchStartOptions,
   type JobDispatchContext,
   createJobDispatchContext,
   dispatchCancel,
@@ -88,6 +89,12 @@ export interface McpServerHandle {
     signal: AbortSignal,
     effective: EffectiveCeilings,
   ) => Promise<unknown>;
+  /**
+   * Test-only callback (async mode): called with the fully-composed workflow
+   * just before runner.fire(). Lets tests assert ceiling / hook composition
+   * without needing to intercept the executor itself.
+   */
+  _testOnComposedWorkflow?: (workflow: WorkflowDef) => void;
   /** Stop background TTL reaper (async mode only). Idempotent. */
   dispose?(): void;
 }
@@ -218,6 +225,10 @@ export function createMcpServer(opts: McpServerOptions): McpServerHandle {
 
       if (isStart) {
         const ctx = ensureDispatchCtx();
+        // Thread test hooks into context (test-only).
+        if (handle._testOnComposedWorkflow !== undefined) {
+          ctx._testOnComposedWorkflow = handle._testOnComposedWorkflow;
+        }
         // Thread test executor into context if set on handle (wraps 4-arg to 1-arg)
         if (handle._testRunExecutor !== undefined) {
           const testExec = handle._testRunExecutor;
@@ -229,9 +240,61 @@ export function createMcpServer(opts: McpServerOptions): McpServerHandle {
               {} as EffectiveCeilings,
             );
         }
+
+        // Apply the same ceiling/hook composition as the sync path so that
+        // async jobs respect CLI ceiling overrides and the configured HITL strategy.
+        const asyncEffective = composeCeilings(
+          resolved,
+          opts.cliCeilings,
+          stderr,
+        );
+
+        // DurationWatchdog for async: instead of Promise.race (which requires
+        // awaiting the run), we wire an AbortController into runner.fire() via
+        // the `signal` option. When maxDurationSec elapses the signal fires,
+        // the internal executor stream receives it, and the run is cancelled.
+        // This is semantically equivalent to the sync watchdog (both abort the
+        // underlying executor) but adapted for fire-and-forget execution.
+        // Note: the run will appear as "cancelled" (not "duration-exceeded") in
+        // the job registry, which is the correct terminal state for async jobs
+        // that hit their duration ceiling. A finer-grained DURATION_EXCEEDED
+        // status is left as a follow-up (tracked in #84 item 11).
+        let asyncWatchdogSignal: AbortSignal | undefined;
+        if (asyncEffective.maxDurationSec !== null) {
+          const asyncWatchdog = new DurationWatchdog(
+            asyncEffective.maxDurationSec,
+            () => {},
+          );
+          asyncWatchdog.start();
+          asyncWatchdogSignal = asyncWatchdog.abortSignal;
+        }
+
+        // Derive async HITL strategy: map hitlStrategy to a simple checkpoint
+        // resolver for runner.fire(). The async path cannot use MCP elicitation
+        // (no persistent connection during fire-and-forget execution), so:
+        //   "auto"   → immediately approve
+        //   "fail"   → immediately reject
+        //   "elicit" → undefined (runner's deferred path; client uses resume_workflow)
+        const asyncOnCheckpoint: DispatchStartOptions["onCheckpoint"] =
+          opts.hitlStrategy === "auto"
+            ? () => true
+            : opts.hitlStrategy === "fail"
+              ? () => false
+              : undefined; // elicit → deferred resume_workflow mechanism
+
+        const dispatchOpts: DispatchStartOptions = {
+          effective: asyncEffective,
+          ...(asyncOnCheckpoint !== undefined
+            ? { onCheckpoint: asyncOnCheckpoint }
+            : {}),
+          ...(asyncWatchdogSignal !== undefined
+            ? { abortSignal: asyncWatchdogSignal }
+            : {}),
+        };
+
         // dispatchStart releases inflight via ctx.releaseInflight (onComplete/onError)
         // or on validation failure.
-        return await dispatchStart(name, args, ctx);
+        return await dispatchStart(name, args, ctx, dispatchOpts);
       }
 
       // Sync path (existing body) — inflight cleared in finally.
