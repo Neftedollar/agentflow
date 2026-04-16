@@ -1,5 +1,6 @@
 import { AgentFlowError, AgentHitlConflictError } from "@ageflow/core";
 import type { Runner, RunnerSpawnArgs, RunnerSpawnResult } from "@ageflow/core";
+import { renderCodexMcpFlags } from "./mcp-render.js";
 
 // ─── Errors ───────────────────────────────────────────────────────────────────
 
@@ -169,6 +170,12 @@ export class CodexRunner implements Runner {
       finalPrompt = `${args.systemPrompt}\n\n---\n\n${args.prompt}`;
     }
 
+    // Emit MCP flags when mcpServers are provided (placed after subArgs, before prompt)
+    const mcpFlags =
+      args.mcpServers !== undefined && args.mcpServers.length > 0
+        ? renderCodexMcpFlags(args.mcpServers)
+        : [];
+
     // Session resumption uses a positional subcommand, not a flag
     let cmd: string[];
     if (args.sessionHandle !== undefined && args.sessionHandle !== "") {
@@ -176,12 +183,13 @@ export class CodexRunner implements Runner {
         "codex",
         "exec",
         ...subArgs,
+        ...mcpFlags,
         "resume",
         args.sessionHandle,
         finalPrompt,
       ];
     } else {
-      cmd = ["codex", "exec", ...subArgs, finalPrompt];
+      cmd = ["codex", "exec", ...subArgs, ...mcpFlags, finalPrompt];
     }
 
     const proc = this._spawn(cmd);

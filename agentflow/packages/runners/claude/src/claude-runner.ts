@@ -1,5 +1,10 @@
-import { AgentFlowError, AgentHitlConflictError } from "@ageflow/core";
+import {
+  AgentFlowError,
+  AgentHitlConflictError,
+  mcpToolFqn,
+} from "@ageflow/core";
 import type { Runner, RunnerSpawnArgs, RunnerSpawnResult } from "@ageflow/core";
+import { renderMcpJson } from "./mcp-render.js";
 
 // ─── Errors ───────────────────────────────────────────────────────────────────
 
@@ -155,6 +160,30 @@ export class ClaudeRunner implements Runner {
         .map(([tool]) => tool);
       if (deniedTools.length > 0) {
         cliArgs.push("--disallowedTools", deniedTools.join(","));
+      }
+    }
+
+    // Emit MCP flags when mcpServers are provided
+    if (args.mcpServers !== undefined && args.mcpServers.length > 0) {
+      const mcpConfigJson = JSON.stringify(renderMcpJson(args.mcpServers));
+      cliArgs.push("--mcp-config", mcpConfigJson, "--strict-mcp-config");
+
+      // Collect allowed MCP tool FQNs from servers that have an explicit allowlist
+      const mcpAllowed: string[] = [];
+      for (const s of args.mcpServers) {
+        if (s.tools === undefined) continue;
+        for (const t of s.tools) mcpAllowed.push(mcpToolFqn(s.name, t));
+      }
+
+      if (mcpAllowed.length > 0) {
+        // Merge with existing --allowedTools if the caller already passed args.tools
+        const existingIdx = cliArgs.indexOf("--allowedTools");
+        if (existingIdx !== -1) {
+          cliArgs[existingIdx + 1] =
+            `${cliArgs[existingIdx + 1]},${mcpAllowed.join(",")}`;
+        } else {
+          cliArgs.push("--allowedTools", mcpAllowed.join(","));
+        }
       }
     }
 
