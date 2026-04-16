@@ -204,3 +204,138 @@ export class TimeoutError extends AgentFlowError {
     super(`Task "${taskName}" timed out after ${timeoutMs}ms`, options);
   }
 }
+
+// ─── MCP error hierarchy ──────────────────────────────────────────────────────
+
+/**
+ * MCP server process failed to start (ENOENT, non-zero exit, etc.).
+ * Retriable — maps to the "mcp_server_start_failed" error kind.
+ */
+export class McpServerStartFailedError extends AgentFlowError {
+  readonly code = "mcp_server_start_failed" as const;
+  constructor(
+    readonly serverName: string,
+    readonly reason: string,
+    options?: ErrorOptions,
+  ) {
+    super(`MCP server "${serverName}" failed to start: ${reason}`, options);
+  }
+}
+
+/**
+ * MCP server process crashed after successful startup.
+ */
+export class McpServerCrashedError extends AgentFlowError {
+  readonly code = "mcp_server_crashed" as const;
+  constructor(
+    readonly serverName: string,
+    readonly exitCode: number | null,
+    options?: ErrorOptions,
+  ) {
+    super(
+      `MCP server "${serverName}" crashed (exit code: ${exitCode ?? "unknown"})`,
+      options,
+    );
+  }
+}
+
+/**
+ * Model called an MCP tool that does not exist on the server.
+ */
+export class McpToolNotFoundError extends AgentFlowError {
+  readonly code = "mcp_tool_not_found" as const;
+  constructor(
+    readonly serverName: string,
+    readonly toolName: string,
+    options?: ErrorOptions,
+  ) {
+    super(`MCP tool "${serverName}/${toolName}" not found on server`, options);
+  }
+}
+
+/**
+ * Model attempted to call a tool not in the allowlist. Double-enforcement
+ * guard — this fires post-dispatch if the model somehow bypassed the
+ * pre-dispatch filter.
+ */
+export class McpToolNotPermittedError extends AgentFlowError {
+  readonly code = "mcp_tool_not_permitted" as const;
+  constructor(
+    readonly serverName: string,
+    readonly toolName: string,
+    options?: ErrorOptions,
+  ) {
+    super(
+      `MCP tool call not permitted: "${serverName}/${toolName}" is not in the allowlist`,
+      options,
+    );
+  }
+}
+
+/**
+ * Tool arguments failed the per-tool Zod refinement (e.g. `safePath()`).
+ */
+export class McpToolArgInvalidError extends AgentFlowError {
+  readonly code = "mcp_tool_arg_invalid" as const;
+  constructor(
+    readonly serverName: string,
+    readonly toolName: string,
+    readonly zodError: string,
+    options?: ErrorOptions,
+  ) {
+    super(
+      `MCP tool "${serverName}/${toolName}" argument validation failed: ${zodError}`,
+      options,
+    );
+  }
+}
+
+/**
+ * The MCP tool call returned an error result from the server.
+ */
+export class McpToolCallFailedError extends AgentFlowError {
+  readonly code = "mcp_tool_call_failed" as const;
+  constructor(
+    readonly serverName: string,
+    readonly toolName: string,
+    readonly serverError: string,
+    options?: ErrorOptions,
+  ) {
+    super(
+      `MCP tool "${serverName}/${toolName}" call failed: ${serverError}`,
+      options,
+    );
+  }
+}
+
+/**
+ * Low-level MCP protocol error (malformed message, unexpected sequence, etc.).
+ */
+export class McpProtocolError extends AgentFlowError {
+  readonly code = "mcp_protocol_error" as const;
+  constructor(
+    readonly serverName: string,
+    readonly detail: string,
+    options?: ErrorOptions,
+  ) {
+    super(`MCP protocol error with server "${serverName}": ${detail}`, options);
+  }
+}
+
+/**
+ * MCP tool call exceeded its per-call timeout (`mcpCallTimeoutMs`).
+ */
+export class McpTimeoutError extends AgentFlowError {
+  readonly code = "mcp_timeout" as const;
+  constructor(
+    readonly serverName: string,
+    readonly toolName: string,
+    readonly timeoutMs: number,
+    options?: ErrorOptions,
+  ) {
+    super(
+      `MCP tool "${serverName}/${toolName}" timed out after ${timeoutMs}ms`,
+      options,
+    );
+  }
+}

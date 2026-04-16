@@ -123,6 +123,40 @@ describe("defineAgent", () => {
   });
 });
 
+describe("resolveAgentDef — mcps migration shim", () => {
+  it("migrates deprecated mcps field to mcp.servers", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const def = defineAgent({
+      runner: "claude",
+      input: z.object({}),
+      output: z.object({ ok: z.boolean() }),
+      prompt: () => "x",
+      mcps: [{ server: "filesystem", args: ["/tmp"], autoStart: true }],
+    });
+    const resolved = resolveAgentDef(def);
+    expect(resolved.mcp?.servers).toHaveLength(1);
+    expect(resolved.mcp?.servers?.[0]?.name).toBe("filesystem");
+    expect(resolved.mcp?.servers?.[0]?.args).toEqual(["/tmp"]);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("mcps"));
+    warnSpy.mockRestore();
+  });
+
+  it("new mcp.servers wins over mcps when both set", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const def = defineAgent({
+      runner: "claude",
+      input: z.object({}),
+      output: z.object({ ok: z.boolean() }),
+      prompt: () => "x",
+      mcp: { servers: [{ name: "new", command: "npx" }] },
+      mcps: [{ server: "old" }],
+    });
+    const resolved = resolveAgentDef(def);
+    expect(resolved.mcp?.servers?.[0]?.name).toBe("new");
+    warnSpy.mockRestore();
+  });
+});
+
 describe("resolveAgentDef", () => {
   it("fills all defaults", () => {
     const agent = defineAgent({

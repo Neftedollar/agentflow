@@ -236,6 +236,35 @@ export function sanitizeCtxData(data: unknown): unknown {
   return data;
 }
 
+const STATIC_IDENTIFIER_RE_SCHEMA = /^[a-zA-Z0-9._-]+$/;
+
+/**
+ * Zod schema for McpServerConfig (v0.2).
+ * Validates MCP server definitions at DSL call time.
+ */
+export const McpServerConfigSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1)
+      .refine((v) => STATIC_IDENTIFIER_RE_SCHEMA.test(v), {
+        message:
+          "MCP server name must match /^[a-zA-Z0-9._-]+$/ (no path separators)",
+      }),
+    command: z.string().min(1, "command must not be empty"),
+    args: z.array(z.string()).readonly().optional(),
+    env: z.record(z.string(), z.string()).optional(),
+    cwd: z.string().optional(),
+    tools: z.array(z.string()).readonly().optional(),
+    // refine is a runtime ZodType map — not Zod-validated itself (opaque)
+    transport: z.literal("stdio").optional(),
+    mcpCallTimeoutMs: z.number().int().positive().optional(),
+    reusePerRunner: z.boolean().optional(),
+  })
+  .strict();
+
+export type McpServerConfigInput = z.input<typeof McpServerConfigSchema>;
+
 export const McpConfigSchema = z
   .object({
     description: z.string().optional(),

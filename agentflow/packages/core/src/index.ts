@@ -4,6 +4,7 @@
 // Types
 export type {
   AgentDef,
+  AgentMcpConfig,
   BoundCtx,
   ResolvedAgentDef,
   BudgetConfig,
@@ -19,6 +20,7 @@ export type {
   LoopDef,
   MCPConfig,
   McpConfig,
+  McpServerConfig,
   OutputOf,
   OutputZodOf,
   RetryConfig,
@@ -36,6 +38,7 @@ export type {
   TaskCompleteEvent,
   TaskDef,
   TaskErrorEvent,
+  TaskMcpOverride,
   TaskMetrics,
   TaskRetryEvent,
   TasksMap,
@@ -69,8 +72,9 @@ export {
   safePath,
   validateStaticIdentifier,
   McpConfigSchema,
+  McpServerConfigSchema,
 } from "./schemas.js";
-export type { McpConfigInput } from "./schemas.js";
+export type { McpConfigInput, McpServerConfigInput } from "./schemas.js";
 
 // Errors
 export {
@@ -80,6 +84,14 @@ export {
   GenericAgentFlowError,
   InvalidIdentifierError,
   LoopMaxIterationsError,
+  McpProtocolError,
+  McpServerCrashedError,
+  McpServerStartFailedError,
+  McpTimeoutError,
+  McpToolArgInvalidError,
+  McpToolCallFailedError,
+  McpToolNotFoundError,
+  McpToolNotPermittedError,
   NodeMaxRetriesError,
   PathTraversalError,
   PreFlightError,
@@ -89,6 +101,15 @@ export {
   ValidationError,
 } from "./errors.js";
 export type { AttemptRecord } from "./errors.js";
+
+// MCP allowlist helpers
+export {
+  filterMcpTools,
+  isMcpToolPermitted,
+  mcpToolFqn,
+  parseMcpToolFqn,
+} from "./mcp-allowlist.js";
+export type { McpToolDescriptor } from "./mcp-allowlist.js";
 
 // MCP defaults
 export {
