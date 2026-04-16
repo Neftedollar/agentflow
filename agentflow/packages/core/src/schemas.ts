@@ -189,6 +189,53 @@ export function safePath(opts?: {
   });
 }
 
+// ─── Input sanitization ───────────────────────────────────────────────────────
+
+// Patterns use (?:^|\n) so they match both:
+//   • A value that STARTS with the pattern (position 0, no preceding newline)
+//   • A pattern that appears after a newline in the middle of a string
+// The `m` flag makes ^ match the start of each line in multiline strings.
+// The `i` flag covers case variants (system:, SYSTEM:, etc.).
+const INJECTION_PATTERNS = [
+  /(?:^|\n)\s*---\s*(?:\n|$)/gm,
+  /(?:^|\n)\s*System:/gim,
+  /(?:^|\n)\s*Human:/gim,
+  /(?:^|\n)\s*Assistant:/gim,
+];
+
+/**
+ * Recursively sanitize string values in an object/array against prompt
+ * injection patterns. Only string leaf values are sanitized — objects and
+ * arrays are traversed recursively.
+ *
+ * Patterns are anchored with `(?:^|\n)` so they catch injections that appear
+ * at position 0 in a string (no leading newline) as well as mid-string after a
+ * newline.
+ */
+export function sanitizeCtxData(data: unknown): unknown {
+  if (typeof data === "string") {
+    let sanitized = data;
+    for (const pattern of INJECTION_PATTERNS) {
+      sanitized = sanitized.replace(pattern, " [SANITIZED] ");
+    }
+    return sanitized;
+  }
+
+  if (Array.isArray(data)) {
+    return data.map(sanitizeCtxData);
+  }
+
+  if (data !== null && typeof data === "object") {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data)) {
+      result[key] = sanitizeCtxData(value);
+    }
+    return result;
+  }
+
+  return data;
+}
+
 export const McpConfigSchema = z
   .object({
     description: z.string().optional(),
