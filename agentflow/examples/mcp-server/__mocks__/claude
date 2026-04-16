@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Mock claude CLI for integration testing without real LLM.
+# Returns a hardcoded JSON greeting response.
+
+RESULT='{"greeting":"Hello, World! Great to meet you!"}'
+
+echo '{"type":"system","subtype":"init","session_id":"mock-session-greet","tools":[],"mcp_servers":[]}'
+echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":$(echo "$RESULT" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))'),\"session_id\":\"mock-session-greet\",\"usage\":{\"input_tokens\":50,\"output_tokens\":20}}"

@@ -24,6 +24,7 @@
   "dependencies": {
     "@ageflow/core": "workspace:*",
     "@ageflow/executor": "workspace:*",
+    "@ageflow/mcp-server": "workspace:*",
     "chalk": "^5.3.0",
     "ora": "^8.0.0",
     "boxen": "^8.0.0",
