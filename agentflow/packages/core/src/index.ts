@@ -32,6 +32,7 @@ export type {
   TaskDef,
   TaskMetrics,
   TasksMap,
+  ToolCallRecord,
   WorkflowDef,
   WorkflowHooks,
   WorkflowMetrics,
