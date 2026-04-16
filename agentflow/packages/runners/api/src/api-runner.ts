@@ -112,27 +112,37 @@ export class ApiRunner implements Runner {
     const perSpawnClients: McpClient[] = [];
 
     if (servers.length > 0) {
-      for (const s of servers) {
-        if (s.reusePerRunner) {
-          let pooled = this.mcpPool.get(s.name);
-          if (!pooled) {
-            const [started] = await startMcpClients([s], this.logger);
-            if (started === undefined) {
+      try {
+        for (const s of servers) {
+          if (s.reusePerRunner) {
+            let pooled = this.mcpPool.get(s.name);
+            if (!pooled) {
+              const [started] = await startMcpClients([s], this.logger);
+              if (started === undefined) {
+                throw new Error(
+                  `startMcpClients returned no client for ${s.name}`,
+                );
+              }
+              pooled = started;
+              this.mcpPool.set(s.name, pooled);
+            }
+            perSpawnClients.push(pooled);
+          } else {
+            const [c] = await startMcpClients([s], this.logger);
+            if (c === undefined) {
               throw new Error(
                 `startMcpClients returned no client for ${s.name}`,
               );
             }
-            pooled = started;
-            this.mcpPool.set(s.name, pooled);
+            perSpawnClients.push(c);
           }
-          perSpawnClients.push(pooled);
-        } else {
-          const [c] = await startMcpClients([s], this.logger);
-          if (c === undefined) {
-            throw new Error(`startMcpClients returned no client for ${s.name}`);
-          }
-          perSpawnClients.push(c);
         }
+      } catch (startErr) {
+        // Partial-startup leak guard: stop any non-pooled clients that already
+        // started before the failure. Pooled clients stay in mcpPool for reuse.
+        const toStop = perSpawnClients.filter((c) => !c.config.reusePerRunner);
+        await shutdownAll(toStop);
+        throw startErr;
       }
     }
 

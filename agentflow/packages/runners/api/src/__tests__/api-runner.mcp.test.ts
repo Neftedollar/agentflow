@@ -9,6 +9,7 @@ import type { Logger } from "@ageflow/core";
 import { spawnMockMcpServer } from "@ageflow/testing";
 import { describe, expect, it, vi } from "vitest";
 import { ApiRunner } from "../api-runner.js";
+import type { McpClient } from "../mcp-client.js";
 import type { ChatCompletionResponse } from "../openai-types.js";
 
 function jsonResp(body: unknown, status = 200): Response {
@@ -195,6 +196,68 @@ describe("ApiRunner logger config (issue #71)", () => {
       expect(mockLogger.debug).toHaveBeenCalledWith(
         expect.stringContaining("crashing on initialize"),
       );
+    },
+    { timeout: 5_000 },
+  );
+});
+
+// ─── Issue #84 Item 7: partial MCP startup leak guard ────────────────────────
+
+describe("ApiRunner MCP startup partial-failure leak guard (issue #84 item 7)", () => {
+  it(
+    "stops already-started non-pooled clients when a later server fails to start",
+    async () => {
+      // Build a fake McpClient whose stop() we can spy on
+      const stopSpy = vi.fn().mockResolvedValue(undefined);
+      const fakeClient: McpClient = {
+        config: { name: "server-a", command: "x" },
+        async listTools() {
+          return [];
+        },
+        async callTool() {
+          return {};
+        },
+        stop: stopSpy,
+      };
+
+      // Patch the mcp-client module so:
+      //   first call to startMcpClients → resolves with fakeClient
+      //   second call to startMcpClients → rejects
+      const mcpClientMod = await import("../mcp-client.js");
+      const startSpy = vi
+        .spyOn(mcpClientMod, "startMcpClients")
+        .mockResolvedValueOnce([fakeClient])
+        .mockRejectedValueOnce(
+          new mcpClientMod.McpServerStartFailedError(
+            "server-b",
+            new Error("spawn failed"),
+          ),
+        );
+
+      const fetchMock = vi.fn();
+      const runner = new ApiRunner({
+        baseUrl: "https://example.test/v1",
+        apiKey: "k",
+        defaultModel: "gpt-4o",
+        fetch: fetchMock as unknown as typeof fetch,
+      });
+
+      // Two non-pooled servers: server-a starts, server-b fails
+      await expect(
+        runner.spawn({
+          prompt: "test",
+          model: "gpt-4o",
+          mcpServers: [
+            { name: "server-a", command: "cmd-a" },
+            { name: "server-b", command: "cmd-b" },
+          ],
+        }),
+      ).rejects.toThrow(/mcp_server_start_failed/i);
+
+      // server-a's stop() must have been called — no subprocess leak
+      expect(stopSpy).toHaveBeenCalledTimes(1);
+
+      startSpy.mockRestore();
     },
     { timeout: 5_000 },
   );
