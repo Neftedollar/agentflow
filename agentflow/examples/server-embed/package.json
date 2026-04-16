@@ -1,0 +1,22 @@
+{
+  "name": "@ageflow-example/server-embed",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ageflow/core": "workspace:*",
+    "@ageflow/executor": "workspace:*",
+    "@ageflow/server": "workspace:*",
+    "@ageflow/runner-api": "workspace:*",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "vitest": "^2.1.0"
+  }
+}

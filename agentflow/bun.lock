@@ -69,6 +69,21 @@
         "zod": "^3.23.0",
       },
     },
+    "examples/server-embed": {
+      "name": "@ageflow-example/server-embed",
+      "version": "0.0.0",
+      "dependencies": {
+        "@ageflow/core": "workspace:*",
+        "@ageflow/executor": "workspace:*",
+        "@ageflow/runner-api": "workspace:*",
+        "@ageflow/server": "workspace:*",
+        "zod": "^3.23.0",
+      },
+      "devDependencies": {
+        "@types/node": "^22.0.0",
+        "vitest": "^2.1.0",
+      },
+    },
     "packages/cli": {
       "name": "@ageflow/cli",
       "version": "0.1.0",
@@ -199,6 +214,8 @@
   },
   "packages": {
     "@ageflow-example/api-runner": ["@ageflow-example/api-runner@workspace:examples/api-runner"],
+
+    "@ageflow-example/server-embed": ["@ageflow-example/server-embed@workspace:examples/server-embed"],
 
     "@ageflow/cli": ["@ageflow/cli@workspace:packages/cli"],
 
