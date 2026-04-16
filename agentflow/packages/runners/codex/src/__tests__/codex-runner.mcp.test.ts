@@ -66,7 +66,10 @@ describe("CodexRunner MCP flags", () => {
     expect(capturedCmd).toContain(
       'mcp_servers.filesystem.args=["-y","@modelcontextprotocol/server-filesystem","/tmp"]',
     );
-    expect(capturedCmd).toContain('mcp_servers.filesystem.tools=["read_file"]');
+    // Bug 1 fix: Codex uses `enabled_tools`, not `tools`
+    expect(capturedCmd).toContain(
+      'mcp_servers.filesystem.enabled_tools=["read_file"]',
+    );
   });
 
   it("omits MCP flags when mcpServers is unset (no behaviour change)", async () => {
@@ -99,7 +102,7 @@ describe("CodexRunner MCP flags", () => {
     expect(mcpIdx).toBeLessThan(promptIdx);
   });
 
-  it("emits env as TOML inline table", async () => {
+  it("emits env as a TOML inline table (Codex -c parses TOML, not JSON)", async () => {
     let capturedCmd: string[] = [];
     const spawn: SpawnFn = (cmd) => {
       capturedCmd = cmd;
@@ -112,6 +115,7 @@ describe("CodexRunner MCP flags", () => {
         { name: "gh", command: "npx", env: { GITHUB_TOKEN: "tok" } },
       ],
     });
+    // Codex -c parses TOML: env must be a TOML inline table '{KEY="val"}'
     expect(capturedCmd).toContain('mcp_servers.gh.env={GITHUB_TOKEN="tok"}');
   });
 });

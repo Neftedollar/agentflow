@@ -90,7 +90,7 @@ const fileAgent = defineAgent({
 ```
 
 **Allowlist** (`tools`): when set, the tool names are forwarded via
-`-c mcp_servers.filesystem.tools=["read_file","list_directory"]`. Unlisted
+`-c mcp_servers.filesystem.enabled_tools=["read_file","list_directory"]`. Unlisted
 tools are denied before they reach the model.
 
 **Refine** (`refine`): a map of tool name → Zod schema. Arguments are validated
