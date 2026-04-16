@@ -397,4 +397,12 @@ describe("ClaudeRunner.spawn()", () => {
     expect(callArgs).toContain("json");
     expect(callArgs).toContain("--print");
   });
+
+  it("does not set toolCalls on RunnerSpawnResult", async () => {
+    const stdout = makeJsonlOutput("x");
+    const spawn = (): SpawnResult => makeSpawnResult(stdout);
+    const runner = new ClaudeRunner({ spawn });
+    const res = await runner.spawn({ prompt: "p" });
+    expect(res.toolCalls).toBeUndefined();
+  });
 });
