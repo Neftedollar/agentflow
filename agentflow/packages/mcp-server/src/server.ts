@@ -1,5 +1,6 @@
-import type { WorkflowDef } from "@ageflow/core";
+import type { WorkflowDef, WorkflowHooks } from "@ageflow/core";
 import { resolveMcpConfig } from "@ageflow/core";
+import { WorkflowExecutor } from "@ageflow/executor";
 import { composeCeilings } from "./ceiling-resolver.js";
 import {
   ErrorCode,
@@ -165,7 +166,7 @@ export function createMcpServer(opts: McpServerOptions): McpServerHandle {
               )
             : undefined;
 
-        // Run executor (delegated; Task 13 wires in the real executor)
+        // Run executor (Task 13: real executor or pluggable injection)
         let rawOutput: unknown;
         if (handle._testRunExecutor !== undefined) {
           rawOutput = await handle._testRunExecutor(
@@ -175,7 +176,9 @@ export function createMcpServer(opts: McpServerOptions): McpServerHandle {
             effective,
           );
         } else {
-          const runner = opts.runWorkflow ?? defaultRunner;
+          const runner =
+            opts.runWorkflow ??
+            makeDefaultRunner(tool.inputTask, tool.outputTask);
           rawOutput = await runner({
             workflow: opts.workflow,
             input: parsedInput,
@@ -244,10 +247,58 @@ function safeParse(
   return result.data;
 }
 
-// Placeholder — real executor integration lands in Task 13.
-async function defaultRunner(): Promise<unknown> {
-  throw new McpServerError(
-    ErrorCode.WORKFLOW_FAILED,
-    "executor not wired (run Task 13 to integrate)",
-  );
+/**
+ * Build the default RunWorkflowFn backed by @ageflow/executor's WorkflowExecutor.
+ *
+ * Real API deviations from plan pseudocode:
+ * - No `runWorkflow` function export — WorkflowExecutor is a class.
+ * - WorkflowExecutor.run() ignores its `_input` argument; input must be injected
+ *   into the workflow's root task definition as a static `input` field.
+ * - Budget is passed via workflow.budget (BudgetConfig), not as a run-time arg.
+ * - HITL hooks are passed via workflow.hooks (merged with existing hooks).
+ * - AbortSignal is not natively supported; the DurationWatchdog's onTimeout
+ *   callback throws into the awaited run(), which propagates as a rejection.
+ */
+function makeDefaultRunner(
+  inputTaskName: string,
+  outputTaskName: string,
+): RunWorkflowFn {
+  return async (args) => {
+    const { workflow, input, hooks, effective } = args;
+
+    // Inject MCP input as the root task's static input field.
+    // biome-ignore lint/suspicious/noExplicitAny: structural injection — task.input must be set at runtime
+    const originalTask = workflow.tasks[inputTaskName] as any;
+    // biome-ignore lint/suspicious/noExplicitAny: structural injection
+    const injectedTasks = {
+      ...workflow.tasks,
+      [inputTaskName]: { ...originalTask, input },
+    } as import("@ageflow/core").TasksMap;
+
+    // Merge HITL hooks with existing workflow hooks.
+    const mcpHooks = hooks as WorkflowHooks | undefined;
+    const mergedHooks: WorkflowHooks = {
+      ...(workflow.hooks ?? {}),
+      ...(mcpHooks !== undefined ? mcpHooks : {}),
+    };
+
+    // Apply budget ceiling from effective config.
+    const budget =
+      effective.maxCostUsd !== null
+        ? { maxCost: effective.maxCostUsd, onExceed: "halt" as const }
+        : undefined;
+
+    const injectedWorkflow: WorkflowDef = {
+      ...workflow,
+      tasks: injectedTasks,
+      hooks: mergedHooks,
+      ...(budget !== undefined ? { budget } : {}),
+    };
+
+    const executor = new WorkflowExecutor(injectedWorkflow);
+    const result = await executor.run();
+
+    // Return the output task's result.
+    return result.outputs[outputTaskName];
+  };
 }

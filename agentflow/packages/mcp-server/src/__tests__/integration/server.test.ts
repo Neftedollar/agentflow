@@ -1,7 +1,7 @@
 import { defineAgent, defineWorkflow } from "@ageflow/core";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { createMcpServer } from "../../server.js";
+import { type RunWorkflowFn, createMcpServer } from "../../server.js";
 
 describe("createMcpServer (integration)", () => {
   const greetAgent = defineAgent({
@@ -57,5 +57,45 @@ describe("createMcpServer (integration)", () => {
     const result = await server.callTool("greet", { name: "b" });
     expect(result.isError).toBe(true);
     expect((result.structuredContent as any).errorCode).toBe("BUSY");
+  });
+
+  it("runs a workflow end-to-end with mocked runWorkflow injection", async () => {
+    // Uses @ageflow/testing createTestHarness to inject a mock runner.
+    // The real WorkflowExecutor takes the workflow with task inputs pre-set;
+    // for a single-task root workflow, we inject input via a modified workflow.
+    const { createTestHarness } = await import("@ageflow/testing");
+
+    // Wrap harness as RunWorkflowFn: create a harness that knows the workflow,
+    // inject input as the root task's static input, and run.
+    const runWorkflow: RunWorkflowFn = async (args) => {
+      // Build a workflow variant with the MCP input injected as the root task's input.
+      const { defineWorkflow: dw } = await import("@ageflow/core");
+      const wfWithInput = dw({
+        ...args.workflow,
+        tasks: {
+          ...args.workflow.tasks,
+          greet: {
+            ...(args.workflow.tasks as any).greet,
+            input: args.input,
+          },
+        },
+      });
+      const harness = createTestHarness(wfWithInput);
+      harness.mockAgent("greet", { greeting: "hello, Alice!" });
+      const result = await harness.run();
+      // Return the output task's output (boundary task is "greet" for this workflow)
+      return result.outputs.greet;
+    };
+
+    const server = createMcpServer({
+      workflow,
+      cliCeilings: {},
+      hitlStrategy: "fail",
+      runWorkflow,
+    });
+
+    const result = await server.callTool("greet", { name: "Alice" });
+    expect(result.isError).toBe(false);
+    expect((result.structuredContent as any).greeting).toBe("hello, Alice!");
   });
 });
