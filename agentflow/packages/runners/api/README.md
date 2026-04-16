@@ -298,8 +298,9 @@ are expensive to initialize.
 ### `runner.shutdown()` — draining the pool
 
 Call `runner.shutdown()` after all tasks are complete to gracefully stop pooled
-servers. The workflow executor calls this automatically on workflow
-completion / abort (Phase 7+). If you manage the runner manually:
+servers. **`runner.shutdown()` must be called manually by the caller** — the
+workflow executor does not call it automatically yet (auto-wiring is tracked in
+issue #75). Forgetting to call it will leak MCP server subprocesses.
 
 ```ts
 const runner = new ApiRunner({ baseUrl: "...", apiKey: "..." });
