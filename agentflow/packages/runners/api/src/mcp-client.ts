@@ -16,6 +16,7 @@ import { AgentFlowError } from "@ageflow/core";
 import type { Logger, McpServerConfig, McpToolDescriptor } from "@ageflow/core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { RUNNER_VERSION } from "./types.js";
 
 export type { McpToolDescriptor };
 
@@ -254,7 +255,7 @@ async function startOne(
   });
 
   const sdkClient = new Client(
-    { name: "ageflow-runner-api", version: "0.2.0" },
+    { name: "ageflow-runner-api", version: RUNNER_VERSION },
     { capabilities: {} },
   );
 

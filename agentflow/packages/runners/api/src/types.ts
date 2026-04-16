@@ -4,6 +4,12 @@ export type { SessionStore } from "./session-store.js";
 export type { ToolCallRecord } from "@ageflow/core";
 export type { Logger };
 
+/**
+ * Package version — keep in sync with package.json.
+ * Used as the MCP Client `version` in the protocol handshake.
+ */
+export const RUNNER_VERSION = "0.3.0" as const;
+
 export interface ToolDefinition {
   /** Human-readable description surfaced to the model. */
   description: string;
