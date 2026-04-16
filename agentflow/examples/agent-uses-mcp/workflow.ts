@@ -77,7 +77,7 @@ export const workflow = defineWorkflow({
   tasks: {
     audit: {
       agent: auditAgent(runner),
-      input: { root: "/tmp/workdir" },
+      input: { root: "." },
     },
   },
 });

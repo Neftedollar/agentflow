@@ -26,7 +26,7 @@ export function auditAgent(runner: "claude" | "codex" | "api") {
           args: [
             "-y",
             "@modelcontextprotocol/server-filesystem",
-            "/tmp/workdir",
+            ".",
           ],
           tools: ["read_file", "list_directory"],
           refine: {

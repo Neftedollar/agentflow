@@ -17,7 +17,7 @@ import { workflow } from "../workflow.js";
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
-const MOCK_OUTPUT = { summary: "Found 3 files in /tmp/workdir.", fileCount: 3 };
+const MOCK_OUTPUT = { summary: "Found 3 files in .", fileCount: 3 };
 
 // ─── Main workflow (imported — uses default "api" runner) ─────────────────────
 
@@ -54,7 +54,7 @@ describe.each([["api" as const], ["claude" as const], ["codex" as const]])(
         tasks: {
           audit: {
             agent: auditAgent(r),
-            input: { root: "/tmp/workdir" },
+            input: { root: "." },
           },
         },
       });
