@@ -1,5 +1,9 @@
 import type { ToolCallRecord } from "@ageflow/core";
-import { ApiRequestError, MaxToolRoundsError } from "./errors.js";
+import {
+  ApiRequestError,
+  MaxToolRoundsError,
+  ToolNotFoundError,
+} from "./errors.js";
 import type {
   ChatCompletionRequest,
   ChatCompletionResponse,
@@ -90,11 +94,13 @@ export async function runToolLoop(
       let result: unknown;
       try {
         if (!def) {
-          result = `error: tool "${name}" is not registered`;
-        } else {
-          result = await def.execute(parsedArgs);
+          throw new ToolNotFoundError(name);
         }
+        result = await def.execute(parsedArgs);
       } catch (err) {
+        if (err instanceof ToolNotFoundError) {
+          throw err;
+        }
         result = `error: ${err instanceof Error ? err.message : String(err)}`;
       }
       const durationMs = Date.now() - startedAt;

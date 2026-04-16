@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { MaxToolRoundsError } from "../errors.js";
+import { MaxToolRoundsError, ToolNotFoundError } from "../errors.js";
 import type { ChatCompletionResponse } from "../openai-types.js";
 import { runToolLoop } from "../tool-loop.js";
 import type { ToolRegistry } from "../types.js";
@@ -156,6 +156,47 @@ describe("runToolLoop", () => {
       requestTimeout: 1000,
     });
     expect(res.toolCalls[0]?.result).toMatch(/kaboom/);
+  });
+
+  it("throws ToolNotFoundError when model calls unknown tool", async () => {
+    const withUnknownToolCall: ChatCompletionResponse = {
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: null,
+            tool_calls: [
+              {
+                id: "call_unknown",
+                type: "function",
+                function: { name: "nonexistent", arguments: "{}" },
+              },
+            ],
+          },
+          finish_reason: "tool_calls",
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(makeResponse(withUnknownToolCall));
+    const registry: ToolRegistry = {};
+
+    await expect(
+      runToolLoop({
+        baseUrl: "https://example",
+        apiKey: "k",
+        headers: {},
+        fetch: fetchMock as unknown as typeof fetch,
+        model: "m",
+        messages: [{ role: "user", content: "hi" }],
+        tools: undefined,
+        registry,
+        maxRounds: 10,
+        requestTimeout: 1000,
+      }),
+    ).rejects.toBeInstanceOf(ToolNotFoundError);
   });
 
   it("throws MaxToolRoundsError when ceiling exceeded", async () => {
