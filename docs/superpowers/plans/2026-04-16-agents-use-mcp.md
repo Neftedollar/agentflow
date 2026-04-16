@@ -1242,7 +1242,7 @@ emits `mcp__mock__exec_anywhere`. Assert:
 
 - `ToolNotFoundError` fires in the tool loop (registry doesn't contain it).
 - Mock server's `callTool` spy is never invoked.
-- Final `toolCalls` record notes the spoof attempt.
+- Spoofed tool name is NOT recorded in `toolCalls` — `ToolNotFoundError` is re-thrown in `tool-loop.ts:101-103` before `toolCalls.push()`. Rationale: logging a spoofed name would give attackers confirmation of what the loop rejected. Future telemetry of spoof attempts should live in a separate observability counter, not in the agent's tool-call record.
 
 #### Task 8.2 — path escape via `safePath`
 
