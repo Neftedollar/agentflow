@@ -535,12 +535,6 @@ export class WorkflowExecutor<T extends TasksMap> {
                   ? hitlConfig.message
                   : `Task "${taskName}" requires approval before proceeding.`;
 
-              // Fire onCheckpoint hook
-              hooks?.onCheckpoint?.(
-                taskName as keyof T & string,
-                checkpointMessage,
-              );
-
               // Emit checkpoint event
               const checkpointEv: CheckpointEvent = {
                 type: "checkpoint",
@@ -553,13 +547,18 @@ export class WorkflowExecutor<T extends TasksMap> {
               push(checkpointEv);
 
               if (onCheckpoint !== undefined) {
-                // Caller-provided handler (stream() path)
+                // Caller-provided handler (stream() path).
+                // Single-ownership: when caller supplies onCheckpoint, it is
+                // solely responsible for approval. hooks.onCheckpoint is NOT
+                // fired here — the caller's handler owns the side-effect.
                 const approved = await onCheckpoint(checkpointEv);
                 if (!approved) {
                   throw new HitlRejectedError(taskName);
                 }
               } else {
-                // Legacy path: defer to HITLManager (TTY / hook)
+                // Legacy path: defer to HITLManager (TTY / hook).
+                // HITLManager fires hooks.onCheckpoint internally — no
+                // double-call.
                 await this.hitlManager.runCheckpoint(
                   taskName,
                   checkpointMessage,

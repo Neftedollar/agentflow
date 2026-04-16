@@ -193,6 +193,79 @@ describe("stream() onCheckpoint", () => {
   });
 });
 
+describe("P1-1: single-ownership of onCheckpoint hook", () => {
+  it("fires hooks.onCheckpoint exactly once when both hooks and stream onCheckpoint are provided", async () => {
+    // When caller provides onCheckpoint to stream(), hooks.onCheckpoint must NOT
+    // fire — the caller's handler owns the side-effect (single-ownership rule).
+    let hookCallCount = 0;
+    const a = defineAgent({
+      runner: "fake",
+      input: z.object({}),
+      output: z.object({ summary: z.string() }),
+      prompt: () => "p",
+      hitl: { mode: "checkpoint", message: "approve?" },
+    });
+    const wfGated = defineWorkflow({
+      name: "gated-hook",
+      tasks: { t: { agent: a, input: {} } },
+      hooks: {
+        onCheckpoint: (_taskName: string, _msg: string) => {
+          hookCallCount++;
+        },
+      },
+    });
+    const ex = new WorkflowExecutor(wfGated);
+    let streamCheckpointCalls = 0;
+    const events: WorkflowEvent[] = [];
+    for await (const ev of ex.stream(
+      {},
+      {
+        onCheckpoint: async () => {
+          streamCheckpointCalls++;
+          return true;
+        },
+      },
+    )) {
+      events.push(ev);
+    }
+    // Stream onCheckpoint fired exactly once
+    expect(streamCheckpointCalls).toBe(1);
+    // hooks.onCheckpoint must NOT fire when stream's onCheckpoint takes ownership
+    expect(hookCallCount).toBe(0);
+    expect(events[events.length - 1]?.type).toBe("workflow:complete");
+  });
+
+  it("fires hooks.onCheckpoint exactly once via HITLManager when no stream onCheckpoint", async () => {
+    // When no stream onCheckpoint, HITLManager fires hooks.onCheckpoint — exactly once.
+    let hookCallCount = 0;
+    const a = defineAgent({
+      runner: "fake",
+      input: z.object({}),
+      output: z.object({ summary: z.string() }),
+      prompt: () => "p",
+      hitl: { mode: "checkpoint", message: "approve?" },
+    });
+    const wfGated = defineWorkflow({
+      name: "gated-hitl",
+      tasks: { t: { agent: a, input: {} } },
+      hooks: {
+        onCheckpoint: (_taskName: string, _msg: string): Promise<boolean> => {
+          hookCallCount++;
+          return Promise.resolve(true); // approve via hook
+        },
+      },
+    });
+    const ex = new WorkflowExecutor(wfGated);
+    const events: WorkflowEvent[] = [];
+    for await (const ev of ex.stream({})) {
+      events.push(ev);
+    }
+    // HITLManager fires it exactly once
+    expect(hookCallCount).toBe(1);
+    expect(events[events.length - 1]?.type).toBe("workflow:complete");
+  });
+});
+
 describe("run() is a drain over stream()", () => {
   it("produces the same WorkflowResult as draining stream()", async () => {
     const executor = new WorkflowExecutor(wf);
