@@ -9,6 +9,7 @@ import type { Logger } from "@ageflow/core";
 import { spawnMockMcpServer } from "@ageflow/testing";
 import { describe, expect, it, vi } from "vitest";
 import { ApiRunner } from "../api-runner.js";
+import { McpPoolCollisionError } from "../errors.js";
 import type { McpClient } from "../mcp-client.js";
 import type { ChatCompletionResponse } from "../openai-types.js";
 
@@ -196,6 +197,180 @@ describe("ApiRunner logger config (issue #71)", () => {
       expect(mockLogger.debug).toHaveBeenCalledWith(
         expect.stringContaining("crashing on initialize"),
       );
+    },
+    { timeout: 5_000 },
+  );
+});
+
+// ─── Issue #70: mcpPool collision guard ──────────────────────────────────────
+
+describe("ApiRunner mcpPool collision guard (issue #70)", () => {
+  it(
+    "rejects second spawn with McpPoolCollisionError when same-named server has different command",
+    async () => {
+      const terminalResponse: ChatCompletionResponse = {
+        choices: [
+          {
+            message: { role: "assistant", content: "ok" },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 },
+      };
+
+      const mcpClientMod = await import("../mcp-client.js");
+
+      // First call succeeds and returns a fake pooled client
+      const fakeClient: McpClient = {
+        config: {
+          name: "shared",
+          command: "/bin/a",
+          reusePerRunner: true,
+        },
+        async listTools() {
+          return [];
+        },
+        async callTool() {
+          return {};
+        },
+        async stop() {},
+      };
+
+      const startSpy = vi
+        .spyOn(mcpClientMod, "startMcpClients")
+        .mockResolvedValue([fakeClient]);
+
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(terminalResponse), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+
+      const runner = new ApiRunner({
+        baseUrl: "https://example.test/v1",
+        apiKey: "k",
+        defaultModel: "gpt-4o",
+        fetch: fetchMock as unknown as typeof fetch,
+      });
+
+      // First spawn registers "shared" with command "/bin/a"
+      await runner.spawn({
+        prompt: "first",
+        model: "gpt-4o",
+        mcpServers: [
+          { name: "shared", command: "/bin/a", reusePerRunner: true },
+        ],
+      });
+
+      // Second spawn uses same name but different command
+      await expect(
+        runner.spawn({
+          prompt: "second",
+          model: "gpt-4o",
+          mcpServers: [
+            { name: "shared", command: "/bin/b", reusePerRunner: true },
+          ],
+        }),
+      ).rejects.toThrow(McpPoolCollisionError);
+
+      // The error message must include the server name
+      await expect(
+        runner.spawn({
+          prompt: "second",
+          model: "gpt-4o",
+          mcpServers: [
+            { name: "shared", command: "/bin/b", reusePerRunner: true },
+          ],
+        }),
+      ).rejects.toThrow("shared");
+
+      startSpy.mockRestore();
+      await runner.shutdown();
+    },
+    { timeout: 5_000 },
+  );
+
+  it(
+    "reuses pooled client without error when spawn configs are identical",
+    async () => {
+      const terminalResponse: ChatCompletionResponse = {
+        choices: [
+          {
+            message: { role: "assistant", content: "ok" },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 },
+      };
+
+      const mcpClientMod = await import("../mcp-client.js");
+
+      const fakeClient: McpClient = {
+        config: {
+          name: "reused",
+          command: "/bin/same",
+          args: ["--flag"],
+          reusePerRunner: true,
+        },
+        async listTools() {
+          return [];
+        },
+        async callTool() {
+          return {};
+        },
+        async stop() {},
+      };
+
+      const startSpy = vi
+        .spyOn(mcpClientMod, "startMcpClients")
+        .mockResolvedValue([fakeClient]);
+
+      const fetchMock = vi.fn().mockImplementation(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(terminalResponse), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        ),
+      );
+
+      const runner = new ApiRunner({
+        baseUrl: "https://example.test/v1",
+        apiKey: "k",
+        defaultModel: "gpt-4o",
+        fetch: fetchMock as unknown as typeof fetch,
+      });
+
+      const config = {
+        name: "reused",
+        command: "/bin/same",
+        args: ["--flag"] as string[],
+        reusePerRunner: true as const,
+      };
+
+      // Both spawns use an identical config — second should reuse without error
+      await expect(
+        runner.spawn({
+          prompt: "first",
+          model: "gpt-4o",
+          mcpServers: [config],
+        }),
+      ).resolves.toBeDefined();
+
+      await expect(
+        runner.spawn({
+          prompt: "second",
+          model: "gpt-4o",
+          mcpServers: [config],
+        }),
+      ).resolves.toBeDefined();
+
+      // startMcpClients should have been called only once (pool reuse on second spawn)
+      expect(startSpy).toHaveBeenCalledTimes(1);
+
+      startSpy.mockRestore();
+      await runner.shutdown();
     },
     { timeout: 5_000 },
   );

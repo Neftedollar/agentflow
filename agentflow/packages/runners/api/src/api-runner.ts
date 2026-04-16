@@ -1,9 +1,11 @@
 import type {
   Logger,
+  McpServerConfig,
   Runner,
   RunnerSpawnArgs,
   RunnerSpawnResult,
 } from "@ageflow/core";
+import { McpPoolCollisionError } from "./errors.js";
 import type { McpClient } from "./mcp-client.js";
 import { shutdownAll, startMcpClients } from "./mcp-client.js";
 import { mcpToolsToRegistry } from "./mcp-tool-adapter.js";
@@ -12,6 +14,53 @@ import type { ChatMessage } from "./openai-types.js";
 import { InMemorySessionStore, type SessionStore } from "./session-store.js";
 import { runToolLoop } from "./tool-loop.js";
 import type { ApiRunnerConfig, ToolRegistry } from "./types.js";
+
+/**
+ * Returns true when two McpServerConfig objects would spawn an identical
+ * process. Compares all spawn-determining fields: command, args, env, cwd,
+ * and tools allowlist.
+ */
+function isSpawnEquivalent(a: McpServerConfig, b: McpServerConfig): boolean {
+  if (a.command !== b.command) return false;
+  if (a.cwd !== b.cwd) return false;
+
+  // args: both absent/empty counts as equal
+  const aArgs = a.args ?? [];
+  const bArgs = b.args ?? [];
+  if (aArgs.length !== bArgs.length) return false;
+  for (let i = 0; i < aArgs.length; i++) {
+    if (aArgs[i] !== bArgs[i]) return false;
+  }
+
+  // env: both absent/empty counts as equal
+  const aEnvEntries = Object.entries(a.env ?? {}).sort(([k1], [k2]) =>
+    k1 < k2 ? -1 : k1 > k2 ? 1 : 0,
+  );
+  const bEnvEntries = Object.entries(b.env ?? {}).sort(([k1], [k2]) =>
+    k1 < k2 ? -1 : k1 > k2 ? 1 : 0,
+  );
+  if (aEnvEntries.length !== bEnvEntries.length) return false;
+  for (let i = 0; i < aEnvEntries.length; i++) {
+    const ae = aEnvEntries[i];
+    const be = bEnvEntries[i];
+    if (ae === undefined || be === undefined) return false;
+    if (ae[0] !== be[0]) return false;
+    if (ae[1] !== be[1]) return false;
+  }
+
+  // tools allowlist
+  const aTools = a.tools ? [...a.tools].sort() : undefined;
+  const bTools = b.tools ? [...b.tools].sort() : undefined;
+  if ((aTools === undefined) !== (bTools === undefined)) return false;
+  if (aTools !== undefined && bTools !== undefined) {
+    if (aTools.length !== bTools.length) return false;
+    for (let i = 0; i < aTools.length; i++) {
+      if (aTools[i] !== bTools[i]) return false;
+    }
+  }
+
+  return true;
+}
 
 const DEFAULT_MAX_ROUNDS = 10;
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -125,6 +174,8 @@ export class ApiRunner implements Runner {
               }
               pooled = started;
               this.mcpPool.set(s.name, pooled);
+            } else if (!isSpawnEquivalent(pooled.config, s)) {
+              throw new McpPoolCollisionError(s.name);
             }
             perSpawnClients.push(pooled);
           } else {

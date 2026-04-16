@@ -1,5 +1,18 @@
 import { AgentFlowError } from "@ageflow/core";
 
+export class McpPoolCollisionError extends AgentFlowError {
+  readonly code = "mcp_pool_collision" as const;
+  constructor(
+    readonly serverName: string,
+    options?: ErrorOptions,
+  ) {
+    super(
+      `MCP server pool collision: '${serverName}' already started with different command/args/env. Use a unique server name or ensure spawn args match.`,
+      options,
+    );
+  }
+}
+
 export class MaxToolRoundsError extends AgentFlowError {
   readonly code = "tool_loop_exceeded" as const;
   constructor(
