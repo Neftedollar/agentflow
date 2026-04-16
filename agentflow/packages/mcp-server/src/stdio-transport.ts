@@ -62,7 +62,7 @@ function makeProgressSender(
 
 function makeConnection(
   sdkServer: Server,
-  sendNotification: (n: {
+  _sendNotification: (n: {
     method: string;
     params: Record<string, unknown>;
   }) => Promise<void>,
@@ -79,21 +79,26 @@ function makeConnection(
       message: string;
       requestedSchema: Record<string, unknown>;
     }): Promise<ElicitationResponse> {
+      // biome-ignore lint/suspicious/noExplicitAny: ElicitRequestFormParams.requestedSchema.properties is a complex union type; cast via any is necessary
+      const properties = req.requestedSchema.properties as any;
+      const required = (req.requestedSchema.required ?? []) as string[];
+
       const result = await sdkServer.elicitInput({
         message: req.message,
         requestedSchema: {
           type: "object" as const,
-          properties: req.requestedSchema.properties as Record<
-            string,
-            { type: string; description?: string }
-          >,
-          required: (req.requestedSchema.required ?? []) as string[],
+          properties,
+          required,
         },
       });
-      return {
+
+      const response: ElicitationResponse = {
         action: result.action,
-        content: result.content as Record<string, unknown> | undefined,
+        ...(result.content !== undefined
+          ? { content: result.content as Record<string, unknown> }
+          : {}),
       };
+      return response;
     },
   };
 }
@@ -143,11 +148,13 @@ export async function startStdioTransport(
     const connection = makeConnection(sdkServer, extra.sendNotification);
     const sendProgress = makeProgressSender(extra.sendNotification);
 
-    const result = await handle.callTool(toolName, args, {
-      connection,
-      progressToken: progressToken ?? undefined,
-      sendProgress: progressToken !== undefined ? sendProgress : undefined,
-    });
+    // exactOptionalPropertyTypes: only pass progressToken/sendProgress when defined
+    const callOpts =
+      progressToken !== undefined
+        ? { connection, progressToken, sendProgress }
+        : { connection };
+
+    const result = await handle.callTool(toolName, args, callOpts);
 
     return {
       content: result.content as { type: "text"; text: string }[],

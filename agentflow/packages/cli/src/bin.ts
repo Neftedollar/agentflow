@@ -2,6 +2,7 @@
 import { program } from "commander";
 import { registerDryRunCommand } from "./commands/dry-run.js";
 import { registerInitCommand } from "./commands/init.js";
+import { registerMcpCommand } from "./commands/mcp-serve.js";
 import { registerRunCommand } from "./commands/run.js";
 import { registerValidateCommand } from "./commands/validate.js";
 
@@ -14,5 +15,6 @@ registerRunCommand(program);
 registerValidateCommand(program);
 registerDryRunCommand(program);
 registerInitCommand(program);
+registerMcpCommand(program);
 
 program.parse();
