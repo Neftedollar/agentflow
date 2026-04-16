@@ -24,6 +24,23 @@
         "@types/node": "^22.0.0",
       },
     },
+    "examples/agent-uses-mcp": {
+      "name": "@ageflow-example/agent-uses-mcp",
+      "version": "0.0.0",
+      "dependencies": {
+        "@ageflow/core": "workspace:*",
+        "@ageflow/executor": "workspace:*",
+        "@ageflow/runner-api": "workspace:*",
+        "@ageflow/runner-claude": "workspace:*",
+        "@ageflow/runner-codex": "workspace:*",
+        "@ageflow/testing": "workspace:*",
+        "zod": "^3.23.0",
+      },
+      "devDependencies": {
+        "@types/node": "^22.0.0",
+        "vitest": "^2.1.0",
+      },
+    },
     "examples/api-runner": {
       "name": "@ageflow-example/api-runner",
       "version": "0.0.0",
@@ -217,6 +234,8 @@
     "zod": "^3.23.0",
   },
   "packages": {
+    "@ageflow-example/agent-uses-mcp": ["@ageflow-example/agent-uses-mcp@workspace:examples/agent-uses-mcp"],
+
     "@ageflow-example/api-runner": ["@ageflow-example/api-runner@workspace:examples/api-runner"],
 
     "@ageflow-example/server-embed": ["@ageflow-example/server-embed@workspace:examples/server-embed"],

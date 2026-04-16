@@ -1,0 +1,26 @@
+{
+  "name": "@ageflow-example/agent-uses-mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo:api": "bun workflow.ts --runner api",
+    "demo:claude": "bun workflow.ts --runner claude",
+    "demo:codex": "bun workflow.ts --runner codex",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ageflow/core": "workspace:*",
+    "@ageflow/executor": "workspace:*",
+    "@ageflow/runner-api": "workspace:*",
+    "@ageflow/runner-claude": "workspace:*",
+    "@ageflow/runner-codex": "workspace:*",
+    "@ageflow/testing": "workspace:*",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "vitest": "^2.1.0"
+  }
+}
