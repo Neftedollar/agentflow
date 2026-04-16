@@ -57,8 +57,12 @@ const summarize = defineAgent({
 | LM Studio     | `http://localhost:1234/v1`                                             |
 | Azure OpenAI  | `https://<resource>.openai.azure.com/openai/deployments/<model>`      |
 
-For Azure you must pass the `api-version` query param via the `headers` option
-(see Configuration below).
+For Azure you must include `?api-version=...` directly in `baseUrl` — the runner
+appends `/chat/completions` to `baseUrl` as a path segment and does not merge
+query parameters separately. Do **not** pass `api-version` via `headers`; Azure
+rejects requests where it appears only as a header.
+
+Example: `baseUrl: "https://<resource>.openai.azure.com/openai/deployments/<model>?api-version=2024-02-01"`
 
 ## Configuration
 
@@ -77,7 +81,7 @@ new ApiRunner({
   maxToolRounds: 10,             // max tool-call loops before MaxToolRoundsError (default 10)
   requestTimeout: 120_000,       // ms before AbortController fires (default 120 000)
   headers: {                     // extra headers forwarded on every request
-    "api-version": "2024-02-01", // e.g. Azure api-version
+    "x-custom-header": "value",  // e.g. custom tracing headers
   },
   fetch: myFetchImpl,            // injectable fetch (default: globalThis.fetch)
 })
