@@ -2,10 +2,84 @@
  * mcp-serve.test.ts
  *
  * Unit tests for parseMcpServeArgs — pure argv parsing, no process or I/O.
+ * Also includes a subprocess test for graceful SIGTERM shutdown.
  */
 
+import { spawn } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parseMcpServeArgs } from "../commands/mcp-serve.js";
+
+// ─── Graceful shutdown test ───────────────────────────────────────────────────
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/** Absolute path to the agentflow monorepo root (4 levels up from __tests__). */
+const MONOREPO_ROOT = path.resolve(__dirname, "../../../../");
+const CLI_BIN = path.join(MONOREPO_ROOT, "packages/cli/src/bin.ts");
+const WORKFLOW = path.join(MONOREPO_ROOT, "examples/mcp-server/workflow.ts");
+
+describe("mcp serve graceful shutdown", () => {
+  it(
+    "exits with code 0 after SIGTERM",
+    async () => {
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(
+          "bun",
+          ["run", CLI_BIN, "mcp", "serve", WORKFLOW, "--hitl", "auto"],
+          { stdio: ["pipe", "pipe", "pipe"] },
+        );
+
+        let stderrBuf = "";
+        let settled = false;
+
+        const done = (err?: Error) => {
+          if (settled) return;
+          settled = true;
+          if (err) reject(err);
+          else resolve();
+        };
+
+        // Emit SIGTERM after seeing the startup banner on stderr.
+        // A short delay ensures the signal handlers are registered before
+        // the signal arrives (handlers are registered after connect resolves).
+        child.stderr.on("data", (chunk: Buffer) => {
+          stderrBuf += chunk.toString();
+          if (stderrBuf.includes("listening on stdio") && !settled) {
+            setTimeout(() => child.kill("SIGTERM"), 100);
+          }
+        });
+
+        child.on("exit", (code, signal) => {
+          if (code === 0) {
+            done();
+          } else {
+            done(
+              new Error(
+                `Expected exit code 0 but got code=${code} signal=${signal}`,
+              ),
+            );
+          }
+        });
+
+        child.on("error", done);
+
+        // Hard timeout — if the server never starts or never exits, fail the test.
+        setTimeout(() => {
+          if (!settled) {
+            child.kill("SIGKILL");
+            done(
+              new Error(
+                `Server did not start or did not exit within 5 s. stderr=${stderrBuf}`,
+              ),
+            );
+          }
+        }, 5000);
+      });
+    },
+    { timeout: 8000 },
+  );
+});
 
 describe("parseMcpServeArgs", () => {
   it("parses workflow file as first positional", () => {

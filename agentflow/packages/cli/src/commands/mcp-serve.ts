@@ -238,12 +238,27 @@ async function runMcpServe(rawArgv: string[]): Promise<void> {
   });
 
   // Start stdio transport
-  await startStdioTransport({
+  const server = await startStdioTransport({
     serverName,
     serverVersion: "0.1.0",
     handle,
     stderr,
   });
+
+  // Graceful shutdown: close SDK server, flush log file, exit cleanly.
+  const shutdown = async (): Promise<void> => {
+    try {
+      await server.close();
+    } catch {
+      // ignore close errors — we're shutting down anyway
+    }
+    logStream?.end();
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+  process.stdin.on("end", shutdown);
 }
 
 // ─── Commander registration ───────────────────────────────────────────────────
