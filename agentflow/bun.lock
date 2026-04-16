@@ -167,6 +167,19 @@
         "vitest": "^2.1.0",
       },
     },
+    "packages/server": {
+      "name": "@ageflow/server",
+      "version": "0.1.0",
+      "dependencies": {
+        "@ageflow/core": "workspace:*",
+        "@ageflow/executor": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^22.0.0",
+        "vitest": "^2.1.0",
+        "zod": "^3.23.0",
+      },
+    },
     "packages/testing": {
       "name": "@ageflow/testing",
       "version": "0.1.0",
@@ -206,6 +219,8 @@
     "@ageflow/runner-claude": ["@ageflow/runner-claude@workspace:packages/runners/claude"],
 
     "@ageflow/runner-codex": ["@ageflow/runner-codex@workspace:packages/runners/codex"],
+
+    "@ageflow/server": ["@ageflow/server@workspace:packages/server"],
 
     "@ageflow/testing": ["@ageflow/testing@workspace:packages/testing"],
 

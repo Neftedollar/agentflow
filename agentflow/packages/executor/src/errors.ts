@@ -1,5 +1,15 @@
 import { AgentFlowError } from "@ageflow/core";
 
+export class HitlRejectedError extends AgentFlowError {
+  readonly code = "hitl_rejected" as const;
+  constructor(
+    readonly taskName: string,
+    options?: ErrorOptions,
+  ) {
+    super(`HITL checkpoint rejected for task "${taskName}"`, options);
+  }
+}
+
 export class SessionCycleError extends AgentFlowError {
   readonly code = "session_cycle" as const;
   constructor(

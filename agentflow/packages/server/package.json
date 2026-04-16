@@ -1,0 +1,34 @@
+{
+  "name": "@ageflow/server",
+  "version": "0.1.0",
+  "description": "Embeddable execution surface for ageflow workflows: stream, fire-and-forget, async HITL, cancellation.",
+  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/agentflow/packages/server",
+  "type": "module",
+  "private": false,
+  "sideEffects": false,
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "biome check src/"
+  },
+  "dependencies": {
+    "@ageflow/core": "workspace:*",
+    "@ageflow/executor": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "vitest": "^2.1.0",
+    "zod": "^3.23.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Neftedollar/ageflow.git"
+  },
+  "keywords": ["ai", "agents", "workflow", "server", "sse", "hitl", "ageflow"],
+  "license": "MIT"
+}

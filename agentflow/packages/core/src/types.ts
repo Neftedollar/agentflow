@@ -519,7 +519,11 @@ export interface TaskCompleteEvent extends EventBase {
 export interface TaskErrorEvent extends EventBase {
   readonly type: "task:error";
   readonly taskName: string;
-  readonly error: { readonly name: string; readonly message: string; readonly stack?: string };
+  readonly error: {
+    readonly name: string;
+    readonly message: string;
+    readonly stack?: string;
+  };
   readonly attempt: number;
   /** true when retries exhausted or the error kind is non-retryable. */
   readonly terminal: boolean;
@@ -555,7 +559,11 @@ export interface WorkflowCompleteEvent extends EventBase {
 
 export interface WorkflowErrorEvent extends EventBase {
   readonly type: "workflow:error";
-  readonly error: { readonly name: string; readonly message: string; readonly stack?: string };
+  readonly error: {
+    readonly name: string;
+    readonly message: string;
+    readonly stack?: string;
+  };
 }
 
 export type WorkflowEvent =
