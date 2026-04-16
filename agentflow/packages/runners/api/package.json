@@ -2,6 +2,7 @@
   "name": "@ageflow/runner-api",
   "version": "0.1.0",
   "description": "OpenAI-compatible HTTP runner for ageflow (OpenAI, Groq, Together, Ollama, vLLM, LM Studio, Azure).",
+  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/agentflow/packages/runners/api",
   "type": "module",
   "private": false,
   "sideEffects": false,
@@ -23,5 +24,22 @@
     "vitest": "^2.1.0",
     "zod": "^3.23.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Neftedollar/ageflow.git"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "workflow",
+    "llm",
+    "dsl",
+    "typescript",
+    "openai",
+    "groq",
+    "ollama",
+    "multi-agent",
+    "api-runner"
+  ],
   "license": "MIT"
 }
