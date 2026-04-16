@@ -363,6 +363,8 @@ export class WorkflowExecutor<T extends TasksMap> {
                 sessionHandle,
                 permissions ?? undefined,
                 filteredTools,
+                undefined,
+                this.workflow.mcpServers,
               );
 
               const latencyMs = Date.now() - taskStart;
@@ -621,6 +623,7 @@ export class WorkflowExecutor<T extends TasksMap> {
                     reason,
                   });
                 },
+                this.workflow.mcpServers,
               );
 
               const latencyMs = Date.now() - taskStart;

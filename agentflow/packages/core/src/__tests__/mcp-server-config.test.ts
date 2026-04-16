@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { McpServerConfigSchema } from "../schemas.js";
 
 describe("McpServerConfigSchema", () => {
@@ -44,5 +45,23 @@ describe("McpServerConfigSchema", () => {
     expect(() =>
       McpServerConfigSchema.parse({ name: "x", command: "" }),
     ).toThrow();
+  });
+
+  it("accepts a refine map with Zod schema values (#84)", () => {
+    const result = McpServerConfigSchema.safeParse({
+      name: "filesystem",
+      command: "npx",
+      refine: { tool_name: z.object({ path: z.string() }) },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts refine as an empty object", () => {
+    const result = McpServerConfigSchema.safeParse({
+      name: "filesystem",
+      command: "npx",
+      refine: {},
+    });
+    expect(result.success).toBe(true);
   });
 });

@@ -282,6 +282,56 @@ describe("WorkflowExecutor", () => {
     expect(receivedHandles[1]).toBe("session-handle-from-A");
   });
 
+  it("workflow mcpServers threaded to runNode: task with mcpOverride resolves without 'unknown server' error (#84)", async () => {
+    // Capture spawn args to verify mcpServers were forwarded
+    let capturedSpawnArgs: import("@ageflow/core").RunnerSpawnArgs | undefined;
+
+    const mockRunner: import("@ageflow/core").Runner = {
+      validate: vi.fn().mockResolvedValue({ ok: true }),
+      spawn: vi.fn(async (args) => {
+        capturedSpawnArgs = args;
+        return {
+          stdout: JSON.stringify({ result: "ok" }),
+          sessionHandle: "s1",
+          tokensIn: 5,
+          tokensOut: 5,
+        };
+      }),
+    };
+    registerRunner("mock-mcp-wf", mockRunner);
+
+    const mcpAgent = defineAgent({
+      runner: "mock-mcp-wf",
+      input: z.object({ value: z.string() }),
+      output: z.object({ result: z.string() }),
+      prompt: ({ value }) => `Process: ${value}`,
+      retry: { max: 1, on: [], backoff: "fixed" },
+    });
+
+    const workflow = defineWorkflow({
+      name: "test-workflow-mcp",
+      mcpServers: [{ name: "fs", command: "npx" }],
+      tasks: {
+        taskA: {
+          agent: mcpAgent,
+          input: { value: "hello" },
+          mcpOverride: { servers: ["fs"] },
+        },
+      },
+    });
+
+    // Before the fix this would throw:
+    //   "Task mcpOverride references unknown server 'fs'. Available servers: []"
+    // because workflowMcpServers was not passed to runNode.
+    const executor = new WorkflowExecutor(workflow);
+    await expect(executor.run()).resolves.toBeDefined();
+
+    // Verify the resolved MCP server was forwarded to the runner spawn args
+    expect(capturedSpawnArgs?.mcpServers).toEqual([
+      expect.objectContaining({ name: "fs" }),
+    ]);
+  });
+
   it("returns correct metrics with taskCount = number of agent tasks", async () => {
     const workflow = defineWorkflow({
       name: "test-metrics",

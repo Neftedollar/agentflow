@@ -256,7 +256,8 @@ export const McpServerConfigSchema = z
     env: z.record(z.string(), z.string()).optional(),
     cwd: z.string().optional(),
     tools: z.array(z.string()).readonly().optional(),
-    // refine is a runtime ZodType map — not Zod-validated itself (opaque)
+    // refine is a map of tool-name → ZodType — opaque at runtime, not recursively validated
+    refine: z.record(z.string(), z.unknown()).optional(),
     transport: z.literal("stdio").optional(),
     mcpCallTimeoutMs: z.number().int().positive().optional(),
     reusePerRunner: z.boolean().optional(),

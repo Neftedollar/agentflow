@@ -34,7 +34,7 @@ export function mcpToolFqn(serverName: string, toolName: string): string {
 export function parseMcpToolFqn(
   fqn: string,
 ): { server: string; tool: string } | undefined {
-  const m = fqn.match(/^mcp__([^_]+)__(.+)$/);
+  const m = fqn.match(/^mcp__(.+?)__(.+)$/);
   if (!m || m[1] === undefined || m[2] === undefined) return undefined;
   return { server: m[1], tool: m[2] };
 }
