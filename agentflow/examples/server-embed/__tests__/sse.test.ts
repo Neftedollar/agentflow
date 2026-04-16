@@ -67,3 +67,25 @@ describe("server-embed demo", () => {
     runner.close();
   });
 });
+
+describe("P2-6: stream — checkpoint does not break generator", () => {
+  it("drains all events including workflow:complete even with checkpoint", async () => {
+    const runner = createRunner();
+    const types: string[] = [];
+
+    // Simulate what the fixed server.ts does: don't break on checkpoint
+    for await (const ev of runner.stream(
+      triageWorkflow,
+      {},
+      {
+        onCheckpoint: async () => true,
+      },
+    )) {
+      types.push(ev.type);
+    }
+
+    expect(types).toContain("checkpoint");
+    expect(types[types.length - 1]).toBe("workflow:complete");
+    runner.close();
+  });
+});

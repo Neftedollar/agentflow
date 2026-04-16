@@ -33,7 +33,9 @@ const server = createServer(async (req, res) => {
     try {
       for await (const ev of runner.stream(triageWorkflow, {})) {
         res.write(`data: ${JSON.stringify(ev)}\n\n`);
-        if (ev.type === "checkpoint") break;
+        // Do NOT break on checkpoint — keep draining until workflow:complete so
+        // the run reaches a terminal state. The client can POST /runs/:id/resume
+        // while the generator is suspended at the checkpoint.
       }
       res.end();
     } catch (err) {
