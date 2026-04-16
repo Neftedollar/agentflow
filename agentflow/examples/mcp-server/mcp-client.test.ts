@@ -5,13 +5,15 @@
  *   1. Client can list the workflow tool via tools/list
  *   2. Client can call the tool and receive a greeting via tools/call
  *   3. Invalid input returns isError: true
+ *   4. Async mode: start_greet → poll get_workflow_status → get_workflow_result
  *
  * No real Claude calls are made — the executor is replaced with a minimal
- * mock via the runWorkflow injection point on createMcpServer.
+ * mock via the runWorkflow injection point on createMcpServer, or via the
+ * _testRunExecutor hook for async-mode tests.
  */
 
 import { createMcpServer } from "@ageflow/mcp-server";
-import type { RunWorkflowFn } from "@ageflow/mcp-server";
+import type { McpServerHandle, RunWorkflowFn } from "@ageflow/mcp-server";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -28,7 +30,65 @@ const mockRunWorkflow: RunWorkflowFn = async (args) => {
   return { greeting: `Hello, ${input.name}!` };
 };
 
-// ─── Test suite ───────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Wire a McpServerHandle to an InMemoryTransport and return a connected Client.
+ * The caller owns `handle.dispose()` and `client.close()`.
+ */
+async function buildClient(
+  handle: McpServerHandle,
+  serverName = "greet-server",
+  stderrSink?: (line: string) => void,
+): Promise<Client> {
+  const [serverTransport, clientTransport] =
+    InMemoryTransport.createLinkedPair();
+
+  const { startStdioTransport } = await import("@ageflow/mcp-server");
+
+  await startStdioTransport({
+    serverName,
+    serverVersion: "0.1.0",
+    handle,
+    transport: serverTransport,
+    stderr: stderrSink ?? (() => {}),
+  });
+
+  const client = new Client(
+    { name: "test-client", version: "0.0.1" },
+    { capabilities: {} },
+  );
+  await client.connect(clientTransport);
+  return client;
+}
+
+/** Resolve once `get_workflow_status` reports state === targetState. */
+async function pollUntil(
+  client: Client,
+  jobId: string,
+  targetState: string,
+  maxAttempts = 50,
+): Promise<Record<string, unknown>> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const res = await client.callTool({
+      name: "get_workflow_status",
+      arguments: { jobId },
+    });
+    if (res.isError)
+      throw new Error(`get_workflow_status error on attempt ${i}`);
+    const text =
+      (res.content as { type: string; text: string }[])[0]?.text ?? "{}";
+    const status = JSON.parse(text) as { state: string };
+    if (status.state === targetState) return status as Record<string, unknown>;
+    // Yield the event loop so the background fire() async-gen can advance.
+    await new Promise<void>((r) => setTimeout(r, 0));
+  }
+  throw new Error(
+    `pollUntil("${targetState}") timed out after ${maxAttempts} attempts`,
+  );
+}
+
+// ─── Sync test suite ──────────────────────────────────────────────────────────
 
 describe("mcp-server example — InMemoryTransport client test", () => {
   let client: Client;
@@ -101,4 +161,114 @@ describe("mcp-server example — InMemoryTransport client test", () => {
     const text = (result.content as { type: string; text: string }[])[0]?.text;
     expect(text).toMatch(/schema validation failed/i);
   });
+});
+
+// ─── Async mode test suite ────────────────────────────────────────────────────
+
+describe("mcp-server example — async mode via InMemoryTransport", () => {
+  /**
+   * Scenario: start the server with --async --hitl auto, verify 6 tools are
+   * exposed, fire start_greet, poll get_workflow_status until done, fetch the
+   * final result via get_workflow_result, and assert the greeting output.
+   *
+   * The runner is mocked via `handle._testRunExecutor` (same approach used by
+   * the async-mode integration tests in @ageflow/mcp-server), which bypasses
+   * the real Claude CLI subprocess — no subprocess is spawned.
+   *
+   * NOTE: The async fire() path (dispatchStart) runs the workflow through
+   * WorkflowExecutor, which reads task.input from the task definition to build
+   * the prompt. Unlike the sync path (which injects the MCP input at run-time
+   * via makeDefaultRunner), the async path requires the task to carry a static
+   * input value. We therefore pass a workflow variant with the input pre-set —
+   * this is the standard pattern for async server-side workflows (see also
+   * examples/server-embed/workflow.ts).
+   */
+  it("start_greet → poll until done → get_workflow_result returns greeting", async () => {
+    // Create a workflow variant with the greet task input pre-set to { name: "Bob" }.
+    // This mirrors how server-embed/workflow.ts defines its triage task with a
+    // static input, and is required because the async fire() path does not
+    // inject the MCP call arguments into the task's `input` field at run-time.
+    //
+    // We spread the original greet task (which carries the `agent` definition)
+    // and override only `input`. The cast to `typeof workflow` is safe here
+    // because the shape is identical — we are just adding an `input` field.
+    const greetTaskWithInput = {
+      // biome-ignore lint/suspicious/noExplicitAny: spreading an opaque readonly TaskDef to add `input`
+      ...(workflow.tasks.greet as any),
+      input: { name: "Bob" } as { name: string },
+    };
+    const asyncWorkflow = {
+      ...workflow,
+      tasks: { greet: greetTaskWithInput },
+      // biome-ignore lint/suspicious/noExplicitAny: test-local cast — shape is equivalent to original workflow
+    } as any as typeof workflow;
+
+    // Build the server handle in async mode (--async --hitl auto equivalent).
+    const handle = createMcpServer({
+      workflow: asyncWorkflow,
+      cliCeilings: {},
+      hitlStrategy: "auto",
+      async: true,
+    });
+
+    // Inject a mock executor: receives the task's resolved input ({ name: "Bob" })
+    // and returns a greeting without spawning a real Claude subprocess.
+    handle._testRunExecutor = async (args) => {
+      const input = args as { name: string };
+      return { greeting: `Hello, ${input.name}!` };
+    };
+
+    const client = await buildClient(handle, "greet-async-server");
+
+    try {
+      // 1. List tools — expect 6 (sync greet + 5 async job tools).
+      const { tools } = await client.listTools();
+      expect(tools).toHaveLength(6);
+      const names = tools.map((t) => t.name).sort();
+      expect(names).toEqual(
+        [
+          "cancel_workflow",
+          "get_workflow_result",
+          "get_workflow_status",
+          "greet",
+          "resume_workflow",
+          "start_greet",
+        ].sort(),
+      );
+
+      // 2. Call start_greet → get jobId.
+      const startRes = await client.callTool({
+        name: "start_greet",
+        arguments: { name: "Bob" },
+      });
+      expect(startRes.isError).toBeFalsy();
+      const startText =
+        (startRes.content as { type: string; text: string }[])[0]?.text ?? "{}";
+      const { jobId } = JSON.parse(startText) as { jobId: string };
+      expect(typeof jobId).toBe("string");
+      expect(jobId).toMatch(/^[0-9a-f-]{36}$/);
+
+      // 3. Poll get_workflow_status until state === "done".
+      await pollUntil(client, jobId, "done");
+
+      // 4. Fetch the result and assert the greeting.
+      const resultRes = await client.callTool({
+        name: "get_workflow_result",
+        arguments: { jobId },
+      });
+      expect(resultRes.isError).toBeFalsy();
+      const resultText =
+        (resultRes.content as { type: string; text: string }[])[0]?.text ??
+        "{}";
+      const result = JSON.parse(resultText) as {
+        state: string;
+        output: { greeting: string };
+      };
+      expect(result.state).toBe("done");
+      expect(result.output.greeting).toBe("Hello, Bob!");
+    } finally {
+      await client.close();
+      handle.dispose?.();
+    }
+  }, 10_000); // 10 s timeout — polling loop needs multiple event-loop ticks
 });

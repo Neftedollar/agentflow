@@ -18,6 +18,7 @@ executor ← testing
 runners/* ← executor (via RunnerRegistry)
 core ← server
 executor ← server
+server ← mcp-server   ← @ageflow/mcp-server depends on @ageflow/server (async job mode, Phase 11 #18)
 
 ## Packages (v1)
 - `@ageflow/core` — types, Zod schemas, DSL builders
@@ -27,6 +28,7 @@ executor ← server
 - `@ageflow/runner-api` — OpenAI-compatible HTTP runner
 - `@ageflow/testing` — test harness (`createTestHarness`)
 - `@ageflow/server` — embeddable execution surface — streaming events, async HITL, cancellation
+- `@ageflow/mcp-server` — MCP transport layer; depends on `@ageflow/server` for async job mode (createRunner, RunHandle)
 - `agentflow` (CLI) — `agentwf run/validate/dry-run/init`
 
 ## Phase 1 complete: @agentflow/core
