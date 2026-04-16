@@ -266,6 +266,109 @@ describe("P1-1: single-ownership of onCheckpoint hook", () => {
   });
 });
 
+describe("P1-2: AbortSignal stops executor", () => {
+  it("transitions to workflow:error with aborted cause and no more events fire after cancellation", async () => {
+    // Workflow with 3 sequential tasks (a → b → c).
+    // We abort the signal before the workflow even starts (already-aborted signal).
+    // The first batch boundary check must throw WorkflowAbortedError, producing
+    // workflow:error and no task events.
+    const agentSlow = defineAgent({
+      runner: "fake",
+      input: z.object({}),
+      output: z.object({ summary: z.string() }),
+      prompt: () => "p",
+    });
+    const wfSeq = defineWorkflow({
+      name: "seq-abort",
+      tasks: {
+        a: { agent: agentSlow, input: {} },
+        b: { agent: agentSlow, input: {}, dependsOn: ["a"] as const },
+        c: { agent: agentSlow, input: {}, dependsOn: ["b"] as const },
+      },
+    });
+    const controller = new AbortController();
+    // Abort before streaming — signal is already aborted at first batch boundary
+    controller.abort();
+
+    const ex = new WorkflowExecutor(wfSeq);
+    const events: WorkflowEvent[] = [];
+    try {
+      for await (const ev of ex.stream({}, { signal: controller.signal })) {
+        events.push(ev);
+      }
+    } catch {
+      // expected throw after abort
+    }
+    // Workflow must end with workflow:error
+    const lastEv = events[events.length - 1];
+    expect(lastEv?.type).toBe("workflow:error");
+    // No task:start should have fired at all
+    expect(events.some((e) => e.type === "task:start")).toBe(false);
+  });
+
+  it("stops mid-workflow when signal is aborted between tasks", async () => {
+    // Workflow with 3 sequential tasks (a → b → c).
+    // The runner for "b" and "c" checks the abort flag via a shared signal.
+    // We abort the controller inside the runner for "a" so the batch check
+    // for "b" sees it aborted before starting.
+    const controller = new AbortController();
+    let taskAStarted = false;
+    const abortingRunner: Runner = {
+      validate: async () => ({ ok: true }),
+      spawn: async () => {
+        if (!taskAStarted) {
+          taskAStarted = true;
+          // Abort after task a — the batch boundary check before b will catch it
+          controller.abort();
+        }
+        return {
+          stdout: JSON.stringify({ summary: "ok" }),
+          sessionHandle: "s",
+          tokensIn: 1,
+          tokensOut: 1,
+        };
+      },
+    };
+    registerRunner("aborting", abortingRunner);
+    try {
+      const agentAborting = defineAgent({
+        runner: "aborting",
+        input: z.object({}),
+        output: z.object({ summary: z.string() }),
+        prompt: () => "p",
+      });
+      const wfAborting = defineWorkflow({
+        name: "aborting-wf",
+        tasks: {
+          a: { agent: agentAborting, input: {} },
+          b: { agent: agentAborting, input: {}, dependsOn: ["a"] as const },
+          c: { agent: agentAborting, input: {}, dependsOn: ["b"] as const },
+        },
+      });
+      const ex = new WorkflowExecutor(wfAborting);
+      const events: WorkflowEvent[] = [];
+      try {
+        for await (const ev of ex.stream({}, { signal: controller.signal })) {
+          events.push(ev);
+        }
+      } catch {
+        // expected throw after abort
+      }
+      // Workflow must end with workflow:error
+      const lastEv = events[events.length - 1];
+      expect(lastEv?.type).toBe("workflow:error");
+      // Task b and c must not have started
+      const taskStarts = events
+        .filter((e) => e.type === "task:start")
+        .map((e) => (e as { taskName: string }).taskName);
+      expect(taskStarts).not.toContain("b");
+      expect(taskStarts).not.toContain("c");
+    } finally {
+      unregisterRunner("aborting");
+    }
+  });
+});
+
 describe("run() is a drain over stream()", () => {
   it("produces the same WorkflowResult as draining stream()", async () => {
     const executor = new WorkflowExecutor(wf);

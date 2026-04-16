@@ -102,3 +102,10 @@ export class RunnerNotRegisteredError extends AgentFlowError {
     );
   }
 }
+
+export class WorkflowAbortedError extends AgentFlowError {
+  readonly code = "workflow_aborted" as const;
+  constructor(options?: ErrorOptions) {
+    super("Workflow execution was aborted via AbortSignal", options);
+  }
+}

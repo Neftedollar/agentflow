@@ -11,7 +11,11 @@ import type {
 } from "@ageflow/core";
 import { BudgetTracker } from "./budget-tracker.js";
 import { topologicalSort } from "./dag-resolver.js";
-import { HitlRejectedError, RunnerNotRegisteredError } from "./errors.js";
+import {
+  HitlRejectedError,
+  RunnerNotRegisteredError,
+  WorkflowAbortedError,
+} from "./errors.js";
 import { HITLManager } from "./hitl-manager.js";
 import { LoopExecutor } from "./loop-executor.js";
 import { runNode } from "./node-runner.js";
@@ -195,6 +199,9 @@ export class WorkflowExecutor<T extends TasksMap> {
             push: (ev) => queue.push(ev),
             ...(options?.onCheckpoint !== undefined
               ? { onCheckpoint: options.onCheckpoint }
+              : {}),
+            ...(options?.signal !== undefined
+              ? { signal: options.signal }
               : {}),
           },
         );
@@ -451,9 +458,10 @@ export class WorkflowExecutor<T extends TasksMap> {
       workflowName: string;
       push: (ev: WorkflowEvent) => void;
       onCheckpoint?: (ev: CheckpointEvent) => Promise<boolean> | boolean;
+      signal?: AbortSignal;
     },
   ): Promise<WorkflowResult<T>> {
-    const { runId, workflowName, push, onCheckpoint } = emitting;
+    const { runId, workflowName, push, onCheckpoint, signal } = emitting;
     const { hooks, budget } = this.workflow;
     const sm = sessionManagerOverride ?? this.sessionManager;
     const workflowStart = Date.now();
@@ -470,6 +478,11 @@ export class WorkflowExecutor<T extends TasksMap> {
     let taskCount = 0;
 
     for (const batch of batches) {
+      // Check AbortSignal at every batch boundary (P1-2)
+      if (signal?.aborted) {
+        throw new WorkflowAbortedError();
+      }
+
       // Check budget before each batch
       if (budget !== undefined) {
         this.budgetTracker.checkBudget(budget);
@@ -482,6 +495,11 @@ export class WorkflowExecutor<T extends TasksMap> {
       await Promise.all(
         groups.map(async (group) => {
           for (const taskName of group) {
+            // Check AbortSignal before each task within a group (P1-2)
+            if (signal?.aborted) {
+              throw new WorkflowAbortedError();
+            }
+
             const taskDef = tasks[taskName];
             if (taskDef === undefined) continue;
 
