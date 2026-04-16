@@ -218,11 +218,11 @@ export async function runNode<
           errorCode,
         });
 
-        // Notify caller about the upcoming retry attempt
-        onRetry?.(attempt + 1, errorMessage);
-
-        // Apply backoff before next attempt (not after last attempt)
+        // Apply backoff before next attempt (not after last attempt).
+        // Only fire onRetry when another attempt will actually happen.
         if (attempt < maxAttempts - 1) {
+          // Notify caller about the upcoming retry attempt
+          onRetry?.(attempt + 1, errorMessage);
           const backoffMs = calculateBackoffMs(
             resolvedDef.retry.backoff,
             attempt,
