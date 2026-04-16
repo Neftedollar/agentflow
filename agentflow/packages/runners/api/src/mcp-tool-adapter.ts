@@ -106,6 +106,14 @@ function buildToolDefinition(
       // Refine validation
       const refineSchema = config.refine?.[toolName];
       if (refineSchema !== undefined) {
+        if (typeof refineSchema.safeParse !== "function") {
+          throw new McpToolArgInvalidError(
+            toolName,
+            new Error(
+              `refine[${toolName}] is not a Zod schema — got ${typeof refineSchema}. Config must use z.object({...}) or similar.`,
+            ),
+          );
+        }
         const result = refineSchema.safeParse(args);
         if (!result.success) {
           throw new McpToolArgInvalidError(toolName, result.error);
