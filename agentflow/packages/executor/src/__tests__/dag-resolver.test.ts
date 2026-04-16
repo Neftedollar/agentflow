@@ -183,7 +183,57 @@ describe("topologicalSort", () => {
 
     expect(caught).toBeInstanceOf(UnresolvedDependencyError);
     expect(caught?.taskName).toBe("myTask");
-    expect(caught?.depName).toBe("ghost");
+    expect(caught?.unresolvedDep).toBe("ghost");
+  });
+
+  it("UnresolvedDependencyError message includes task name, bad dep, and available task names", () => {
+    const tasks: TasksMap = {
+      analyze: makeTask([]),
+      build: makeTask(["analuze"]), // typo — "analuze" instead of "analyze"
+    };
+
+    let caught: UnresolvedDependencyError | undefined;
+    try {
+      topologicalSort(tasks);
+    } catch (e) {
+      if (e instanceof UnresolvedDependencyError) {
+        caught = e;
+      }
+    }
+
+    expect(caught).toBeInstanceOf(UnresolvedDependencyError);
+    expect(caught?.taskName).toBe("build");
+    expect(caught?.unresolvedDep).toBe("analuze");
+    expect(caught?.availableTaskNames).toContain("analyze");
+    expect(caught?.availableTaskNames).toContain("build");
+    expect(caught?.message).toContain("build");
+    expect(caught?.message).toContain("analuze");
+    expect(caught?.message).toContain("analyze");
+  });
+
+  it("UnresolvedDependencyError lists all available tasks so user can spot typo", () => {
+    const tasks: TasksMap = {
+      fetch: makeTask([]),
+      transform: makeTask([]),
+      load: makeTask(["trnasform"]), // typo — "trnasform" instead of "transform"
+    };
+
+    let caught: UnresolvedDependencyError | undefined;
+    try {
+      topologicalSort(tasks);
+    } catch (e) {
+      if (e instanceof UnresolvedDependencyError) {
+        caught = e;
+      }
+    }
+
+    expect(caught).toBeInstanceOf(UnresolvedDependencyError);
+    expect(caught?.availableTaskNames).toEqual(
+      expect.arrayContaining(["fetch", "transform", "load"]),
+    );
+    // Message should list available tasks
+    expect(caught?.message).toContain("fetch");
+    expect(caught?.message).toContain("transform");
   });
 });
 

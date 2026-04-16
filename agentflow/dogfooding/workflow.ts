@@ -156,7 +156,8 @@ export default defineWorkflow({
   name: "dev-pipeline",
 
   mcp: {
-    description: "Run the full ageflow dev pipeline: plan → build → test → verify → ship.",
+    description:
+      "Run the full ageflow dev pipeline: plan → build → test → verify → ship.",
     maxCostUsd: 10,
     maxDurationSec: 1800,
     maxTurns: 100,

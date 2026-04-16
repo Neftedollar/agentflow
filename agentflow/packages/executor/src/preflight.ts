@@ -83,7 +83,7 @@ function validateDAG(tasks: TasksMap, errors: string[]): void {
       errors.push(`DAG cycle detected: ${err.cycle.join(" → ")}`);
     } else if (err instanceof UnresolvedDependencyError) {
       errors.push(
-        `DAG error: Task "${err.taskName}" depends on "${err.depName}" which is not defined in this workflow`,
+        `DAG error: Task "${err.taskName}" depends on "${err.unresolvedDep}" which is not defined in this workflow`,
       );
     } else {
       throw err;

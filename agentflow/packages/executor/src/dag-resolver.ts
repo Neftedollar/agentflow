@@ -32,7 +32,7 @@ export function topologicalSort(tasks: TasksMap): string[][] {
     for (const dep of deps) {
       // Only count dependencies that are within this tasks map
       if (!inDegree.has(dep)) {
-        throw new UnresolvedDependencyError(name, dep);
+        throw new UnresolvedDependencyError(name, dep, taskNames);
       }
       inDegree.set(name, (inDegree.get(name) ?? 0) + 1);
       dependents.get(dep)?.push(name);

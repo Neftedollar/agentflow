@@ -55,11 +55,16 @@ export class UnresolvedDependencyError extends AgentFlowError {
   readonly code = "unresolved_dependency" as const;
   constructor(
     readonly taskName: string,
-    readonly depName: string,
+    readonly unresolvedDep: string,
+    readonly availableTaskNames: string[],
     options?: ErrorOptions,
   ) {
+    const available =
+      availableTaskNames.length > 0
+        ? ` Available tasks: ${availableTaskNames.join(", ")}.`
+        : "";
     super(
-      `Task "${taskName}" depends on "${depName}" which is not defined in this workflow`,
+      `Task "${taskName}" depends on "${unresolvedDep}" which does not exist in the workflow.${available}`,
       options,
     );
   }
