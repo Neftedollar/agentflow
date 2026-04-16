@@ -18,13 +18,17 @@ function renderStringArray(values: readonly string[]): string {
 }
 
 /**
- * Render an env map as a JSON object string.
- * Codex's `-c` flag parses values as JSON when possible; `mcp_servers.<id>.env`
- * expects a map<string,string>, so we must emit a valid JSON object.
- * Example: { FOO: "bar" } → '{"FOO":"bar"}'
+ * Render an env map as a TOML inline table.
+ * Codex's `-c` flag parses values as TOML (per codex-rs source:
+ * `codex-rs/utils/cli/src/config_override.rs` — "The value portion is parsed as TOML").
+ * `mcp_servers.<id>.env` expects a TOML inline table: {KEY="val"}.
+ * Example: { FOO: "bar" } → '{FOO="bar"}'
  */
 function renderEnvTable(env: Readonly<Record<string, string>>): string {
-  return JSON.stringify(env);
+  const pairs = Object.entries(env)
+    .map(([k, v]) => `${k}="${tomlEscape(v)}"`)
+    .join(",");
+  return `{${pairs}}`;
 }
 
 /**
@@ -66,9 +70,9 @@ export function renderCodexMcpFlags(
       );
     }
 
-    // cwd override — only when set
+    // cwd override — only when set; tomlEscape for safety if path contains quotes/backslashes
     if (srv.cwd !== undefined) {
-      flags.push("-c", `${prefix}.cwd=${srv.cwd}`);
+      flags.push("-c", `${prefix}.cwd="${tomlEscape(srv.cwd)}"`);
     }
   }
 
