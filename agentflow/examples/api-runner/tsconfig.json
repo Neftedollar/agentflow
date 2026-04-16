@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".",
+    "paths": {
+      "@ageflow/core": ["../../packages/core/src/index.ts"],
+      "@ageflow/runner-api": ["../../packages/runners/api/src/index.ts"],
+      "@ageflow/executor": ["../../packages/executor/src/index.ts"],
+      "@ageflow/testing": ["../../packages/testing/src/index.ts"]
+    }
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

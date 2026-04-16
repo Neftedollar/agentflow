@@ -24,6 +24,21 @@
         "@types/node": "^22.0.0",
       },
     },
+    "examples/api-runner": {
+      "name": "@ageflow-example/api-runner",
+      "version": "0.0.0",
+      "dependencies": {
+        "@ageflow/core": "workspace:*",
+        "@ageflow/executor": "workspace:*",
+        "@ageflow/runner-api": "workspace:*",
+        "zod": "^3.23.0",
+      },
+      "devDependencies": {
+        "@ageflow/testing": "workspace:*",
+        "@types/node": "^22.0.0",
+        "vitest": "^2.1.0",
+      },
+    },
     "examples/bug-fix-pipeline": {
       "name": "@ageflow/example-bug-fix-pipeline",
       "version": "0.1.0",
@@ -170,6 +185,8 @@
     "zod": "^3.23.0",
   },
   "packages": {
+    "@ageflow-example/api-runner": ["@ageflow-example/api-runner@workspace:examples/api-runner"],
+
     "@ageflow/cli": ["@ageflow/cli@workspace:packages/cli"],
 
     "@ageflow/core": ["@ageflow/core@workspace:packages/core"],
