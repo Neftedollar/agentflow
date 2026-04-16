@@ -176,7 +176,14 @@ export class WorkflowExecutor<T extends TasksMap> {
     });
 
     // Run the DAG in the background; push events via queue; close on exit.
-    const driver = (async (): Promise<WorkflowResult<T>> => {
+    // We use a shared error slot instead of a rejected Promise to avoid
+    // unhandled-rejection warnings when the generator is suspended
+    // (e.g. async HITL timeout): the error is already communicated via the
+    // queue as workflow:error and will be re-thrown from `return driverResult`
+    // once the consumer drains the queue.
+    let driverResult: WorkflowResult<T> | undefined;
+    let driverError: Error | undefined;
+    const driverDone = (async (): Promise<void> => {
       try {
         const result = await this._runBatchesEmitting(
           this.workflow.tasks,
@@ -206,8 +213,8 @@ export class WorkflowExecutor<T extends TasksMap> {
             metrics: result.metrics,
           },
         });
+        driverResult = result;
         queue.close();
-        return result;
       } catch (err) {
         const e = err instanceof Error ? err : new Error(String(err));
         queue.push({
@@ -221,10 +228,12 @@ export class WorkflowExecutor<T extends TasksMap> {
             ...(e.stack !== undefined ? { stack: e.stack } : {}),
           },
         });
+        driverError = e;
         queue.close();
-        throw e;
       }
     })();
+    // Suppress the floating promise rejection (the IIFE returns void / never rejects).
+    void driverDone;
 
     while (true) {
       const ev = await queue.next();
@@ -232,8 +241,10 @@ export class WorkflowExecutor<T extends TasksMap> {
       yield ev;
     }
 
-    // Await so we can return the final WorkflowResult.
-    return await driver;
+    // Await the driver to ensure it has fully completed before returning.
+    await driverDone;
+    if (driverError !== undefined) throw driverError;
+    return driverResult as WorkflowResult<T>;
   }
 
   /**
