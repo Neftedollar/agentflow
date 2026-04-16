@@ -181,3 +181,59 @@ describe("parseMcpServeArgs", () => {
     );
   });
 });
+
+describe("parseMcpServeArgs: async mode flags (#18)", () => {
+  it("parses --async without a value", () => {
+    const parsed = parseMcpServeArgs(["wf.ts", "--async"]);
+    expect(parsed.async).toBe(true);
+  });
+
+  it("defaults async to undefined (off)", () => {
+    const parsed = parseMcpServeArgs(["wf.ts"]);
+    expect(parsed.async).toBeUndefined();
+  });
+
+  it("parses --job-ttl <ms>", () => {
+    const parsed = parseMcpServeArgs([
+      "wf.ts",
+      "--async",
+      "--job-ttl",
+      "1800000",
+    ]);
+    expect(parsed.jobTtlMs).toBe(1_800_000);
+  });
+
+  it("parses --checkpoint-ttl <ms>", () => {
+    const parsed = parseMcpServeArgs([
+      "wf.ts",
+      "--async",
+      "--checkpoint-ttl",
+      "900000",
+    ]);
+    expect(parsed.jobCheckpointTtlMs).toBe(900_000);
+  });
+
+  it("rejects --job-ttl with no value", () => {
+    expect(() => parseMcpServeArgs(["wf.ts", "--async", "--job-ttl"])).toThrow(
+      /requires/,
+    );
+  });
+
+  it("rejects --job-ttl with non-positive value", () => {
+    expect(() =>
+      parseMcpServeArgs(["wf.ts", "--async", "--job-ttl", "0"]),
+    ).toThrow(/positive/);
+  });
+
+  it("rejects TTL flags without --async", () => {
+    expect(() => parseMcpServeArgs(["wf.ts", "--job-ttl", "1000"])).toThrow(
+      /requires --async/,
+    );
+  });
+
+  it("rejects --checkpoint-ttl without --async", () => {
+    expect(() =>
+      parseMcpServeArgs(["wf.ts", "--checkpoint-ttl", "1000"]),
+    ).toThrow(/requires --async/);
+  });
+});

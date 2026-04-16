@@ -34,6 +34,12 @@ export interface McpServeArgs {
   readonly hitlStrategy: HitlStrategy;
   readonly serverName?: string;
   readonly logFile?: string;
+  /** Enable async job mode (--async flag). */
+  readonly async?: boolean;
+  /** Override default 30-minute job TTL in ms (--job-ttl <ms>). */
+  readonly jobTtlMs?: number;
+  /** Override default 1-hour checkpoint TTL in ms (--checkpoint-ttl <ms>). */
+  readonly jobCheckpointTtlMs?: number;
 }
 
 // ─── Raw argv parser ─────────────────────────────────────────────────────────
@@ -65,6 +71,9 @@ export function parseMcpServeArgs(argv: readonly string[]): McpServeArgs {
   let hitlStrategy: HitlStrategy = "elicit";
   let serverName: string | undefined = undefined;
   let logFile: string | undefined = undefined;
+  let asyncMode: boolean | undefined = undefined;
+  let jobTtlMs: number | undefined = undefined;
+  let jobCheckpointTtlMs: number | undefined = undefined;
 
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
@@ -152,9 +161,50 @@ export function parseMcpServeArgs(argv: readonly string[]): McpServeArgs {
         break;
       }
 
+      case "--async":
+        asyncMode = true;
+        break;
+
+      case "--job-ttl": {
+        const val = args[++i];
+        if (val === undefined || val.startsWith("-")) {
+          throw new Error("--job-ttl requires a numeric argument (ms)");
+        }
+        const n = Number(val);
+        if (!Number.isInteger(n) || n <= 0) {
+          throw new Error(
+            `--job-ttl must be a positive integer in ms, got: ${val}`,
+          );
+        }
+        jobTtlMs = n;
+        break;
+      }
+
+      case "--checkpoint-ttl": {
+        const val = args[++i];
+        if (val === undefined || val.startsWith("-")) {
+          throw new Error("--checkpoint-ttl requires a numeric argument (ms)");
+        }
+        const n = Number(val);
+        if (!Number.isInteger(n) || n <= 0) {
+          throw new Error(
+            `--checkpoint-ttl must be a positive integer in ms, got: ${val}`,
+          );
+        }
+        jobCheckpointTtlMs = n;
+        break;
+      }
+
       default:
         throw new Error(`Unknown flag: ${flag}`);
     }
+  }
+
+  if (
+    asyncMode !== true &&
+    (jobTtlMs !== undefined || jobCheckpointTtlMs !== undefined)
+  ) {
+    throw new Error("--job-ttl / --checkpoint-ttl requires --async");
   }
 
   return {
@@ -165,6 +215,9 @@ export function parseMcpServeArgs(argv: readonly string[]): McpServeArgs {
     ...(maxTurns !== undefined ? { maxTurns } : {}),
     ...(serverName !== undefined ? { serverName } : {}),
     ...(logFile !== undefined ? { logFile } : {}),
+    ...(asyncMode !== undefined ? { async: asyncMode } : {}),
+    ...(jobTtlMs !== undefined ? { jobTtlMs } : {}),
+    ...(jobCheckpointTtlMs !== undefined ? { jobCheckpointTtlMs } : {}),
   };
 }
 
@@ -235,6 +288,11 @@ async function runMcpServe(rawArgv: string[]): Promise<void> {
     cliCeilings,
     hitlStrategy: parsed.hitlStrategy,
     stderr,
+    ...(parsed.async === true ? { async: true } : {}),
+    ...(parsed.jobTtlMs !== undefined ? { jobTtlMs: parsed.jobTtlMs } : {}),
+    ...(parsed.jobCheckpointTtlMs !== undefined
+      ? { jobCheckpointTtlMs: parsed.jobCheckpointTtlMs }
+      : {}),
   });
 
   // Start stdio transport
@@ -273,15 +331,18 @@ export function registerMcpCommand(program: Command): void {
     .description(
       "Expose a workflow as an MCP tool via stdio transport\n\n" +
         "Flags (passed after the workflow file):\n" +
-        "  --max-cost <n>       max cost in USD\n" +
-        "  --no-max-cost        disable cost ceiling\n" +
-        "  --max-duration <n>   max duration in seconds\n" +
-        "  --no-max-duration    disable duration ceiling\n" +
-        "  --max-turns <n>      max agent turns\n" +
-        "  --no-max-turns       disable turns ceiling\n" +
-        "  --hitl <strategy>    elicit | auto | fail (default: elicit)\n" +
-        "  --name <name>        MCP server name\n" +
-        "  --log-file <path>    log stderr to file",
+        "  --max-cost <n>         max cost in USD\n" +
+        "  --no-max-cost          disable cost ceiling\n" +
+        "  --max-duration <n>     max duration in seconds\n" +
+        "  --no-max-duration      disable duration ceiling\n" +
+        "  --max-turns <n>        max agent turns\n" +
+        "  --no-max-turns         disable turns ceiling\n" +
+        "  --hitl <strategy>      elicit | auto | fail (default: elicit)\n" +
+        "  --name <name>          MCP server name\n" +
+        "  --log-file <path>      log stderr to file\n" +
+        "  --async                enable async job mode (5 extra tools)\n" +
+        "  --job-ttl <ms>         job TTL in ms (default: 1800000, requires --async)\n" +
+        "  --checkpoint-ttl <ms>  checkpoint TTL in ms (default: 3600000, requires --async)",
     )
     .allowUnknownOption(true) // raw flags parsed manually
     .action(async (workflowFile: string, extraArgs: string[]) => {
