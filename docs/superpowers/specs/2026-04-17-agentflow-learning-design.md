@@ -21,10 +21,14 @@ hooks from `createLearningHooks()` into any `defineWorkflow()`.
 
 ```ts
 import { createLearningHooks } from "@ageflow/learning";
-import { SqliteSkillStore } from "@ageflow/learning-sqlite";
+import { SqliteLearningStore } from "@ageflow/learning-sqlite";
 
-const store = new SqliteSkillStore("~/.agentflow/skills.db");
-const hooks = createLearningHooks({ store, strategy: "autonomous" });
+const store = new SqliteLearningStore("~/.agentflow/skills.db");
+const hooks = createLearningHooks({
+  skillStore: store,
+  traceStore: store,
+  strategy: "autonomous",
+});
 
 const workflow = defineWorkflow({
   name: "bug-fix",
@@ -62,7 +66,19 @@ Users can provide their own:
 
 ```ts
 const hooks = createLearningHooks({
-  store: new PostgresSkillStore(pool),  // custom implementation
+  skillStore: new PostgresSkillStore(pool),
+  traceStore: new PostgresTraceStore(pool),
+});
+```
+
+`SqliteLearningStore` is a convenience class that implements both interfaces
+backed by a single SQLite database:
+
+```ts
+const store = new SqliteLearningStore("~/.agentflow/skills.db");
+const hooks = createLearningHooks({
+  skillStore: store,
+  traceStore: store,
 });
 ```
 
@@ -225,8 +241,21 @@ system learns through itself (meta-circularity, dogfooding).
 
 ### 6.1 reflectionWorkflow
 
-Triggered automatically via `onWorkflowComplete` hook after each user workflow
-run.
+Triggered via `onWorkflowComplete` hook. **Rate-limited** — not every run
+triggers reflection. Configurable via `createLearningHooks({ reflectEvery })`:
+
+- `reflectEvery: "always"` — after every run (default for first 10 runs)
+- `reflectEvery: N` — every N-th run (e.g., 5 = reflect after every 5th run)
+- `reflectEvery: "on-failure"` — only when `success === false`
+- `reflectEvery: "on-feedback"` — only when delayed feedback was received
+  since last reflection
+
+Default: `"always"` for the first 10 runs (cold start — need data), then
+automatically switches to `reflectEvery: 5`. Override with explicit config.
+
+**Cost estimation**: each reflection = 1 opus call (credit assignment) +
+0-N sonnet calls (skill generation, only for low-scoring tasks). Typical
+cost: ~$0.05-0.15 per reflection cycle at current API pricing.
 
 ```
 collectTrace → creditAssignment → generateSkillDrafts
@@ -305,6 +334,22 @@ v1 (active, score: 0.6)
    lineage.maxBy(score)`).
 5. Each version keeps its own score — scores are NOT reset on rollback.
 
+**Score accumulation formula**:
+- **Exponential Moving Average (EMA)** with α = 0.3:
+  `newScore = α × latestSignal + (1 − α) × previousScore`
+- Signal sources: `success` (boolean → 0/1), feedback rating
+  (`positive` = 1, `mixed` = 0.5, `negative` = 0), credit assignment score
+  (0-1 from reflection agent)
+- **Delayed feedback weight**: when feedback contradicts immediate signal,
+  feedback is weighted 2× (effectively α = 0.5 for that update)
+- **Minimum runCount before rollback**: 3 runs. No rollback on first or
+  second use — too little data.
+- **Rollback threshold**: `currentScore < bestInLineage.score − 0.15`.
+  Small regressions (within 0.15) are tolerated — only clear degradation
+  triggers rollback.
+
+All thresholds configurable via `createLearningHooks({ thresholds: {...} })`.
+
 **Promotion strategies** (configurable):
 - `"autonomous"` — fully automatic: apply → score → rollback if worse
 - `"hitl"` — reflection generates new version, but activation requires human
@@ -314,26 +359,68 @@ v1 (active, score: 0.6)
 
 ## 7. Changes to Existing Packages
 
-### 7.1 `@ageflow/core` — one new hook, no learning types
+### 7.1 `@ageflow/core` — new hooks + extended TaskMetrics
 
 All learning-specific types (`ExecutionTrace`, `TaskTrace`, `Feedback`,
 `SkillRecord`) live in `@ageflow/learning`. Core does NOT import or re-export
 them — clean boundary.
 
 Add to `WorkflowHooks` in `types.ts`:
-- `getSystemPromptPrefix?: (taskName: string) => string | undefined` — generic
-  hook for injecting extra context into agent prompts. Learning is the first
-  consumer, but the hook is useful beyond learning (e.g., per-task instructions,
-  environment-specific context).
 
-### 7.2 `@ageflow/executor` — ~5 lines
+```ts
+// Generic hook — useful beyond learning (per-task instructions, env context)
+getSystemPromptPrefix?: (taskName: string) => string | undefined;
 
-In `node-runner.ts`, when building `RunnerSpawnArgs`:
-- If `hooks` provide skill content for this task (via a new optional
-  `getSkillContent?: (taskName: string) => string | undefined` on
-  `WorkflowHooks`), prepend to `systemPrompt`.
+// Trace collection hooks — called by executor, consumed by learning
+onTaskSpawnArgs?: (taskName: string, args: RunnerSpawnArgs) => void;
+onTaskSpawnResult?: (taskName: string, result: RunnerSpawnResult) => void;
+```
 
-Guarded by optional chaining — zero impact when learning is not active.
+`getSystemPromptPrefix` injects content into agent prompts. `onTaskSpawnArgs`
+and `onTaskSpawnResult` give learning hooks access to the full prompt and
+token counts / tool calls that are not currently exposed via `onTaskComplete`
+(which only receives parsed output + `TaskMetrics`).
+
+Extend `TaskMetrics` in core with fields already available from
+`RunnerSpawnResult`:
+
+```ts
+interface TaskMetrics {
+  // existing fields...
+  tokensIn: number;       // NEW — from RunnerSpawnResult
+  tokensOut: number;      // NEW — from RunnerSpawnResult
+  promptSent: string;     // NEW — the full prompt as sent to the runner
+}
+```
+
+This keeps trace collection clean — learning hooks read `TaskMetrics` from
+`onTaskComplete` without needing to intercept spawn internals.
+
+### 7.2 `@ageflow/executor` — ~20 lines
+
+Changes in `node-runner.ts`:
+
+1. Call `hooks.getSystemPromptPrefix?.(taskName)` and prepend result to
+   `systemPrompt` when building `RunnerSpawnArgs` (~5 lines).
+2. Populate new `TaskMetrics` fields (`tokensIn`, `tokensOut`, `promptSent`)
+   from `RunnerSpawnResult` before passing to `onTaskComplete` (~10 lines).
+3. Call `hooks.onTaskSpawnArgs?.(taskName, args)` before spawn and
+   `hooks.onTaskSpawnResult?.(taskName, result)` after spawn (~4 lines).
+
+All guarded by optional chaining — zero impact when learning is not active.
+
+### 7.3 Circular dependency avoidance
+
+`@ageflow/learning` contains pre-built workflows that use `@ageflow/executor`
+at runtime. The executor reads hooks from `@ageflow/core` types. Resolution:
+
+- `@ageflow/core` defines hook signatures using **only primitive/core types**
+  (`string`, `RunnerSpawnArgs`, `TaskMetrics`) — no learning imports.
+- `@ageflow/executor` reads hooks from core — no learning imports.
+- `@ageflow/learning` imports core (types) + executor (peer dep, runtime).
+- Dependency graph is a clean DAG: `core ← executor ← learning`. No cycles.
+
+### 7.4 `@ageflow/cli` — new subcommands
 
 ### 7.3 `@ageflow/cli` — new subcommands
 
