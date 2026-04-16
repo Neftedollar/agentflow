@@ -16,8 +16,8 @@
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -97,13 +97,15 @@ async function buildInProcessServer(opts: MockMcpServerOpts): Promise<Server> {
 
     if (name === opts.isErrorOn) {
       return {
-        content: [{ type: "text" as const, text: `error: tool ${name} failed` }],
+        content: [
+          { type: "text" as const, text: `error: tool ${name} failed` },
+        ],
         isError: true,
       };
     }
 
-    const text =
-      typeof args["text"] === "string" ? args["text"] : JSON.stringify(args);
+    const textArg = args.text;
+    const text = typeof textArg === "string" ? textArg : JSON.stringify(args);
     return {
       content: [{ type: "text" as const, text }],
       isError: false,
@@ -133,7 +135,8 @@ export async function spawnMockMcpServer(
   }
 
   const server = await buildInProcessServer(opts);
-  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const [clientTransport, serverTransport] =
+    InMemoryTransport.createLinkedPair();
 
   await server.connect(serverTransport);
 

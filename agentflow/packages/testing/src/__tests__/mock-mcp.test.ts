@@ -33,7 +33,9 @@ describe("spawnMockMcpServer", () => {
       tools: [{ name: "slow", description: "", inputSchema: {} }],
       hangOn: "call",
     });
-    await expect(srv.callTool("slow", {}, { timeoutMs: 100 })).rejects.toThrow(/timeout/i);
+    await expect(srv.callTool("slow", {}, { timeoutMs: 100 })).rejects.toThrow(
+      /timeout/i,
+    );
     await srv.stop();
   });
 });

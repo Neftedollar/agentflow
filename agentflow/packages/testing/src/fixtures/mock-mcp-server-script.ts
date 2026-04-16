@@ -35,10 +35,11 @@ interface ScriptConfig {
 
 function parseArgs(): ScriptConfig {
   const idx = process.argv.indexOf("--config");
-  if (idx === -1 || !process.argv[idx + 1]) {
+  const configArg = process.argv[idx + 1];
+  if (idx === -1 || !configArg) {
     throw new Error("mock-mcp-server-script: --config argument is required");
   }
-  const raw = Buffer.from(process.argv[idx + 1]!, "base64").toString("utf-8");
+  const raw = Buffer.from(configArg, "base64").toString("utf-8");
   return JSON.parse(raw) as ScriptConfig;
 }
 
@@ -86,13 +87,16 @@ async function main(): Promise<void> {
 
     if (name === cfg.isErrorOn) {
       return {
-        content: [{ type: "text" as const, text: `error: tool ${name} failed` }],
+        content: [
+          { type: "text" as const, text: `error: tool ${name} failed` },
+        ],
         isError: true,
       };
     }
 
     // Default echo behaviour: return args as JSON text
-    const text = typeof args["text"] === "string" ? args["text"] : JSON.stringify(args);
+    const textArg = args.text;
+    const text = typeof textArg === "string" ? textArg : JSON.stringify(args);
     return {
       content: [{ type: "text" as const, text }],
       isError: false,
@@ -104,6 +108,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  process.stderr.write(`mock-mcp-server-script error: ${err instanceof Error ? err.message : String(err)}\n`);
+  process.stderr.write(
+    `mock-mcp-server-script error: ${err instanceof Error ? err.message : String(err)}\n`,
+  );
   process.exit(1);
 });
