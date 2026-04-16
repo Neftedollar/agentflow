@@ -11,7 +11,7 @@ import type {
 } from "@ageflow/core";
 import { BudgetTracker } from "./budget-tracker.js";
 import { topologicalSort } from "./dag-resolver.js";
-import { RunnerNotRegisteredError } from "./errors.js";
+import { HitlRejectedError, RunnerNotRegisteredError } from "./errors.js";
 import { HITLManager } from "./hitl-manager.js";
 import { LoopExecutor } from "./loop-executor.js";
 import { runNode } from "./node-runner.js";
@@ -545,7 +545,7 @@ export class WorkflowExecutor<T extends TasksMap> {
                 // Caller-provided handler (stream() path)
                 const approved = await onCheckpoint(checkpointEv);
                 if (!approved) {
-                  throw new Error(`Checkpoint rejected for task "${taskName}"`);
+                  throw new HitlRejectedError(taskName);
                 }
               } else {
                 // Legacy path: defer to HITLManager (TTY / hook)

@@ -356,12 +356,10 @@ describe("runNode", () => {
 
     const runner: import("@ageflow/core").Runner = {
       validate: vi.fn().mockResolvedValue({ ok: true }),
-      spawn: vi.fn(
-        async (args: import("@ageflow/core").RunnerSpawnArgs) => {
-          capturedSystemPrompt = args.systemPrompt;
-          return makeSuccessResult({ result: "ok" });
-        },
-      ),
+      spawn: vi.fn(async (args: import("@ageflow/core").RunnerSpawnArgs) => {
+        capturedSystemPrompt = args.systemPrompt;
+        return makeSuccessResult({ result: "ok" });
+      }),
     };
 
     const task = { agent: simpleAgent };
@@ -391,12 +389,10 @@ describe("runNode", () => {
     let capturedSystemPrompt: string | undefined;
     const runner: import("@ageflow/core").Runner = {
       validate: vi.fn().mockResolvedValue({ ok: true }),
-      spawn: vi.fn(
-        async (args: import("@ageflow/core").RunnerSpawnArgs) => {
-          capturedSystemPrompt = args.systemPrompt;
-          return makeSuccessResult({ title: "t", score: 1, tags: [] });
-        },
-      ),
+      spawn: vi.fn(async (args: import("@ageflow/core").RunnerSpawnArgs) => {
+        capturedSystemPrompt = args.systemPrompt;
+        return makeSuccessResult({ title: "t", score: 1, tags: [] });
+      }),
     };
 
     await Promise.all([

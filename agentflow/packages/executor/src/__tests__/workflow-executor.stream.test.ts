@@ -143,6 +143,56 @@ describe("WorkflowExecutor.stream (task retry)", () => {
   });
 });
 
+describe("stream() onCheckpoint", () => {
+  it("continues when onCheckpoint resolves true", async () => {
+    const a = defineAgent({
+      runner: "fake",
+      input: z.object({}),
+      output: z.object({ summary: z.string() }),
+      prompt: () => "p",
+      hitl: { mode: "checkpoint", message: "go?" },
+    });
+    const wfz = defineWorkflow({
+      name: "gated",
+      tasks: { t: { agent: a, input: {} } },
+    });
+    const ex = new WorkflowExecutor(wfz);
+    const events: WorkflowEvent[] = [];
+    for await (const ev of ex.stream({}, { onCheckpoint: async () => true })) {
+      events.push(ev);
+    }
+    expect(events.map((e) => e.type)).toContain("checkpoint");
+    expect(events[events.length - 1]?.type).toBe("workflow:complete");
+  });
+
+  it("fails with workflow:error when onCheckpoint resolves false", async () => {
+    const a = defineAgent({
+      runner: "fake",
+      input: z.object({}),
+      output: z.object({ summary: z.string() }),
+      prompt: () => "p",
+      hitl: { mode: "checkpoint", message: "go?" },
+    });
+    const wfz = defineWorkflow({
+      name: "gated",
+      tasks: { t: { agent: a, input: {} } },
+    });
+    const ex = new WorkflowExecutor(wfz);
+    const events: WorkflowEvent[] = [];
+    try {
+      for await (const ev of ex.stream(
+        {},
+        { onCheckpoint: async () => false },
+      )) {
+        events.push(ev);
+      }
+    } catch {
+      // expected — driver throws
+    }
+    expect(events[events.length - 1]?.type).toBe("workflow:error");
+  });
+});
+
 describe("run() is a drain over stream()", () => {
   it("produces the same WorkflowResult as draining stream()", async () => {
     const executor = new WorkflowExecutor(wf);

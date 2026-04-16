@@ -3,6 +3,7 @@ export type { WorkflowResult, RunBatchesFn } from "./workflow-executor.js";
 export {
   OutputValidationError,
   CyclicDependencyError,
+  HitlRejectedError,
   RunnerNotRegisteredError,
   SessionCycleError,
   UnresolvedSessionRefError,
