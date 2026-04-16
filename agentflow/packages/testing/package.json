@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/testing",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Test harness for ageflow workflows — mock agents, inspect call counts, no API calls needed",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/agentflow/packages/testing",
   "type": "module",
