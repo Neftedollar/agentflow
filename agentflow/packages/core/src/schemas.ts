@@ -250,6 +250,10 @@ export const McpServerConfigSchema = z
       .refine((v) => STATIC_IDENTIFIER_RE_SCHEMA.test(v), {
         message:
           "MCP server name must match /^[a-zA-Z0-9._-]+$/ (no path separators)",
+      })
+      .refine((v) => !v.includes("__"), {
+        message:
+          "MCP server name cannot contain '__' (reserved as FQN delimiter)",
       }),
     command: z.string().min(1, "command must not be empty"),
     args: z.array(z.string()).readonly().optional(),
