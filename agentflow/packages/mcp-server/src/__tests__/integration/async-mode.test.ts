@@ -1,4 +1,5 @@
-import { defineAgent, defineWorkflow } from "@ageflow/core";
+import { defineAgent, defineWorkflow, registerRunner, unregisterRunner } from "@ageflow/core";
+import type { RunnerSpawnArgs, RunnerSpawnResult } from "@ageflow/core";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { ErrorCode } from "../../errors.js";
@@ -327,5 +328,155 @@ describe("async mode: reserved tool name guard (#84 item 12)", () => {
         async: true,
       }),
     ).not.toThrow();
+  });
+});
+
+describe("async mode: input injection (#84 item 10)", () => {
+  /**
+   * Verifies that dispatchStart injects the runtime MCP call arguments into the
+   * input task's `input` field before calling runner.fire().
+   *
+   * Without the fix, the executor reads the static task.input ({ q: "hi" })
+   * as resolvedInput and builds the prompt from it — the runtime arg "Charlie"
+   * is never seen. With the fix, the executor sees { q: "Charlie" } and the
+   * prompt reflects that.
+   *
+   * We register a real fake runner (bypassing _testRunExecutor) so the executor
+   * resolves task.input → calls runner.spawn with a prompt built from that input.
+   * The spawn function captures the prompt and returns a response that encodes it,
+   * letting us assert the correct input was injected.
+   */
+  it("start_ask with { q: 'Charlie' } runs with injected input, not static task input", async () => {
+    const RUNNER_NAME = "fake-injection-test";
+    let capturedPrompt = "";
+
+    const fakeRunner = {
+      validate: async () => ({ ok: true }),
+      spawn: async (args: RunnerSpawnArgs): Promise<RunnerSpawnResult> => {
+        capturedPrompt = args.prompt;
+        // Return a valid output matching the agent's output schema.
+        return {
+          stdout: JSON.stringify({ a: `echo:${args.prompt}` }),
+          sessionHandle: "",
+          tokensIn: 0,
+          tokensOut: 0,
+        };
+      },
+    };
+    registerRunner(RUNNER_NAME, fakeRunner);
+
+    const injectionAgent = defineAgent({
+      runner: RUNNER_NAME,
+      input: z.object({ q: z.string() }),
+      output: z.object({ a: z.string() }),
+      prompt: ({ q }) => `query:${q}`,
+    });
+
+    const injectionWorkflow = defineWorkflow({
+      name: "ask",
+      tasks: {
+        // Static task.input is { q: "hi" } — the bug manifested when this was
+        // used instead of the runtime arg { q: "Charlie" }.
+        t: { agent: injectionAgent, input: { q: "hi" } },
+      },
+    });
+
+    const h = createMcpServer({
+      workflow: injectionWorkflow,
+      cliCeilings: {},
+      hitlStrategy: "auto",
+      async: true,
+    });
+
+    try {
+      // Call with runtime arg { q: "Charlie" } — should override static { q: "hi" }
+      const startRes = await h.callTool("start_ask", { q: "Charlie" });
+      expect(startRes.isError).toBe(false);
+      if (startRes.isError) throw new Error("start_ask failed unexpectedly");
+
+      const { jobId } = startRes.structuredContent as { jobId: string };
+
+      // Poll until done (give the background fire() loop time to run).
+      let state = "running";
+      for (let i = 0; i < 50 && state === "running"; i++) {
+        await new Promise<void>((r) => setTimeout(r, 10));
+        const statusRes = await h.callTool("get_workflow_status", { jobId });
+        if (!statusRes.isError) {
+          state = (statusRes.structuredContent as { state: string }).state;
+        }
+      }
+      expect(state).toBe("done");
+
+      // The prompt must have been built from the runtime arg "Charlie", not from
+      // the static task.input value "hi".
+      expect(capturedPrompt).toBe("query:Charlie");
+      expect(capturedPrompt).not.toBe("query:hi");
+
+      // Result should reflect the prompt that was built.
+      const resultRes = await h.callTool("get_workflow_result", { jobId });
+      expect(resultRes.isError).toBe(false);
+      if (!resultRes.isError) {
+        const output = (resultRes.structuredContent as { output: { a: string } }).output;
+        expect(output.a).toContain("query:Charlie");
+      }
+    } finally {
+      unregisterRunner(RUNNER_NAME);
+      h.dispose?.();
+    }
+  });
+
+  it("get_workflow_result returns correct output when called with runtime name (end-to-end poll)", async () => {
+    /**
+     * Uses _testRunExecutor path (consistent with other async tests) to verify
+     * that start_ask({ q: "Charlie" }) → poll → get_workflow_result returns
+     * { a: "hello, Charlie!" } — not the value derived from static task.input.
+     *
+     * This is the canonical regression test for #84 item 10: confirms that even
+     * when the workflow defines a static task.input, the runtime arg wins.
+     */
+    const h = createMcpServer({
+      workflow,
+      cliCeilings: {},
+      hitlStrategy: "auto",
+      async: true,
+    });
+
+    // The executor receives the input passed via task.input injection.
+    // We return a greeting that encodes the received input so we can assert
+    // the right value arrived.
+    h._testRunExecutor = async (args) => {
+      const input = args as { q: string };
+      return { a: `hello, ${input.q}!` };
+    };
+
+    try {
+      const startRes = await h.callTool("start_ask", { q: "Charlie" });
+      expect(startRes.isError).toBe(false);
+      if (startRes.isError) throw new Error("start failed");
+
+      const { jobId } = startRes.structuredContent as { jobId: string };
+
+      // Poll until done.
+      let state = "running";
+      for (let i = 0; i < 50 && state === "running"; i++) {
+        await new Promise<void>((r) => setTimeout(r, 10));
+        const statusRes = await h.callTool("get_workflow_status", { jobId });
+        if (!statusRes.isError) {
+          state = (statusRes.structuredContent as { state: string }).state;
+        }
+      }
+      expect(state).toBe("done");
+
+      const resultRes = await h.callTool("get_workflow_result", { jobId });
+      expect(resultRes.isError).toBe(false);
+      if (!resultRes.isError) {
+        const output = (resultRes.structuredContent as { output: { a: string } }).output;
+        // Must be "hello, Charlie!" — NOT "hello, hi!" (which would indicate the
+        // static task.input { q: "hi" } was used instead of the runtime arg).
+        expect(output.a).toBe("hello, Charlie!");
+      }
+    } finally {
+      h.dispose?.();
+    }
   });
 });

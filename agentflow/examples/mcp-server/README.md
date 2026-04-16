@@ -110,6 +110,10 @@ const { output } = JSON.parse(resultRes.content[0].text);
 console.log(output.greeting); // "Hello, Alice!"
 ```
 
+Async mode injects the `start_<workflow>` call arguments into the input task at
+runtime — the same way the synchronous path does. No static `task.input` value
+needs to be pre-set on the workflow definition for async jobs.
+
 The async scenario is covered by the integration test in `mcp-client.test.ts`
 (the `"async mode via InMemoryTransport"` describe block). The runner is mocked
 via `handle._testRunExecutor` — no real Claude CLI is invoked.

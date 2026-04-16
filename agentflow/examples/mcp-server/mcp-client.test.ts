@@ -175,44 +175,25 @@ describe("mcp-server example — async mode via InMemoryTransport", () => {
    * the async-mode integration tests in @ageflow/mcp-server), which bypasses
    * the real Claude CLI subprocess — no subprocess is spawned.
    *
-   * NOTE: The async fire() path (dispatchStart) runs the workflow through
-   * WorkflowExecutor, which reads task.input from the task definition to build
-   * the prompt. Unlike the sync path (which injects the MCP input at run-time
-   * via makeDefaultRunner), the async path requires the task to carry a static
-   * input value. We therefore pass a workflow variant with the input pre-set —
-   * this is the standard pattern for async server-side workflows (see also
-   * examples/server-embed/workflow.ts).
+   * The async dispatchStart path now injects the runtime MCP call arguments
+   * into the input task's `input` field before calling runner.fire() — the same
+   * way the sync path does via makeDefaultRunner. No static-input workaround is
+   * needed here; the base `workflow` (with no pre-set task input) works directly.
    */
   it("start_greet → poll until done → get_workflow_result returns greeting", async () => {
-    // Create a workflow variant with the greet task input pre-set to { name: "Bob" }.
-    // This mirrors how server-embed/workflow.ts defines its triage task with a
-    // static input, and is required because the async fire() path does not
-    // inject the MCP call arguments into the task's `input` field at run-time.
-    //
-    // We spread the original greet task (which carries the `agent` definition)
-    // and override only `input`. The cast to `typeof workflow` is safe here
-    // because the shape is identical — we are just adding an `input` field.
-    const greetTaskWithInput = {
-      // biome-ignore lint/suspicious/noExplicitAny: spreading an opaque readonly TaskDef to add `input`
-      ...(workflow.tasks.greet as any),
-      input: { name: "Bob" } as { name: string },
-    };
-    const asyncWorkflow = {
-      ...workflow,
-      tasks: { greet: greetTaskWithInput },
-      // biome-ignore lint/suspicious/noExplicitAny: test-local cast — shape is equivalent to original workflow
-    } as any as typeof workflow;
-
     // Build the server handle in async mode (--async --hitl auto equivalent).
+    // Use the base workflow directly — no static-input shim needed since
+    // dispatchStart now injects runtime args before firing (fix for #84 item 10).
     const handle = createMcpServer({
-      workflow: asyncWorkflow,
+      workflow,
       cliCeilings: {},
       hitlStrategy: "auto",
       async: true,
     });
 
-    // Inject a mock executor: receives the task's resolved input ({ name: "Bob" })
-    // and returns a greeting without spawning a real Claude subprocess.
+    // Inject a mock executor: receives the runtime input ({ name: "Bob" })
+    // injected by dispatchStart and returns a greeting without spawning a real
+    // Claude subprocess.
     handle._testRunExecutor = async (args) => {
       const input = args as { name: string };
       return { greeting: `Hello, ${input.name}!` };
