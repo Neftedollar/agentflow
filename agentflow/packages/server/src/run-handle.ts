@@ -50,7 +50,8 @@ export class InternalRunHandle {
   }
 
   clearCheckpoint(): void {
-    this.pendingCheckpoint = undefined;
+    // biome-ignore lint/performance/noDelete: exactOptionalPropertyTypes requires delete over undefined assignment
+    delete this.pendingCheckpoint;
     this.state = "running";
     this.touch();
   }
@@ -61,20 +62,23 @@ export class InternalRunHandle {
   }): void {
     this.state = "done";
     this.result = result;
-    this.pendingCheckpoint = undefined;
+    // biome-ignore lint/performance/noDelete: exactOptionalPropertyTypes requires delete over undefined assignment
+    delete this.pendingCheckpoint;
     this.touch();
   }
 
   markFailed(err: Error): void {
     this.state = "failed";
     this.error = err;
-    this.pendingCheckpoint = undefined;
+    // biome-ignore lint/performance/noDelete: exactOptionalPropertyTypes requires delete over undefined assignment
+    delete this.pendingCheckpoint;
     this.touch();
   }
 
   markCancelled(): void {
     this.state = "cancelled";
-    this.pendingCheckpoint = undefined;
+    // biome-ignore lint/performance/noDelete: exactOptionalPropertyTypes requires delete over undefined assignment
+    delete this.pendingCheckpoint;
     this.touch();
   }
 
