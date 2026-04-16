@@ -20,7 +20,8 @@
   },
   "dependencies": {
     "@ageflow/core": "workspace:*",
-    "@ageflow/executor": "workspace:*"
+    "@ageflow/executor": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

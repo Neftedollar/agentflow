@@ -1,4 +1,7 @@
 import type { Runner, RunnerSpawnArgs, RunnerSpawnResult } from "@ageflow/core";
+import type { McpClient } from "./mcp-client.js";
+import { shutdownAll, startMcpClients } from "./mcp-client.js";
+import { mcpToolsToRegistry } from "./mcp-tool-adapter.js";
 import { buildInitialMessages, toolsToSchemas } from "./message-builder.js";
 import type { ChatMessage } from "./openai-types.js";
 import { InMemorySessionStore, type SessionStore } from "./session-store.js";
@@ -18,6 +21,8 @@ export class ApiRunner implements Runner {
   private readonly requestTimeout: number;
   private readonly headers: Record<string, string>;
   private readonly fetch: typeof fetch;
+  /** Pool of long-lived MCP clients keyed by server name (reusePerRunner=true). */
+  private readonly mcpPool = new Map<string, McpClient>();
 
   constructor(config: ApiRunnerConfig) {
     this.baseUrl = config.baseUrl.replace(/\/+$/, "");
@@ -84,8 +89,6 @@ export class ApiRunner implements Runner {
       history,
     });
 
-    const toolSchemas = toolsToSchemas(this.tools, args.tools);
-
     // P1-3: filter the runtime registry to the caller's allowlist so that
     // tools not in args.tools cannot be executed even if the model names them.
     const filteredRegistry =
@@ -97,27 +100,83 @@ export class ApiRunner implements Runner {
           )
         : this.tools;
 
-    const loop = await runToolLoop({
-      baseUrl: this.baseUrl,
-      apiKey: this.apiKey,
-      headers: this.headers,
-      fetch: this.fetch,
-      model,
-      messages: initialMessages,
-      tools: toolSchemas,
-      registry: filteredRegistry,
-      maxRounds: this.maxToolRounds,
-      requestTimeout: this.requestTimeout,
-    });
+    // ── MCP clients ────────────────────────────────────────────────────────
+    const servers = args.mcpServers ?? [];
+    const perSpawnClients: McpClient[] = [];
 
-    await this.sessionStore.set(handle, loop.finalMessages);
+    if (servers.length > 0) {
+      for (const s of servers) {
+        if (s.reusePerRunner) {
+          let pooled = this.mcpPool.get(s.name);
+          if (!pooled) {
+            const [started] = await startMcpClients([s]);
+            if (started === undefined) {
+              throw new Error(
+                `startMcpClients returned no client for ${s.name}`,
+              );
+            }
+            pooled = started;
+            this.mcpPool.set(s.name, pooled);
+          }
+          perSpawnClients.push(pooled);
+        } else {
+          const [c] = await startMcpClients([s]);
+          if (c === undefined) {
+            throw new Error(`startMcpClients returned no client for ${s.name}`);
+          }
+          perSpawnClients.push(c);
+        }
+      }
+    }
 
-    return {
-      stdout: loop.finalText,
-      sessionHandle: handle,
-      tokensIn: loop.tokensIn,
-      tokensOut: loop.tokensOut,
-      toolCalls: loop.toolCalls,
-    };
+    try {
+      const mcpRegistry = await mcpToolsToRegistry(perSpawnClients);
+      const merged: ToolRegistry = { ...filteredRegistry, ...mcpRegistry };
+
+      const mergedToolsArg: string[] | undefined =
+        args.tools !== undefined
+          ? [...args.tools, ...Object.keys(mcpRegistry)]
+          : Object.keys(mcpRegistry).length > 0
+            ? [...Object.keys(filteredRegistry), ...Object.keys(mcpRegistry)]
+            : args.tools;
+
+      const toolSchemas = toolsToSchemas(merged, mergedToolsArg);
+
+      const loop = await runToolLoop({
+        baseUrl: this.baseUrl,
+        apiKey: this.apiKey,
+        headers: this.headers,
+        fetch: this.fetch,
+        model,
+        messages: initialMessages,
+        tools: toolSchemas,
+        registry: merged,
+        maxRounds: this.maxToolRounds,
+        requestTimeout: this.requestTimeout,
+      });
+
+      await this.sessionStore.set(handle, loop.finalMessages);
+
+      return {
+        stdout: loop.finalText,
+        sessionHandle: handle,
+        tokensIn: loop.tokensIn,
+        tokensOut: loop.tokensOut,
+        toolCalls: loop.toolCalls,
+      };
+    } finally {
+      // Stop per-spawn clients only — pooled clients live until shutdown().
+      const toStop = perSpawnClients.filter((c) => !c.config.reusePerRunner);
+      await Promise.allSettled(toStop.map((c) => c.stop()));
+    }
+  }
+
+  /**
+   * Drain the pooled MCP clients. Invoked by the workflow executor on
+   * workflow completion / abort (Phase 7 wires this call; runner exposes it now).
+   */
+  async shutdown(): Promise<void> {
+    await shutdownAll([...this.mcpPool.values()]);
+    this.mcpPool.clear();
   }
 }
