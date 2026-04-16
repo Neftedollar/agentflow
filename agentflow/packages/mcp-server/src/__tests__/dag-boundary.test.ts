@@ -1,6 +1,7 @@
 import type { TasksMap } from "@ageflow/core";
 import { describe, expect, it } from "vitest";
 import { findBoundaryTasks } from "../dag-boundary.js";
+import { ErrorCode, McpServerError } from "../errors.js";
 
 // Minimal TaskDef stubs for testing; actual implementation only reads dependsOn.
 // biome-ignore lint/suspicious/noExplicitAny: narrow test stub
@@ -40,9 +41,15 @@ describe("findBoundaryTasks", () => {
       b: mkTask(),
       c: mkTask(["a", "b"]),
     };
-    expect(() => findBoundaryTasks(tasks, undefined, "c")).toThrow(
-      /multiple root tasks/,
-    );
+    let caught: unknown;
+    try {
+      findBoundaryTasks(tasks, undefined, "c");
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(McpServerError);
+    expect((caught as McpServerError).errorCode).toBe(ErrorCode.DAG_INVALID);
+    expect((caught as McpServerError).message).toMatch(/multiple root tasks/);
   });
 
   it("throws if DAG has >1 leaf and no outputTask", () => {
@@ -51,21 +58,43 @@ describe("findBoundaryTasks", () => {
       b: mkTask(["a"]),
       c: mkTask(["a"]),
     };
-    expect(() => findBoundaryTasks(tasks, "a", undefined)).toThrow(
-      /multiple leaf tasks/,
-    );
+    let caught: unknown;
+    try {
+      findBoundaryTasks(tasks, "a", undefined);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(McpServerError);
+    expect((caught as McpServerError).errorCode).toBe(ErrorCode.DAG_INVALID);
+    expect((caught as McpServerError).message).toMatch(/multiple leaf tasks/);
   });
 
   it("throws if inputTask not in tasks", () => {
     const tasks: TasksMap = { a: mkTask() };
-    expect(() => findBoundaryTasks(tasks, "nonexistent", "a")).toThrow(
+    let caught: unknown;
+    try {
+      findBoundaryTasks(tasks, "nonexistent", "a");
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(McpServerError);
+    expect((caught as McpServerError).errorCode).toBe(ErrorCode.DAG_INVALID);
+    expect((caught as McpServerError).message).toMatch(
       /inputTask "nonexistent" not found/,
     );
   });
 
   it("throws if outputTask not in tasks", () => {
     const tasks: TasksMap = { a: mkTask() };
-    expect(() => findBoundaryTasks(tasks, "a", "nonexistent")).toThrow(
+    let caught: unknown;
+    try {
+      findBoundaryTasks(tasks, "a", "nonexistent");
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(McpServerError);
+    expect((caught as McpServerError).errorCode).toBe(ErrorCode.DAG_INVALID);
+    expect((caught as McpServerError).message).toMatch(
       /outputTask "nonexistent" not found/,
     );
   });

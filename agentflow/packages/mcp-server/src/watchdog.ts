@@ -1,8 +1,12 @@
 /**
- * Fires a callback after `maxDurationSec` elapses and signals abortion via AbortController.
+ * Fires a side-effect callback after `maxDurationSec` elapses and aborts via AbortController.
  *
  * - null maxDurationSec = no watchdog (unlimited).
  * - cancel() stops the timer and releases resources (used on successful completion).
+ * - The `onTimeout` callback must NOT throw — it is called inside a setTimeout callback
+ *   and any exception would become an uncaughtException rather than a promise rejection.
+ *   Consumers should race their main promise against a rejection registered on
+ *   `abortSignal`'s "abort" event to propagate the timeout as a proper rejection.
  */
 export class DurationWatchdog {
   private timer: ReturnType<typeof setTimeout> | null = null;

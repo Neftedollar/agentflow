@@ -1,3 +1,5 @@
+import { BudgetExceededError } from "@ageflow/core";
+import { HitlNotInteractiveError } from "@ageflow/executor";
 import { describe, expect, it } from "vitest";
 import { ErrorCode, McpServerError, formatErrorResult } from "../errors.js";
 
@@ -30,5 +32,24 @@ describe("McpServerError + formatErrorResult", () => {
     const result = formatErrorResult("string error" as any);
     expect(result.structuredContent.errorCode).toBe("WORKFLOW_FAILED");
     expect(result.structuredContent.message).toBe("string error");
+  });
+
+  it("maps BudgetExceededError → BUDGET_EXCEEDED", () => {
+    const err = new BudgetExceededError(1.0, 1.23);
+    const result = formatErrorResult(err);
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent.errorCode).toBe(ErrorCode.BUDGET_EXCEEDED);
+    expect(result.structuredContent.context).toEqual({
+      maxCost: 1.0,
+      spent: 1.23,
+    });
+  });
+
+  it("maps HitlNotInteractiveError → HITL_DENIED", () => {
+    const err = new HitlNotInteractiveError("verify");
+    const result = formatErrorResult(err);
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent.errorCode).toBe(ErrorCode.HITL_DENIED);
+    expect(result.structuredContent.context).toEqual({ taskName: "verify" });
   });
 });

@@ -1,3 +1,6 @@
+import { BudgetExceededError } from "@ageflow/core";
+import { HitlNotInteractiveError } from "@ageflow/executor";
+
 export const ErrorCode = {
   INPUT_VALIDATION_FAILED: "INPUT_VALIDATION_FAILED",
   OUTPUT_VALIDATION_FAILED: "OUTPUT_VALIDATION_FAILED",
@@ -46,6 +49,30 @@ export function formatErrorResult(err: unknown): McpToolErrorResult {
         errorCode: err.errorCode,
         message: err.message,
         ...(err.context !== undefined ? { context: err.context } : {}),
+      },
+      isError: true,
+    };
+  }
+
+  if (err instanceof BudgetExceededError) {
+    return {
+      content: [{ type: "text", text: err.message }],
+      structuredContent: {
+        errorCode: ErrorCode.BUDGET_EXCEEDED,
+        message: err.message,
+        context: { maxCost: err.maxCost, spent: err.actualCost },
+      },
+      isError: true,
+    };
+  }
+
+  if (err instanceof HitlNotInteractiveError) {
+    return {
+      content: [{ type: "text", text: err.message }],
+      structuredContent: {
+        errorCode: ErrorCode.HITL_DENIED,
+        message: err.message,
+        context: { taskName: err.taskName },
       },
       isError: true,
     };

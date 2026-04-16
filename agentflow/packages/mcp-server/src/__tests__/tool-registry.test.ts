@@ -1,6 +1,7 @@
 import type { WorkflowDef } from "@ageflow/core";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { ErrorCode, McpServerError } from "../errors.js";
 import { buildToolDefinition } from "../tool-registry.js";
 
 const mkWorkflow = (mcp?: any): WorkflowDef =>
@@ -47,8 +48,15 @@ describe("buildToolDefinition", () => {
   });
 
   it("throws when workflow.mcp === false", () => {
-    expect(() => buildToolDefinition(mkWorkflow(false))).toThrow(
-      /WORKFLOW_NOT_MCP_EXPOSABLE/,
+    let caught: unknown;
+    try {
+      buildToolDefinition(mkWorkflow(false));
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(McpServerError);
+    expect((caught as McpServerError).errorCode).toBe(
+      ErrorCode.WORKFLOW_NOT_MCP_EXPOSABLE,
     );
   });
 });

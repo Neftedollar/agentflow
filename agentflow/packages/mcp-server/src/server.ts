@@ -145,14 +145,24 @@ export function createMcpServer(opts: McpServerOptions): McpServerHandle {
         if (effective.maxTurns === null) unlimitedAxes.push("turns");
         if (unlimitedAxes.length > 0) streamer.unlimitedWarning(unlimitedAxes);
 
-        // Watchdog
+        // Watchdog — side-effect only; abort is communicated via abortPromise race
         const watchdog = new DurationWatchdog(effective.maxDurationSec, () => {
-          throw new McpServerError(
-            ErrorCode.DURATION_EXCEEDED,
-            `workflow exceeded maxDurationSec=${effective.maxDurationSec}`,
-          );
+          // intentionally empty: AbortController.abort() is called by DurationWatchdog
+          // internally; consumers race against abortPromise below
         });
         watchdog.start();
+
+        const abortPromise = new Promise<never>((_, reject) => {
+          watchdog.abortSignal.addEventListener("abort", () => {
+            reject(
+              new McpServerError(
+                ErrorCode.DURATION_EXCEEDED,
+                `workflow exceeded maxDurationSec=${effective.maxDurationSec}`,
+                { maxDurationSec: effective.maxDurationSec },
+              ),
+            );
+          });
+        });
 
         // HITL bridge (requires MCP connection)
         const mcpHooks =
@@ -169,23 +179,29 @@ export function createMcpServer(opts: McpServerOptions): McpServerHandle {
         // Run executor (Task 13: real executor or pluggable injection)
         let rawOutput: unknown;
         if (handle._testRunExecutor !== undefined) {
-          rawOutput = await handle._testRunExecutor(
-            parsedInput,
-            mcpHooks,
-            watchdog.abortSignal,
-            effective,
-          );
+          rawOutput = await Promise.race([
+            handle._testRunExecutor(
+              parsedInput,
+              mcpHooks,
+              watchdog.abortSignal,
+              effective,
+            ),
+            abortPromise,
+          ]);
         } else {
           const runner =
             opts.runWorkflow ??
             makeDefaultRunner(tool.inputTask, tool.outputTask);
-          rawOutput = await runner({
-            workflow: opts.workflow,
-            input: parsedInput,
-            hooks: mcpHooks,
-            signal: watchdog.abortSignal,
-            effective,
-          });
+          rawOutput = await Promise.race([
+            runner({
+              workflow: opts.workflow,
+              input: parsedInput,
+              hooks: mcpHooks,
+              signal: watchdog.abortSignal,
+              effective,
+            }),
+            abortPromise,
+          ]);
         }
         watchdog.cancel();
 
@@ -269,7 +285,6 @@ function makeDefaultRunner(
     // Inject MCP input as the root task's static input field.
     // biome-ignore lint/suspicious/noExplicitAny: structural injection — task.input must be set at runtime
     const originalTask = workflow.tasks[inputTaskName] as any;
-    // biome-ignore lint/suspicious/noExplicitAny: structural injection
     const injectedTasks = {
       ...workflow.tasks,
       [inputTaskName]: { ...originalTask, input },

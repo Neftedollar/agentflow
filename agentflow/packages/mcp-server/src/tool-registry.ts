@@ -1,6 +1,7 @@
 import type { WorkflowDef } from "@ageflow/core";
 import { resolveMcpConfig } from "@ageflow/core";
 import { findBoundaryTasks } from "./dag-boundary.js";
+import { ErrorCode, McpServerError } from "./errors.js";
 import { type McpJsonSchema, zodToMcpSchema } from "./schema-convert.js";
 
 export interface ToolDefinition {
@@ -20,7 +21,21 @@ export interface ToolDefinition {
  * - outputSchema = Zod → JSON Schema of the output task's `agent.output`
  */
 export function buildToolDefinition(workflow: WorkflowDef): ToolDefinition {
-  const resolved = resolveMcpConfig(workflow.mcp);
+  let resolved: ReturnType<typeof resolveMcpConfig>;
+  try {
+    resolved = resolveMcpConfig(workflow.mcp);
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      err.message.startsWith("WORKFLOW_NOT_MCP_EXPOSABLE:")
+    ) {
+      throw new McpServerError(
+        ErrorCode.WORKFLOW_NOT_MCP_EXPOSABLE,
+        err.message,
+      );
+    }
+    throw err;
+  }
   const boundary = findBoundaryTasks(
     workflow.tasks,
     resolved.inputTask,

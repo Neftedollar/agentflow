@@ -59,6 +59,35 @@ describe("createMcpServer (integration)", () => {
     expect((result.structuredContent as any).errorCode).toBe("BUSY");
   });
 
+  it(
+    "returns DURATION_EXCEEDED when workflow exceeds maxDurationSec",
+    async () => {
+      const hangWorkflow = defineWorkflow({
+        name: "hang",
+        mcp: { description: "Hangs forever", maxDurationSec: 0.1 },
+        tasks: {
+          hang: {
+            agent: greetAgent,
+          },
+        },
+      });
+
+      const server = createMcpServer({
+        workflow: hangWorkflow,
+        cliCeilings: {},
+        hitlStrategy: "fail",
+        runWorkflow: async () => new Promise(() => {}), // never resolves
+      });
+
+      const result = await server.callTool("hang", { name: "x" });
+      expect(result.isError).toBe(true);
+      expect((result.structuredContent as any).errorCode).toBe(
+        "DURATION_EXCEEDED",
+      );
+    },
+    { timeout: 2000 },
+  );
+
   it("runs a workflow end-to-end with mocked runWorkflow injection", async () => {
     // Uses @ageflow/testing createTestHarness to inject a mock runner.
     // The real WorkflowExecutor takes the workflow with task inputs pre-set;

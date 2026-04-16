@@ -1,4 +1,5 @@
 import type { TasksMap } from "@ageflow/core";
+import { ErrorCode, McpServerError } from "./errors.js";
 
 export interface BoundaryTasks {
   readonly inputTask: string;
@@ -39,16 +40,23 @@ export function findBoundaryTasks(
   let inputTask: string;
   if (inputTaskOverride !== undefined) {
     if (!taskNames.includes(inputTaskOverride)) {
-      throw new Error(
-        `DAG_INVALID: inputTask "${inputTaskOverride}" not found in workflow tasks`,
+      throw new McpServerError(
+        ErrorCode.DAG_INVALID,
+        `inputTask "${inputTaskOverride}" not found in workflow tasks`,
+        { inputTask: inputTaskOverride },
       );
     }
     inputTask = inputTaskOverride;
   } else if (roots.length === 0) {
-    throw new Error("DAG_INVALID: workflow has no root task (cyclic?)");
+    throw new McpServerError(
+      ErrorCode.DAG_INVALID,
+      "workflow has no root task (cyclic?)",
+    );
   } else if (roots.length > 1) {
-    throw new Error(
-      `DAG_INVALID: workflow has multiple root tasks (${roots.join(", ")}); set workflow.mcp.inputTask to disambiguate`,
+    throw new McpServerError(
+      ErrorCode.DAG_INVALID,
+      `workflow has multiple root tasks (${roots.join(", ")}); set workflow.mcp.inputTask to disambiguate`,
+      { roots },
     );
   } else {
     inputTask = roots[0] as string;
@@ -58,16 +66,23 @@ export function findBoundaryTasks(
   let outputTask: string;
   if (outputTaskOverride !== undefined) {
     if (!taskNames.includes(outputTaskOverride)) {
-      throw new Error(
-        `DAG_INVALID: outputTask "${outputTaskOverride}" not found in workflow tasks`,
+      throw new McpServerError(
+        ErrorCode.DAG_INVALID,
+        `outputTask "${outputTaskOverride}" not found in workflow tasks`,
+        { outputTask: outputTaskOverride },
       );
     }
     outputTask = outputTaskOverride;
   } else if (leaves.length === 0) {
-    throw new Error("DAG_INVALID: workflow has no leaf task (cyclic?)");
+    throw new McpServerError(
+      ErrorCode.DAG_INVALID,
+      "workflow has no leaf task (cyclic?)",
+    );
   } else if (leaves.length > 1) {
-    throw new Error(
-      `DAG_INVALID: workflow has multiple leaf tasks (${leaves.join(", ")}); set workflow.mcp.outputTask to disambiguate`,
+    throw new McpServerError(
+      ErrorCode.DAG_INVALID,
+      `workflow has multiple leaf tasks (${leaves.join(", ")}); set workflow.mcp.outputTask to disambiguate`,
+      { leaves },
     );
   } else {
     outputTask = leaves[0] as string;
