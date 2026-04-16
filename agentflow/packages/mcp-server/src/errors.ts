@@ -25,6 +25,7 @@ export const ErrorCode = {
   JOB_CANCELLED: "JOB_CANCELLED",
   INVALID_RUN_STATE: "INVALID_RUN_STATE",
   ASYNC_MODE_DISABLED: "ASYNC_MODE_DISABLED",
+  RESERVED_TOOL_NAME: "RESERVED_TOOL_NAME",
 } as const;
 
 export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode];

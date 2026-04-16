@@ -21,6 +21,19 @@ export interface ToolDefinition {
 
 export type ToolRegistry = Record<string, ToolDefinition>;
 
+/**
+ * Configuration for ApiRunner.
+ *
+ * **Direct-caller env note:** When `ApiRunner.spawn` is called directly (outside
+ * the workflow executor), `${env:VAR}` placeholders in `mcpServers[].env` are
+ * passed VERBATIM to subprocess env — they are NOT expanded. The workflow
+ * executor handles expansion via `expandServerEnv` before calling `spawn`; if
+ * you bypass it, you must pre-expand placeholders yourself or the MCP server
+ * will receive literal strings like `${env:API_KEY}`.
+ *
+ * @see PR #82 — removed the second `${env:VAR}` expansion pass from
+ * `mcp-client.ts`; direct callers are now solely responsible for expansion.
+ */
 export interface ApiRunnerConfig {
   /** e.g. "https://api.openai.com/v1" — no trailing slash. */
   baseUrl: string;

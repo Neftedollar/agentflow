@@ -8,6 +8,17 @@ import {
   type McpToolErrorResult,
   formatErrorResult,
 } from "./errors.js";
+
+/**
+ * Tool names reserved by the async job observer layer.
+ * Workflow names must not collide with these — see `createMcpServer`.
+ */
+export const ASYNC_OBSERVER_TOOL_NAMES = [
+  "get_workflow_status",
+  "get_workflow_result",
+  "cancel_workflow",
+  "resume_workflow",
+] as const;
 import { type McpConnectionLike, buildMcpHooks } from "./hitl-bridge.js";
 import {
   type JobDispatchContext,
@@ -90,6 +101,23 @@ export interface McpServerHandle {
  * directly without the transport.
  */
 export function createMcpServer(opts: McpServerOptions): McpServerHandle {
+  // Guard: in async mode the observer tools own fixed names. If the workflow
+  // uses one of those names it would be unreachable (shadowed by observer
+  // dispatch) and listTools would surface duplicates.
+  if (opts.async === true) {
+    const reserved = new Set<string>(ASYNC_OBSERVER_TOOL_NAMES);
+    const wfName = opts.workflow.name;
+    const startName = `start_${wfName}`;
+    if (reserved.has(wfName) || reserved.has(startName)) {
+      throw new McpServerError(
+        ErrorCode.RESERVED_TOOL_NAME,
+        `Workflow name "${wfName}" conflicts with a reserved async observer tool name. ` +
+          `Reserved names: ${[...ASYNC_OBSERVER_TOOL_NAMES].join(", ")}`,
+        { workflowName: wfName, reserved: [...ASYNC_OBSERVER_TOOL_NAMES] },
+      );
+    }
+  }
+
   const resolved = resolveMcpConfig(opts.workflow.mcp);
   const stderr =
     opts.stderr ??

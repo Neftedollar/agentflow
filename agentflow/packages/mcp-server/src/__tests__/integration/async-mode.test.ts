@@ -1,8 +1,9 @@
 import { defineAgent, defineWorkflow } from "@ageflow/core";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { ErrorCode } from "../../errors.js";
 import type { McpToolResult } from "../../server.js";
-import { createMcpServer } from "../../server.js";
+import { ASYNC_OBSERVER_TOOL_NAMES, createMcpServer } from "../../server.js";
 
 const agent = defineAgent({
   runner: "fake",
@@ -245,5 +246,86 @@ describe("async mode: ASYNC_MODE_DISABLED (#18)", () => {
     if (res.isError) {
       expect(res.structuredContent.errorCode).toBe("ASYNC_MODE_DISABLED");
     }
+  });
+});
+
+describe("async mode: reserved tool name guard (#84 item 12)", () => {
+  it("throws RESERVED_TOOL_NAME when workflow is named get_workflow_status in async mode", () => {
+    const reservedAgent = defineAgent({
+      runner: "fake",
+      input: z.object({ q: z.string() }),
+      output: z.object({ a: z.string() }),
+      prompt: () => "p",
+    });
+    const reservedWorkflow = defineWorkflow({
+      name: "get_workflow_status",
+      tasks: { t: { agent: reservedAgent, input: { q: "hi" } } },
+    });
+    expect(() =>
+      createMcpServer({
+        workflow: reservedWorkflow,
+        cliCeilings: {},
+        hitlStrategy: "auto",
+        async: true,
+      }),
+    ).toThrow(
+      /Workflow name "get_workflow_status" conflicts with a reserved async observer tool name/,
+    );
+  });
+
+  it.each(ASYNC_OBSERVER_TOOL_NAMES)(
+    "throws for each reserved observer name: %s",
+    (reservedName) => {
+      const ag = defineAgent({
+        runner: "fake",
+        input: z.object({ q: z.string() }),
+        output: z.object({ a: z.string() }),
+        prompt: () => "p",
+      });
+      const wf = defineWorkflow({
+        name: reservedName,
+        tasks: { t: { agent: ag, input: { q: "hi" } } },
+      });
+      expect(() =>
+        createMcpServer({
+          workflow: wf,
+          cliCeilings: {},
+          hitlStrategy: "auto",
+          async: true,
+        }),
+      ).toThrow(/conflicts with a reserved async observer tool name/);
+    },
+  );
+
+  it("does NOT throw when async is false, even with a reserved name", () => {
+    const ag = defineAgent({
+      runner: "fake",
+      input: z.object({ q: z.string() }),
+      output: z.object({ a: z.string() }),
+      prompt: () => "p",
+    });
+    const wf = defineWorkflow({
+      name: "get_workflow_status",
+      tasks: { t: { agent: ag, input: { q: "hi" } } },
+    });
+    expect(() =>
+      createMcpServer({
+        workflow: wf,
+        cliCeilings: {},
+        hitlStrategy: "auto",
+        async: false,
+      }),
+    ).not.toThrow();
+  });
+
+  it("does NOT throw for a normal workflow name in async mode", () => {
+    expect(() =>
+      createMcpServer({
+        workflow,
+        cliCeilings: {},
+        hitlStrategy: "auto",
+        async: true,
+      }),
+    ).not.toThrow();
   });
 });
