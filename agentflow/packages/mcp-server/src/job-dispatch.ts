@@ -10,6 +10,7 @@ import { ErrorCode, McpServerError, formatErrorResult } from "./errors.js";
 import { JobEventRecorder } from "./job-event-recorder.js";
 import type { McpToolResult } from "./server.js";
 import type { ToolDefinition } from "./tool-registry.js";
+import type { EffectiveCeilings } from "./types.js";
 
 export interface JobDispatchContext {
   readonly runner: Runner;
@@ -19,16 +20,47 @@ export interface JobDispatchContext {
   readonly jobTools: readonly ToolDefinition[]; // full job-tool array
   /** Executor injection hook from tests (mirrors sync path's _testRunExecutor). */
   testRunExecutor?: (input: unknown) => Promise<unknown>;
+  /**
+   * Test-only callback: called with the fully-composed workflow just before
+   * runner.fire(). Allows tests to assert that ceilings and hooks were correctly
+   * merged without needing to intercept the executor itself.
+   */
+  _testOnComposedWorkflow?: (workflow: WorkflowDef) => void;
   /** Task count in the workflow (for progress.tasksTotal). */
   readonly taskCount: number;
   /** Called from fire() onComplete/onError to release the inflight lock. */
   readonly releaseInflight: () => void;
 }
 
+export interface DispatchStartOptions {
+  /** Effective ceilings (from composeCeilings) to apply to workflow budget. */
+  readonly effective: EffectiveCeilings;
+  /**
+   * Checkpoint resolver for HITL strategy:
+   * - "auto": () => true  (approve all)
+   * - "fail": () => false  (reject all)
+   * - "elicit": undefined  (deferred path — client calls resume_workflow)
+   *
+   * When undefined, runner.fire falls back to the deferred mechanism:
+   * the run pauses at each checkpoint until resume_workflow resolves it.
+   * This is the correct async-mode equivalent of "elicit" strategy.
+   */
+  readonly onCheckpoint?: (
+    ev: import("@ageflow/core").CheckpointEvent,
+  ) => boolean;
+  /**
+   * Abort signal for the DurationWatchdog (sync path uses Promise.race;
+   * async path wires the signal directly into runner.fire so the internal
+   * executor respects it). Undefined when no duration ceiling is set.
+   */
+  readonly abortSignal?: AbortSignal;
+}
+
 export async function dispatchStart(
   _toolName: string,
   args: unknown,
   ctx: JobDispatchContext,
+  runOpts: DispatchStartOptions,
 ): Promise<McpToolResult> {
   // Validate input via the sync tool's input Zod (shared between sync + async)
   const inputTaskDef = ctx.workflow.tasks[ctx.tool.inputTask] as {
@@ -46,6 +78,19 @@ export async function dispatchStart(
       ),
     );
   }
+
+  // Build the composed workflow — apply ceiling overrides and HITL hooks.
+  // This mirrors the setup done on the sync path (composeCeilings + buildMcpHooks)
+  // so that both paths behave identically with respect to CLI ceilings and HITL.
+  const composedWorkflow = applyRunOpts(
+    ctx.workflow,
+    ctx.tool.inputTask,
+    parsed.data,
+    runOpts,
+  );
+
+  // Notify test observers with the composed workflow (test-only hook).
+  ctx._testOnComposedWorkflow?.(composedWorkflow);
 
   // If a test executor is injected, temporarily register a fake runner that
   // delegates to it. This ensures runner.fire() still registers the handle in
@@ -81,22 +126,17 @@ export async function dispatchStart(
     };
     registerRunner(runnerName, fakeRunner);
 
-    // Inject runtime input into the input task's static `input` field so the
-    // executor reads the correct input (same injection as the production path).
-    // biome-ignore lint/suspicious/noExplicitAny: structural injection — task.input must be set at runtime
-    const originalInputTaskTest = ctx.workflow.tasks[ctx.tool.inputTask] as any;
-    const workflowWithInputTest: typeof ctx.workflow = {
-      ...ctx.workflow,
-      tasks: {
-        ...ctx.workflow.tasks,
-        [ctx.tool.inputTask]: {
-          ...originalInputTaskTest,
-          input: parsed.data,
-        },
-      },
-    };
-
-    const handle = ctx.runner.fire(workflowWithInputTest, parsed.data, {
+    const handle = ctx.runner.fire(composedWorkflow, parsed.data, {
+      ...(runOpts.abortSignal !== undefined
+        ? { signal: runOpts.abortSignal }
+        : {}),
+      // Apply HITL strategy: "auto" → approve, "fail" → reject, "elicit" → deferred.
+      ...(runOpts.onCheckpoint !== undefined
+        ? {
+            // biome-ignore lint/style/noNonNullAssertion: guarded by outer !== undefined check
+            onCheckpoint: (ev) => runOpts.onCheckpoint!(ev),
+          }
+        : {}),
       onEvent: (ev: WorkflowEvent) => ctx.recorder.record(ev),
       onComplete: () => {
         unregisterRunner(runnerName);
@@ -118,26 +158,23 @@ export async function dispatchStart(
     };
   }
 
-  // Inject runtime input into the input task's static `input` field before
-  // firing. WorkflowExecutor reads task.input directly — the `input` argument
-  // passed to runner.fire / executor.stream is only used for workflow:start
-  // metadata and is NOT wired into task execution. Without this injection the
-  // async path would use whatever static task.input was defined at config time.
-  // This mirrors the same injection done by makeDefaultRunner on the sync path.
-  const inputTaskName = ctx.tool.inputTask;
-  // biome-ignore lint/suspicious/noExplicitAny: structural injection — task.input must be set at runtime
-  const originalInputTask = ctx.workflow.tasks[inputTaskName] as any;
-  const workflowWithInput: typeof ctx.workflow = {
-    ...ctx.workflow,
-    tasks: {
-      ...ctx.workflow.tasks,
-      [inputTaskName]: { ...originalInputTask, input: parsed.data },
-    },
-  };
-
-  const handle = ctx.runner.fire(workflowWithInput, parsed.data, {
-    // onCheckpoint is intentionally OMITTED — triggers server's deferred path
-    // (handle.markAwaitingCheckpoint(ev, resolver)) so resume_workflow can clear it.
+  const handle = ctx.runner.fire(composedWorkflow, parsed.data, {
+    // Wire the DurationWatchdog abort signal (if any) so the internal executor
+    // honours the duration ceiling on the async path.
+    ...(runOpts.abortSignal !== undefined
+      ? { signal: runOpts.abortSignal }
+      : {}),
+    // Apply HITL strategy from runOpts:
+    //   - "auto" maps to onCheckpoint: () => true
+    //   - "fail" maps to onCheckpoint: () => false
+    //   - "elicit" maps to undefined → runner uses deferred path so
+    //     resume_workflow can resolve checkpoints externally.
+    ...(runOpts.onCheckpoint !== undefined
+      ? {
+          // biome-ignore lint/style/noNonNullAssertion: guarded by outer !== undefined check
+          onCheckpoint: (ev) => runOpts.onCheckpoint!(ev),
+        }
+      : {}),
     onEvent: (ev: WorkflowEvent) => ctx.recorder.record(ev),
     onComplete: () => {
       ctx.releaseInflight();
@@ -390,5 +427,47 @@ export function createJobDispatchContext(args: {
     jobTools: args.jobTools,
     taskCount: Object.keys(args.workflow.tasks).length,
     releaseInflight: args.releaseInflight,
+  };
+}
+
+/**
+ * Build the fully-composed workflow for a run by applying:
+ * 1. Runtime input injection into the input task.
+ * 2. Budget ceiling from effective ceilings (maxCostUsd).
+ *
+ * This mirrors makeDefaultRunner on the sync path so both paths produce
+ * identical workflow budget configurations.
+ *
+ * HITL strategy is handled separately via DispatchStartOptions.onCheckpoint
+ * passed to runner.fire() — NOT via workflow.hooks — because the executor's
+ * stream() path uses "single-ownership": caller-provided onCheckpoint takes
+ * full precedence and workflow.hooks.onCheckpoint is NOT called when a
+ * stream-level onCheckpoint is present (see WorkflowExecutor docs).
+ */
+function applyRunOpts(
+  workflow: WorkflowDef,
+  inputTaskName: string,
+  input: unknown,
+  opts: DispatchStartOptions,
+): WorkflowDef {
+  // 1. Inject runtime input.
+  // biome-ignore lint/suspicious/noExplicitAny: structural injection — task.input must be set at runtime
+  const originalInputTask = workflow.tasks[inputTaskName] as any;
+  const tasksWithInput = {
+    ...workflow.tasks,
+    [inputTaskName]: { ...originalInputTask, input },
+  } as import("@ageflow/core").TasksMap;
+
+  // 2. Apply budget ceiling (maxCostUsd only — maxTurns/maxDurationSec are
+  // enforced via abortSignal / executor-level ceiling respectively).
+  const budget =
+    opts.effective.maxCostUsd !== null
+      ? { maxCost: opts.effective.maxCostUsd, onExceed: "halt" as const }
+      : undefined;
+
+  return {
+    ...workflow,
+    tasks: tasksWithInput,
+    ...(budget !== undefined ? { budget } : {}),
   };
 }
