@@ -4,6 +4,7 @@
 // Types
 export type {
   AgentDef,
+  AgentMcpConfig,
   BoundCtx,
   ResolvedAgentDef,
   BudgetConfig,
@@ -19,6 +20,7 @@ export type {
   LoopDef,
   MCPConfig,
   McpConfig,
+  McpServerConfig,
   OutputOf,
   OutputZodOf,
   RetryConfig,
@@ -36,6 +38,7 @@ export type {
   TaskCompleteEvent,
   TaskDef,
   TaskErrorEvent,
+  TaskMcpOverride,
   TaskMetrics,
   TaskRetryEvent,
   TasksMap,
@@ -69,8 +72,9 @@ export {
   safePath,
   validateStaticIdentifier,
   McpConfigSchema,
+  McpServerConfigSchema,
 } from "./schemas.js";
-export type { McpConfigInput } from "./schemas.js";
+export type { McpConfigInput, McpServerConfigInput } from "./schemas.js";
 
 // Errors
 export {

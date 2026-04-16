@@ -10,7 +10,8 @@ export type RetryErrorKind =
   | "rate_limit"
   | "provider_unavailable"
   | "budget_exceeded"
-  | "agent_hitl_conflict";
+  | "agent_hitl_conflict"
+  | "mcp_server_start_failed";
 
 // ─── Config types ─────────────────────────────────────────────────────────────
 
@@ -58,6 +59,53 @@ export interface MCPConfig {
   readonly autoStart?: boolean;
 }
 
+// ─── MCP server config (v0.2) ─────────────────────────────────────────────────
+
+export interface McpServerConfig {
+  /** Stable identifier, /^[a-zA-Z0-9._-]+$/. Used as tool-name prefix. */
+  readonly name: string;
+  /** Executable. Static — no function forms. */
+  readonly command: string;
+  readonly args?: readonly string[];
+  /** Env vars. `${env:X}` substitution resolved at launch time. */
+  readonly env?: Readonly<Record<string, string>>;
+  /** Working directory. Default: executor cwd. */
+  readonly cwd?: string;
+  /**
+   * Tool allowlist. When omitted, all tools exposed by the server are
+   * allowed. When present, tools not in the list are filtered out
+   * before reaching the model AND rejected if the model calls them.
+   */
+  readonly tools?: readonly string[];
+  /**
+   * Per-tool argument refinement. Maps tool name → Zod schema run before
+   * the call is dispatched. Lets users pin `safePath()` on path args.
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: must accept any ZodType shape
+  readonly refine?: Readonly<Record<string, import("zod").ZodType<any>>>;
+  /** Transport — v0.2 only supports "stdio". Typed open for v0.3+. */
+  readonly transport?: "stdio";
+  /** Per-call timeout. Default 30 s. */
+  readonly mcpCallTimeoutMs?: number;
+  /**
+   * API runner: keep this MCP server alive across `spawn()` calls on
+   * the same runner instance. CLI runners ignore (lifecycle delegated
+   * to the CLI). Default false.
+   */
+  readonly reusePerRunner?: boolean;
+}
+
+export interface AgentMcpConfig {
+  readonly servers: readonly McpServerConfig[];
+  /** true → append to workflow.mcp.servers; false (default) → replace. */
+  readonly extendWorkflow?: boolean;
+}
+
+export interface TaskMcpOverride {
+  /** Whitelist by name — keep only these resolved servers. */
+  readonly servers: readonly string[];
+}
+
 /** Minimal logger interface for executor/hook injection. */
 export interface Logger {
   debug(msg: string, ...args: unknown[]): void;
@@ -73,6 +121,9 @@ export interface RunnerSpawnArgs {
   model?: string;
   tools?: readonly string[];
   skills?: readonly string[];
+  /** Resolved MCP servers, post-workflow/agent/task merging. */
+  mcpServers?: readonly McpServerConfig[];
+  /** @deprecated old v0.1 shape — preserved during migration window. */
   mcps?: readonly MCPConfig[];
   sessionHandle?: string;
   permissions?: Readonly<Record<string, boolean>>;
@@ -124,6 +175,12 @@ export interface RunnerSpawnResult {
 export interface Runner {
   validate(): Promise<{ ok: boolean; version?: string; error?: string }>;
   spawn(args: RunnerSpawnArgs): Promise<RunnerSpawnResult>;
+  /**
+   * Optional cleanup hook. Runners holding long-lived resources (e.g. the
+   * API runner's per-runner MCP pool) drain them here. Invoked by the
+   * workflow executor on completion / abort.
+   */
+  shutdown?(): Promise<void>;
 }
 
 // ─── Session types (phantom-branded) ─────────────────────────────────────────
@@ -188,7 +245,12 @@ export interface AgentDef<
   readonly tools?: readonly string[];
   /** Skill identifiers. Static values only — no functions. */
   readonly skills?: readonly string[];
-  /** MCP server configs. Static values only — no functions. */
+  /** MCP server configuration (v0.2). */
+  readonly mcp?: AgentMcpConfig;
+  /**
+   * @deprecated use `mcp.servers` — kept for v0.1 backward compatibility.
+   * Will be removed in a future major version.
+   */
   readonly mcps?: readonly MCPConfig[];
   readonly hitl?: HITLConfig;
   readonly retry?: Partial<RetryConfig>;
@@ -375,6 +437,8 @@ export interface TaskDef<
   readonly session?: SessionRef<RunnerOf<A>>;
   readonly hitl?: HITLConfig;
   readonly mustUse?: readonly string[];
+  /** Override which resolved MCP servers are available for this specific task. */
+  readonly mcpOverride?: TaskMcpOverride;
 }
 
 // ─── Loop definition ──────────────────────────────────────────────────────────
@@ -474,8 +538,14 @@ export interface WorkflowDef<T extends TasksMap = TasksMap> {
   /**
    * MCP exposure config. Set to `false` to forbid MCP exposure,
    * omit for safe defaults, or provide a `McpConfig` to customize.
+   * (workflow AS MCP server — #18)
    */
   readonly mcp?: McpConfig | false;
+  /**
+   * MCP servers the workflow's agents MAY use (#19).
+   * Agent-level `mcp.servers` can extend or replace this list.
+   */
+  readonly mcpServers?: readonly McpServerConfig[];
   /**
    * Environment profiles. v2 feature — type reserved to prevent breaking API changes.
    * @v2
