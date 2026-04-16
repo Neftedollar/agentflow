@@ -49,8 +49,8 @@ export async function runToolLoop(
     };
 
     const resp = await postChat(input, body);
-    tokensIn += resp.usage.prompt_tokens;
-    tokensOut += resp.usage.completion_tokens;
+    tokensIn += resp.usage?.prompt_tokens ?? 0;
+    tokensOut += resp.usage?.completion_tokens ?? 0;
 
     const choice = resp.choices[0];
     if (!choice) {

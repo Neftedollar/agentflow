@@ -199,6 +199,38 @@ describe("runToolLoop", () => {
     ).rejects.toBeInstanceOf(ToolNotFoundError);
   });
 
+  it("P2-7: handles missing usage field (defaults to 0) for servers that omit it", async () => {
+    const noUsage = {
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: "done",
+            tool_calls: undefined,
+          },
+          finish_reason: "stop",
+        },
+      ],
+      // usage intentionally omitted (Ollama-style)
+    } as unknown as ChatCompletionResponse;
+    const fetchMock = vi.fn().mockResolvedValue(makeResponse(noUsage));
+    const res = await runToolLoop({
+      baseUrl: "https://example",
+      apiKey: "k",
+      headers: {},
+      fetch: fetchMock as unknown as typeof fetch,
+      model: "llama3",
+      messages: [{ role: "user", content: "hi" }],
+      tools: undefined,
+      registry: {},
+      maxRounds: 10,
+      requestTimeout: 1000,
+    });
+    expect(res.tokensIn).toBe(0);
+    expect(res.tokensOut).toBe(0);
+    expect(res.finalText).toBe("done");
+  });
+
   it("throws MaxToolRoundsError when ceiling exceeded", async () => {
     const withToolCall: ChatCompletionResponse = {
       choices: [
