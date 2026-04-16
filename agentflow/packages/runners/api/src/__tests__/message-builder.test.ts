@@ -37,15 +37,30 @@ describe("buildInitialMessages", () => {
     expect(msgs[3]).toEqual({ role: "user", content: "next" });
   });
 
-  it("does not duplicate system when history already has one", () => {
-    const history: ChatMessage[] = [{ role: "system", content: "old" }];
+  it("P2-6: replaces stale system message with new systemPrompt on resumed sessions", () => {
+    // Executor regenerates system prompt with per-task output schema on every
+    // spawn. The new systemPrompt must replace the old one so stale schema
+    // instructions do not persist across resumed sessions.
+    const history: ChatMessage[] = [
+      { role: "system", content: "old schema" },
+      { role: "user", content: "earlier" },
+      { role: "assistant", content: "earlier reply" },
+    ];
     const msgs = buildInitialMessages({
-      prompt: "p",
-      systemPrompt: "new",
+      prompt: "next",
+      systemPrompt: "new schema",
       history,
     });
-    // history wins — new systemPrompt only prepended if history has no system
-    expect(msgs.filter((m) => m.role === "system").length).toBe(1);
-    expect(msgs[0]).toEqual({ role: "system", content: "old" });
+    // Exactly one system message
+    const systemMsgs = msgs.filter((m) => m.role === "system");
+    expect(systemMsgs.length).toBe(1);
+    // Must be the NEW prompt, not the old one
+    expect(systemMsgs[0]).toEqual({ role: "system", content: "new schema" });
+    // Must appear first
+    expect(msgs[0]).toEqual({ role: "system", content: "new schema" });
+    // Old system message must be gone — remaining history preserved
+    expect(msgs.filter((m) => m.content === "old schema").length).toBe(0);
+    // User prompt is last
+    expect(msgs[msgs.length - 1]).toEqual({ role: "user", content: "next" });
   });
 });

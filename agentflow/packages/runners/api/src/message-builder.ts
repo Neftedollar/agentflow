@@ -9,19 +9,24 @@ export interface BuildMessagesInput {
 
 /**
  * Build the initial messages[] array for a new (or resumed) session.
- * Rule: system message present in history takes precedence; otherwise
- * the provided systemPrompt is prepended when non-empty.
+ *
+ * When a systemPrompt is provided it always wins: any prior system message in
+ * history is replaced so that stale per-task output-schema instructions do not
+ * persist across resumed sessions.  When no systemPrompt is provided the
+ * history is used as-is (existing system message, if any, is kept).
  */
 export function buildInitialMessages(input: BuildMessagesInput): ChatMessage[] {
   const history = input.history ?? [];
-  const hasSystem = history.some((m) => m.role === "system");
   const out: ChatMessage[] = [];
 
-  if (!hasSystem && input.systemPrompt && input.systemPrompt.length > 0) {
+  if (input.systemPrompt && input.systemPrompt.length > 0) {
+    // Prepend new system prompt and strip any prior system message from history
     out.push({ role: "system", content: input.systemPrompt });
+    out.push(...history.filter((m) => m.role !== "system"));
+  } else {
+    out.push(...history);
   }
 
-  out.push(...history);
   out.push({ role: "user", content: input.prompt });
   return out;
 }
