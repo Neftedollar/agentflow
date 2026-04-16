@@ -81,7 +81,22 @@ export async function dispatchStart(
     };
     registerRunner(runnerName, fakeRunner);
 
-    const handle = ctx.runner.fire(ctx.workflow, parsed.data, {
+    // Inject runtime input into the input task's static `input` field so the
+    // executor reads the correct input (same injection as the production path).
+    // biome-ignore lint/suspicious/noExplicitAny: structural injection — task.input must be set at runtime
+    const originalInputTaskTest = ctx.workflow.tasks[ctx.tool.inputTask] as any;
+    const workflowWithInputTest: typeof ctx.workflow = {
+      ...ctx.workflow,
+      tasks: {
+        ...ctx.workflow.tasks,
+        [ctx.tool.inputTask]: {
+          ...originalInputTaskTest,
+          input: parsed.data,
+        },
+      },
+    };
+
+    const handle = ctx.runner.fire(workflowWithInputTest, parsed.data, {
       onEvent: (ev: WorkflowEvent) => ctx.recorder.record(ev),
       onComplete: () => {
         unregisterRunner(runnerName);
@@ -103,7 +118,24 @@ export async function dispatchStart(
     };
   }
 
-  const handle = ctx.runner.fire(ctx.workflow, parsed.data, {
+  // Inject runtime input into the input task's static `input` field before
+  // firing. WorkflowExecutor reads task.input directly — the `input` argument
+  // passed to runner.fire / executor.stream is only used for workflow:start
+  // metadata and is NOT wired into task execution. Without this injection the
+  // async path would use whatever static task.input was defined at config time.
+  // This mirrors the same injection done by makeDefaultRunner on the sync path.
+  const inputTaskName = ctx.tool.inputTask;
+  // biome-ignore lint/suspicious/noExplicitAny: structural injection — task.input must be set at runtime
+  const originalInputTask = ctx.workflow.tasks[inputTaskName] as any;
+  const workflowWithInput: typeof ctx.workflow = {
+    ...ctx.workflow,
+    tasks: {
+      ...ctx.workflow.tasks,
+      [inputTaskName]: { ...originalInputTask, input: parsed.data },
+    },
+  };
+
+  const handle = ctx.runner.fire(workflowWithInput, parsed.data, {
     // onCheckpoint is intentionally OMITTED — triggers server's deferred path
     // (handle.markAwaitingCheckpoint(ev, resolver)) so resume_workflow can clear it.
     onEvent: (ev: WorkflowEvent) => ctx.recorder.record(ev),
