@@ -5,6 +5,7 @@
  * Mocks fetch to drive a tool_call → terminal assistant sequence.
  */
 
+import type { Logger } from "@ageflow/core";
 import { spawnMockMcpServer } from "@ageflow/testing";
 import { describe, expect, it, vi } from "vitest";
 import { ApiRunner } from "../api-runner.js";
@@ -140,4 +141,61 @@ describe("ApiRunner.spawn with MCP", () => {
     // shutdown() should drain the pool without throwing
     await expect(runner.shutdown()).resolves.toBeUndefined();
   });
+});
+
+// ─── Issue #71: ApiRunnerConfig.logger threaded to startMcpClients ────────────
+
+describe("ApiRunner logger config (issue #71)", () => {
+  it(
+    "forwards ApiRunnerConfig.logger to MCP subprocess stderr",
+    async () => {
+      // A crashing MCP server emits stderr before dying. The logger injected
+      // via ApiRunnerConfig must receive that stderr output.
+      const crashCmd = spawnMockMcpServer.asSubprocessCommand({
+        tools: [],
+        crashOn: "initialize",
+      });
+
+      const mockLogger: Logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+
+      const fetchMock = vi.fn();
+
+      const runner = new ApiRunner({
+        baseUrl: "https://example.test/v1",
+        apiKey: "k",
+        defaultModel: "gpt-4o",
+        fetch: fetchMock as unknown as typeof fetch,
+        logger: mockLogger,
+      });
+
+      // spawn must fail because the MCP server crashes on initialize
+      await expect(
+        runner.spawn({
+          prompt: "test",
+          model: "gpt-4o",
+          mcpServers: [
+            {
+              name: "crashing",
+              command: crashCmd.command,
+              args: [...crashCmd.args],
+            },
+          ],
+        }),
+      ).rejects.toThrow(/mcp_server_start_failed/i);
+
+      // Logger must have received the stderr from the crashing subprocess
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining("[mcp:crashing]"),
+      );
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining("crashing on initialize"),
+      );
+    },
+    { timeout: 5_000 },
+  );
 });

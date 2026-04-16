@@ -1,6 +1,8 @@
+import type { Logger } from "@ageflow/core";
 import type { SessionStore } from "./session-store.js";
 export type { SessionStore } from "./session-store.js";
 export type { ToolCallRecord } from "@ageflow/core";
+export type { Logger };
 
 export interface ToolDefinition {
   /** Human-readable description surfaced to the model. */
@@ -29,4 +31,6 @@ export interface ApiRunnerConfig {
   headers?: Record<string, string>;
   /** Injectable fetch for testing. Default: globalThis.fetch. */
   fetch?: typeof fetch;
+  /** Optional logger. MCP subprocess stderr is teed here; never forwarded to the model. */
+  logger?: Logger;
 }

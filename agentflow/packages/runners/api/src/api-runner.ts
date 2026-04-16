@@ -1,4 +1,9 @@
-import type { Runner, RunnerSpawnArgs, RunnerSpawnResult } from "@ageflow/core";
+import type {
+  Logger,
+  Runner,
+  RunnerSpawnArgs,
+  RunnerSpawnResult,
+} from "@ageflow/core";
 import type { McpClient } from "./mcp-client.js";
 import { shutdownAll, startMcpClients } from "./mcp-client.js";
 import { mcpToolsToRegistry } from "./mcp-tool-adapter.js";
@@ -21,6 +26,7 @@ export class ApiRunner implements Runner {
   private readonly requestTimeout: number;
   private readonly headers: Record<string, string>;
   private readonly fetch: typeof fetch;
+  private readonly logger: Logger | undefined;
   /** Pool of long-lived MCP clients keyed by server name (reusePerRunner=true). */
   private readonly mcpPool = new Map<string, McpClient>();
 
@@ -34,6 +40,7 @@ export class ApiRunner implements Runner {
     this.requestTimeout = config.requestTimeout ?? DEFAULT_TIMEOUT_MS;
     this.headers = config.headers ?? {};
     this.fetch = config.fetch ?? globalThis.fetch;
+    this.logger = config.logger;
   }
 
   async validate(): Promise<{ ok: boolean; version?: string; error?: string }> {
@@ -109,7 +116,7 @@ export class ApiRunner implements Runner {
         if (s.reusePerRunner) {
           let pooled = this.mcpPool.get(s.name);
           if (!pooled) {
-            const [started] = await startMcpClients([s]);
+            const [started] = await startMcpClients([s], this.logger);
             if (started === undefined) {
               throw new Error(
                 `startMcpClients returned no client for ${s.name}`,
@@ -120,7 +127,7 @@ export class ApiRunner implements Runner {
           }
           perSpawnClients.push(pooled);
         } else {
-          const [c] = await startMcpClients([s]);
+          const [c] = await startMcpClients([s], this.logger);
           if (c === undefined) {
             throw new Error(`startMcpClients returned no client for ${s.name}`);
           }
