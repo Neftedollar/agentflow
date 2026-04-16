@@ -110,7 +110,8 @@ function buildToolDefinition(
         if (
           refineSchema === null ||
           typeof refineSchema !== "object" ||
-          typeof (refineSchema as { safeParse?: unknown }).safeParse !== "function"
+          typeof (refineSchema as { safeParse?: unknown }).safeParse !==
+            "function"
         ) {
           throw new McpToolArgInvalidError(
             toolName,

@@ -1,9 +1,9 @@
 import { defineAgent, defineWorkflow } from "@ageflow/core";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { ErrorCode } from "../../errors.js";
 import type { McpToolResult } from "../../server.js";
 import { ASYNC_OBSERVER_TOOL_NAMES, createMcpServer } from "../../server.js";
-import { ErrorCode } from "../../errors.js";
 
 const agent = defineAgent({
   runner: "fake",
@@ -287,7 +287,12 @@ describe("async mode: reserved tool name guard (#84 item 12)", () => {
         tasks: { t: { agent: ag, input: { q: "hi" } } },
       });
       expect(() =>
-        createMcpServer({ workflow: wf, cliCeilings: {}, hitlStrategy: "auto", async: true }),
+        createMcpServer({
+          workflow: wf,
+          cliCeilings: {},
+          hitlStrategy: "auto",
+          async: true,
+        }),
       ).toThrow(/conflicts with a reserved async observer tool name/);
     },
   );
@@ -304,7 +309,12 @@ describe("async mode: reserved tool name guard (#84 item 12)", () => {
       tasks: { t: { agent: ag, input: { q: "hi" } } },
     });
     expect(() =>
-      createMcpServer({ workflow: wf, cliCeilings: {}, hitlStrategy: "auto", async: false }),
+      createMcpServer({
+        workflow: wf,
+        cliCeilings: {},
+        hitlStrategy: "auto",
+        async: false,
+      }),
     ).not.toThrow();
   });
 
