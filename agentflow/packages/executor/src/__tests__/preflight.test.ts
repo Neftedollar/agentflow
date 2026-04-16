@@ -422,3 +422,82 @@ describe("runPreflight — static arg validation", () => {
     expect(staticErrors.length).toBeGreaterThan(0);
   });
 });
+
+// ─── MCP preflight validation ────────────────────────────────────────────────
+
+describe("runPreflight — MCP config validation", () => {
+  it("flags duplicate MCP server names in agent.mcp.servers", async () => {
+    const wf = defineWorkflow({
+      name: "w",
+      tasks: {
+        a: {
+          agent: defineAgent({
+            runner: "claude",
+            input: z.object({}),
+            output: z.object({ ok: z.boolean() }),
+            prompt: () => "x",
+            mcp: {
+              servers: [
+                { name: "fs", command: "npx" },
+                { name: "fs", command: "other" },
+              ],
+            },
+          }),
+        },
+      },
+    });
+    const res = await runPreflight(wf, { whichFn: () => true });
+    expect(res.errors.some((e) => /duplicate/i.test(e))).toBe(true);
+  });
+
+  it("flags unknown task.mcpOverride name", async () => {
+    const wf = defineWorkflow({
+      name: "w",
+      tasks: {
+        a: {
+          agent: defineAgent({
+            runner: "claude",
+            input: z.object({}),
+            output: z.object({ ok: z.boolean() }),
+            prompt: () => "x",
+            mcp: { servers: [{ name: "fs", command: "npx" }] },
+          }),
+          mcpOverride: { servers: ["does-not-exist"] },
+        },
+      },
+    });
+    const res = await runPreflight(wf, { whichFn: () => true });
+    expect(res.errors.some((e) => /does-not-exist/i.test(e))).toBe(true);
+  });
+
+  it("warns when ${env:X} refers to a missing env var in mcp server config", async () => {
+    const wf = defineWorkflow({
+      name: "w",
+      tasks: {
+        a: {
+          agent: defineAgent({
+            runner: "claude",
+            input: z.object({}),
+            output: z.object({ ok: z.boolean() }),
+            prompt: () => "x",
+            mcp: {
+              servers: [
+                {
+                  name: "github",
+                  command: "npx",
+                  env: {
+                    GITHUB_TOKEN: "${env:GITHUB_TOKEN_DEFINITELY_UNSET_XYZ}",
+                  },
+                },
+              ],
+            },
+          }),
+        },
+      },
+    });
+    const res = await runPreflight(wf, { whichFn: () => true });
+    expect(
+      res.warnings.some((w) => /GITHUB_TOKEN_DEFINITELY_UNSET_XYZ/i.test(w)),
+    ).toBe(true);
+  });
+});

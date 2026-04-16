@@ -4,10 +4,18 @@ import {
   TimeoutError,
   resolveAgentDef,
 } from "@ageflow/core";
-import type { AgentDef, AttemptRecord, Runner, TaskDef } from "@ageflow/core";
+import type {
+  AgentDef,
+  AttemptRecord,
+  McpServerConfig,
+  Runner,
+  TaskDef,
+} from "@ageflow/core";
 import type { ZodType } from "zod";
 import { OutputValidationError } from "./errors.js";
+import { expandServerEnv } from "./mcp-env.js";
 import { parseAgentOutput } from "./output-parser.js";
+import { resolveMcp } from "./resolve-mcp.js";
 import { buildOutputSchemaPrompt } from "./schema-prompt.js";
 
 export interface NodeRunResult<O> {
@@ -99,6 +107,7 @@ export async function runNode<
   permissions?: Record<string, boolean>,
   filteredTools?: readonly string[],
   onRetry?: (attempt: number, reason: string) => void,
+  workflowMcpServers?: readonly McpServerConfig[],
 ): Promise<
   NodeRunResult<
     import("zod").infer<
@@ -137,6 +146,19 @@ export async function runNode<
         spawnArgs.tools = effectiveTools;
       }
 
+      // Resolve MCP servers: merge workflow + agent + task override, then expand env vars.
+      const resolved = resolveMcp(
+        workflowMcpServers,
+        resolvedDef.mcp,
+        task.mcpOverride,
+      );
+      if (resolved.length > 0) {
+        spawnArgs.mcpServers = resolved.map((s) =>
+          expandServerEnv(s, process.env as Record<string, string>),
+        );
+      }
+
+      // Deprecated alias retained for one release cycle.
       if (resolvedDef.mcps !== undefined && resolvedDef.mcps.length > 0) {
         spawnArgs.mcps = resolvedDef.mcps;
       }

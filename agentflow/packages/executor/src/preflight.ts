@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import type { TasksMap, WorkflowDef } from "@ageflow/core";
+import type { McpServerConfig, TasksMap, WorkflowDef } from "@ageflow/core";
 import { validateStaticIdentifier } from "@ageflow/core";
 import { topologicalSort } from "./dag-resolver.js";
 import {
@@ -8,6 +8,7 @@ import {
   UnresolvedDependencyError,
   UnresolvedSessionRefError,
 } from "./errors.js";
+import { resolveMcp } from "./resolve-mcp.js";
 import { SessionManager } from "./session-manager.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -239,6 +240,90 @@ function validateCrossProviderSessions(
   }
 }
 
+// ─── MCP config validation ────────────────────────────────────────────────────
+
+/** Pattern matching ${env:NAME} references in a string. */
+const ENV_REF_RE = /\$\{env:([A-Z_][A-Z0-9_]*)\}/g;
+
+/** Collect all ${env:NAME} references in a string. */
+function collectEnvRefs(value: string): string[] {
+  const refs: string[] = [];
+  for (const match of value.matchAll(ENV_REF_RE)) {
+    if (match[1] !== undefined) refs.push(match[1]);
+  }
+  return refs;
+}
+
+/** Collect all ${env:NAME} references in a McpServerConfig. */
+function collectServerEnvRefs(server: McpServerConfig): string[] {
+  const refs: string[] = [];
+  refs.push(...collectEnvRefs(server.command));
+  for (const arg of server.args ?? []) {
+    refs.push(...collectEnvRefs(arg));
+  }
+  for (const val of Object.values(server.env ?? {})) {
+    refs.push(...collectEnvRefs(val));
+  }
+  return refs;
+}
+
+function validateMcpConfigs(
+  workflow: WorkflowDef<TasksMap>,
+  errors: string[],
+  warnings: string[],
+): void {
+  const tasks = workflow.tasks;
+
+  for (const [taskName, task] of Object.entries(tasks)) {
+    if (task === undefined || "kind" in task) {
+      continue;
+    }
+
+    const agent = task.agent;
+    const agentMcp = agent.mcp;
+
+    // Validate for duplicate server names within agent.mcp.servers.
+    if (agentMcp !== undefined) {
+      const seen = new Set<string>();
+      for (const server of agentMcp.servers) {
+        if (seen.has(server.name)) {
+          errors.push(
+            `Task "${taskName}": duplicate MCP server name "${server.name}" in agent.mcp.servers`,
+          );
+        }
+        seen.add(server.name);
+      }
+    }
+
+    // Validate task.mcpOverride names against resolved server list.
+    const mcpOverride = task.mcpOverride;
+    if (mcpOverride !== undefined) {
+      try {
+        resolveMcp(workflow.mcpServers, agentMcp, mcpOverride);
+      } catch (err) {
+        errors.push(
+          `Task "${taskName}": mcpOverride references an unknown server — ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    // Warn about ${env:X} references to unset env vars in MCP server configs.
+    const allServers = [
+      ...(workflow.mcpServers ?? []),
+      ...(agentMcp?.servers ?? []),
+    ];
+    for (const server of allServers) {
+      for (const varName of collectServerEnvRefs(server)) {
+        if (process.env[varName] === undefined) {
+          warnings.push(
+            `Task "${taskName}": MCP server "${server.name}" references env var \${env:${varName}} which is not set`,
+          );
+        }
+      }
+    }
+  }
+}
+
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 export async function runPreflight(
@@ -267,6 +352,9 @@ export async function runPreflight(
 
   // 6. Warn about cross-provider session sharing
   validateCrossProviderSessions(tasks, warnings);
+
+  // 7. Validate MCP server configs (duplicates, unknown overrides, missing env vars)
+  validateMcpConfigs(workflow, errors, warnings);
 
   return { errors, warnings };
 }
