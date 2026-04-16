@@ -9,6 +9,16 @@ import {
   formatErrorResult,
 } from "./errors.js";
 import { type McpConnectionLike, buildMcpHooks } from "./hitl-bridge.js";
+import {
+  type JobDispatchContext,
+  createJobDispatchContext,
+  dispatchCancel,
+  dispatchGetResult,
+  dispatchGetStatus,
+  dispatchResume,
+  dispatchStart,
+} from "./job-dispatch.js";
+import { buildJobTools } from "./job-tools.js";
 import { ProgressStreamer, type SendProgress } from "./progress-streamer.js";
 import { type ToolDefinition, buildToolDefinition } from "./tool-registry.js";
 import type { CliCeilings, EffectiveCeilings, HitlStrategy } from "./types.js";
@@ -26,6 +36,12 @@ export interface McpServerOptions {
   readonly workflow: WorkflowDef;
   readonly cliCeilings: CliCeilings;
   readonly hitlStrategy: HitlStrategy;
+  /** Opt-in async job mode. Default: false. */
+  readonly async?: boolean;
+  /** Override the default 30-minute job TTL (async mode only). */
+  readonly jobTtlMs?: number;
+  /** Override the default 1-hour checkpoint TTL (async mode only). */
+  readonly jobCheckpointTtlMs?: number;
   /** Custom stderr writer (for testing); defaults to process.stderr.write. */
   readonly stderr?: (line: string) => void;
   /**
@@ -61,6 +77,8 @@ export interface McpServerHandle {
     signal: AbortSignal,
     effective: EffectiveCeilings,
   ) => Promise<unknown>;
+  /** Stop background TTL reaper (async mode only). Idempotent. */
+  dispose?(): void;
 }
 
 /**
@@ -79,16 +97,62 @@ export function createMcpServer(opts: McpServerOptions): McpServerHandle {
       process.stderr.write(line);
     });
   const tool = buildToolDefinition(opts.workflow);
+  const jobTools = opts.async === true ? buildJobTools(opts.workflow) : [];
 
   let inflight = false;
+  let dispatchCtx: JobDispatchContext | undefined; // lazy — created on first start_*
+
+  const startName = `start_${opts.workflow.name}`;
+  const OBSERVER_TOOLS = new Set([
+    "get_workflow_status",
+    "get_workflow_result",
+    "cancel_workflow",
+    "resume_workflow",
+  ]);
+
+  function ensureDispatchCtx(): JobDispatchContext {
+    if (!dispatchCtx) {
+      dispatchCtx = createJobDispatchContext({
+        workflow: opts.workflow,
+        tool,
+        jobTools,
+        ...(opts.jobTtlMs !== undefined ? { jobTtlMs: opts.jobTtlMs } : {}),
+        ...(opts.jobCheckpointTtlMs !== undefined
+          ? { jobCheckpointTtlMs: opts.jobCheckpointTtlMs }
+          : {}),
+        releaseInflight: () => {
+          inflight = false;
+        },
+      });
+    }
+    return dispatchCtx;
+  }
 
   const handle: McpServerHandle = {
     async listTools() {
-      return [tool];
+      return opts.async === true ? [tool, ...jobTools] : [tool];
+    },
+
+    dispose() {
+      dispatchCtx?.runner.close();
     },
 
     async callTool(name, args, callOpts) {
-      if (name !== tool.name) {
+      const isSync = name === tool.name;
+      const isStart = opts.async === true && name === startName;
+      const isObserver = opts.async === true && OBSERVER_TOOLS.has(name);
+
+      if (!isSync && !isStart && !isObserver) {
+        // Return ASYNC_MODE_DISABLED for job tools when async=false
+        if (name === startName || OBSERVER_TOOLS.has(name)) {
+          return formatErrorResult(
+            new McpServerError(
+              ErrorCode.ASYNC_MODE_DISABLED,
+              `async mode is disabled; tool "${name}" is unavailable`,
+              { name },
+            ),
+          );
+        }
         return formatErrorResult(
           new McpServerError(
             ErrorCode.WORKFLOW_FAILED,
@@ -98,6 +162,22 @@ export function createMcpServer(opts: McpServerOptions): McpServerHandle {
         );
       }
 
+      // Observer tools: no inflight lock.
+      if (isObserver) {
+        const ctx = ensureDispatchCtx();
+        switch (name) {
+          case "get_workflow_status":
+            return dispatchGetStatus(args, ctx);
+          case "get_workflow_result":
+            return dispatchGetResult(args, ctx);
+          case "cancel_workflow":
+            return dispatchCancel(args, ctx);
+          case "resume_workflow":
+            return dispatchResume(args, ctx);
+        }
+      }
+
+      // start_* and sync tool: share the inflight lock.
       if (inflight) {
         return formatErrorResult(
           new McpServerError(
@@ -108,6 +188,25 @@ export function createMcpServer(opts: McpServerOptions): McpServerHandle {
       }
       inflight = true;
 
+      if (isStart) {
+        const ctx = ensureDispatchCtx();
+        // Thread test executor into context if set on handle (wraps 4-arg to 1-arg)
+        if (handle._testRunExecutor !== undefined) {
+          const testExec = handle._testRunExecutor;
+          ctx.testRunExecutor = (input: unknown) =>
+            testExec(
+              input,
+              undefined,
+              new AbortController().signal,
+              {} as EffectiveCeilings,
+            );
+        }
+        // dispatchStart releases inflight via ctx.releaseInflight (onComplete/onError)
+        // or on validation failure.
+        return await dispatchStart(name, args, ctx);
+      }
+
+      // Sync path (existing body) — inflight cleared in finally.
       try {
         // Validate input
         const inputTaskDef = (opts.workflow.tasks as Record<string, unknown>)[
