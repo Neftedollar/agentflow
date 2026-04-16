@@ -48,10 +48,22 @@ jobs:
         run: npm publish --access public --provenance
         working-directory: agentflow/packages/runners/codex
 
+      - name: Publish @ageflow/runner-api
+        run: npm publish --access public --provenance
+        working-directory: agentflow/packages/runners/api
+
       - name: Publish @ageflow/testing
         run: npm publish --access public --provenance
         working-directory: agentflow/packages/testing
 
-      - name: Publish ageflow (CLI)
+      - name: Publish @ageflow/mcp-server
+        run: npm publish --access public --provenance
+        working-directory: agentflow/packages/mcp-server
+
+      - name: Publish @ageflow/server
+        run: npm publish --access public --provenance
+        working-directory: agentflow/packages/server
+
+      - name: Publish @ageflow/cli
         run: npm publish --access public --provenance
         working-directory: agentflow/packages/cli
