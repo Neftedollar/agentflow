@@ -130,9 +130,12 @@ export async function dispatchStart(
       ...(runOpts.abortSignal !== undefined
         ? { signal: runOpts.abortSignal }
         : {}),
-      // Apply HITL strategy: "auto" → approve, "deny" → reject, "elicit" → deferred.
+      // Apply HITL strategy: "auto" → approve, "fail" → reject, "elicit" → deferred.
       ...(runOpts.onCheckpoint !== undefined
-        ? { onCheckpoint: (ev) => runOpts.onCheckpoint?.(ev) }
+        ? {
+            // biome-ignore lint/style/noNonNullAssertion: guarded by outer !== undefined check
+            onCheckpoint: (ev) => runOpts.onCheckpoint!(ev),
+          }
         : {}),
       onEvent: (ev: WorkflowEvent) => ctx.recorder.record(ev),
       onComplete: () => {
@@ -163,11 +166,14 @@ export async function dispatchStart(
       : {}),
     // Apply HITL strategy from runOpts:
     //   - "auto" maps to onCheckpoint: () => true
-    //   - "deny" maps to onCheckpoint: () => false
+    //   - "fail" maps to onCheckpoint: () => false
     //   - "elicit" maps to undefined → runner uses deferred path so
     //     resume_workflow can resolve checkpoints externally.
     ...(runOpts.onCheckpoint !== undefined
-      ? { onCheckpoint: (ev) => runOpts.onCheckpoint?.(ev) }
+      ? {
+          // biome-ignore lint/style/noNonNullAssertion: guarded by outer !== undefined check
+          onCheckpoint: (ev) => runOpts.onCheckpoint!(ev),
+        }
       : {}),
     onEvent: (ev: WorkflowEvent) => ctx.recorder.record(ev),
     onComplete: () => {
