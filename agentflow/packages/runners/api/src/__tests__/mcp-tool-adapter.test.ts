@@ -1,8 +1,8 @@
+import type { McpServerConfig } from "@ageflow/core";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { mcpToolsToRegistry } from "../mcp-tool-adapter.js";
 import type { McpClient } from "../mcp-client.js";
-import type { McpServerConfig } from "@ageflow/core";
+import { mcpToolsToRegistry } from "../mcp-tool-adapter.js";
 
 function mockClient(cfg: Partial<McpServerConfig>): McpClient {
   return {
@@ -40,7 +40,10 @@ describe("mcpToolsToRegistry", () => {
     // Build registry with allowlist; simulate the model calling a non-listed tool.
     // Registry won't contain `mcp__fs__delete_file`, so the tool-loop will hit
     // ToolNotFoundError. Assert the error maps to MCP_TOOL_NOT_PERMITTED.
-    const reg = await mcpToolsToRegistry([mockClient({ tools: ["read_file"] })]);
+    const reg = await mcpToolsToRegistry([
+      mockClient({ tools: ["read_file"] }),
+    ]);
+    // biome-ignore lint/complexity/useLiteralKeys: key contains double underscores, bracket access is clearer
     expect(reg["mcp__fs__delete_file"]).toBeUndefined();
   });
 
@@ -48,11 +51,18 @@ describe("mcpToolsToRegistry", () => {
     const reg = await mcpToolsToRegistry([
       mockClient({
         tools: ["read_file"],
-        refine: { read_file: z.object({ path: z.string().refine((p) => !p.startsWith("/etc")) }) },
+        refine: {
+          read_file: z.object({
+            path: z.string().refine((p) => !p.startsWith("/etc")),
+          }),
+        },
       }),
     ]);
-    await expect(
-      reg["mcp__fs__read_file"]!.execute({ path: "/etc/passwd" }),
-    ).rejects.toThrow(/mcp_tool_arg_invalid/i);
+    // biome-ignore lint/complexity/useLiteralKeys: key contains double underscores, bracket access is clearer
+    // biome-ignore lint/style/noNonNullAssertion: known to exist due to prior assertion
+    const readFileTool = reg["mcp__fs__read_file"]!;
+    await expect(readFileTool.execute({ path: "/etc/passwd" })).rejects.toThrow(
+      /mcp_tool_arg_invalid/i,
+    );
   });
 });

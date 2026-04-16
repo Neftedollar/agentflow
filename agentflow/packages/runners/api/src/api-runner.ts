@@ -1,8 +1,8 @@
 import type { Runner, RunnerSpawnArgs, RunnerSpawnResult } from "@ageflow/core";
-import { buildInitialMessages, toolsToSchemas } from "./message-builder.js";
 import type { McpClient } from "./mcp-client.js";
-import { startMcpClients, shutdownAll } from "./mcp-client.js";
+import { shutdownAll, startMcpClients } from "./mcp-client.js";
 import { mcpToolsToRegistry } from "./mcp-tool-adapter.js";
+import { buildInitialMessages, toolsToSchemas } from "./message-builder.js";
 import type { ChatMessage } from "./openai-types.js";
 import { InMemorySessionStore, type SessionStore } from "./session-store.js";
 import { runToolLoop } from "./tool-loop.js";
@@ -111,7 +111,9 @@ export class ApiRunner implements Runner {
           if (!pooled) {
             const [started] = await startMcpClients([s]);
             if (started === undefined) {
-              throw new Error(`startMcpClients returned no client for ${s.name}`);
+              throw new Error(
+                `startMcpClients returned no client for ${s.name}`,
+              );
             }
             pooled = started;
             this.mcpPool.set(s.name, pooled);

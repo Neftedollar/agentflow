@@ -13,7 +13,7 @@
  */
 
 import { AgentFlowError } from "@ageflow/core";
-import type { McpServerConfig, Logger, McpToolDescriptor } from "@ageflow/core";
+import type { Logger, McpServerConfig, McpToolDescriptor } from "@ageflow/core";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -85,11 +85,13 @@ class McpClientImpl implements McpClient {
 
   async listTools(): Promise<McpToolDescriptor[]> {
     const res = await this.client.listTools();
-    return res.tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: t.inputSchema,
-    }));
+    return res.tools.map(
+      (t): McpToolDescriptor => ({
+        name: t.name,
+        ...(t.description !== undefined ? { description: t.description } : {}),
+        ...(t.inputSchema !== undefined ? { inputSchema: t.inputSchema } : {}),
+      }),
+    );
   }
 
   async callTool(
@@ -149,7 +151,10 @@ class McpClientImpl implements McpClient {
                 .map((c) => c.text ?? "")
                 .join(" ")
             : "";
-        throw new McpToolCallFailedError(name, new Error(content || "isError:true"));
+        throw new McpToolCallFailedError(
+          name,
+          new Error(content || "isError:true"),
+        );
       }
       return res;
     } finally {
@@ -163,7 +168,9 @@ class McpClientImpl implements McpClient {
     try {
       await this.client.close();
     } catch (err) {
-      this.logger?.warn(`McpClient.stop: close error for ${this.config.name}: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger?.warn(
+        `McpClient.stop: close error for ${this.config.name}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 }
@@ -208,16 +215,21 @@ async function startOne(
         Object.entries(cfg.env).map(([k, v]) => [
           k,
           // Basic ${env:VAR} substitution (already resolved by executor; kept for safety)
-          v.replace(/\$\{env:([^}]+)\}/g, (_, name: string) => process.env[name] ?? ""),
+          v.replace(
+            /\$\{env:([^}]+)\}/g,
+            (_, name: string) => process.env[name] ?? "",
+          ),
         ]),
       )
     : {};
 
+  const hasEnv = Object.keys(env).length > 0;
+  const hasCwd = cfg.cwd !== undefined;
   const transport = new StdioClientTransport({
     command: cfg.command,
     args: cfg.args ? [...cfg.args] : [],
-    env: Object.keys(env).length > 0 ? env : undefined,
-    cwd: cfg.cwd,
+    ...(hasEnv ? { env } : {}),
+    ...(hasCwd ? { cwd: cfg.cwd } : {}),
     stderr: "pipe",
   });
 
@@ -243,6 +255,8 @@ async function startOne(
 /**
  * Shut down all clients concurrently. Errors are ignored.
  */
-export async function shutdownAll(clients: readonly McpClient[]): Promise<void> {
+export async function shutdownAll(
+  clients: readonly McpClient[],
+): Promise<void> {
   await Promise.allSettled(clients.map((c) => c.stop()));
 }

@@ -13,7 +13,12 @@
  *      Zod schema before forwarding to the server.
  */
 
-import { AgentFlowError, filterMcpTools, isMcpToolPermitted, mcpToolFqn } from "@ageflow/core";
+import {
+  AgentFlowError,
+  filterMcpTools,
+  isMcpToolPermitted,
+  mcpToolFqn,
+} from "@ageflow/core";
 import type { McpClient } from "./mcp-client.js";
 import type { ToolDefinition, ToolRegistry } from "./types.js";
 
@@ -76,7 +81,11 @@ export async function mcpToolsToRegistry(
 function buildToolDefinition(
   client: McpClient,
   toolName: string,
-  descriptor: { name: string; description?: string | undefined; inputSchema?: unknown },
+  descriptor: {
+    name: string;
+    description?: string | undefined;
+    inputSchema?: unknown;
+  },
 ): ToolDefinition {
   return {
     description: descriptor.description ?? "",
@@ -99,10 +108,7 @@ function buildToolDefinition(
       if (refineSchema !== undefined) {
         const result = refineSchema.safeParse(args);
         if (!result.success) {
-          throw new McpToolArgInvalidError(
-            toolName,
-            result.error,
-          );
+          throw new McpToolArgInvalidError(toolName, result.error);
         }
       }
 

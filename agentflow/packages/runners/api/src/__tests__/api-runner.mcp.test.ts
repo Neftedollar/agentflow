@@ -5,10 +5,10 @@
  * Mocks fetch to drive a tool_call → terminal assistant sequence.
  */
 
+import { spawnMockMcpServer } from "@ageflow/testing";
 import { describe, expect, it, vi } from "vitest";
 import { ApiRunner } from "../api-runner.js";
 import type { ChatCompletionResponse } from "../openai-types.js";
-import { spawnMockMcpServer } from "@ageflow/testing";
 
 function jsonResp(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -21,7 +21,9 @@ describe("ApiRunner.spawn with MCP", () => {
   it("routes mcp__mock__echo tool call through the MCP subprocess", async () => {
     // Start a real mock MCP server subprocess
     const subCmd = spawnMockMcpServer.asSubprocessCommand({
-      tools: [{ name: "echo", description: "echo", inputSchema: { type: "object" } }],
+      tools: [
+        { name: "echo", description: "echo", inputSchema: { type: "object" } },
+      ],
     });
 
     // Sequence: first response has a tool_call for mcp__mock__echo, then terminal
@@ -112,9 +114,7 @@ describe("ApiRunner.spawn with MCP", () => {
       usage: { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 },
     };
 
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResp(terminalResponse));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResp(terminalResponse));
 
     const runner = new ApiRunner({
       baseUrl: "https://example.test/v1",

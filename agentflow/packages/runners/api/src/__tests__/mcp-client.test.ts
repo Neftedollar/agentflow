@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { startMcpClients, shutdownAll } from "../mcp-client.js";
 import { spawnMockMcpServer } from "@ageflow/testing";
+import { describe, expect, it } from "vitest";
+import { shutdownAll, startMcpClients } from "../mcp-client.js";
 
 describe("startMcpClients", () => {
   it("starts a client per McpServerConfig and lists tools", async () => {
@@ -13,7 +13,9 @@ describe("startMcpClients", () => {
       { name: "mock", command: handle.command, args: [...handle.args] },
     ]);
     expect(clients).toHaveLength(1);
-    const tools = await clients[0]!.listTools();
+    const client = clients[0];
+    if (!client) throw new Error("expected client");
+    const tools = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual(["echo"]);
     await shutdownAll(clients);
   });
