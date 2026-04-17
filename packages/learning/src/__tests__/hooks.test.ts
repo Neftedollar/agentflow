@@ -363,6 +363,105 @@ describe("createLearningHooks", () => {
     expect(trace.taskTraces[1].agentRunner).toBe("anthropic");
   });
 
+  // ─── #169: onTaskSpawnArgs / onTaskSpawnResult ──────────────────────────────
+
+  describe("#169: spawn args/result captured in TaskTrace", () => {
+    it("TaskTrace.spawnArgs is populated when onTaskSpawnArgs fires", async () => {
+      const traceStore = makeTraceStore();
+      const hooks = createLearningHooks({
+        skillStore: makeSkillStore(),
+        traceStore,
+        workflowName: "bug-fix",
+      });
+
+      const spawnArgs = {
+        prompt: "Analyze this repo",
+        taskName: "analyze",
+        systemPrompt: "You MUST respond with valid JSON",
+      };
+
+      hooks.onTaskStart?.("analyze", "api");
+      hooks.onTaskSpawnArgs?.("analyze", spawnArgs);
+      hooks.onTaskComplete?.("analyze", { fixed: true }, makeTaskMetrics());
+      await hooks.onWorkflowComplete?.({ fixed: true }, makeMetrics());
+
+      const trace = traceStore.traces[0];
+      expect(trace.taskTraces[0].spawnArgs).toEqual(spawnArgs);
+    });
+
+    it("TaskTrace.spawnResult is populated when onTaskSpawnResult fires", async () => {
+      const traceStore = makeTraceStore();
+      const hooks = createLearningHooks({
+        skillStore: makeSkillStore(),
+        traceStore,
+        workflowName: "bug-fix",
+      });
+
+      const spawnResult = {
+        stdout: JSON.stringify({ fixed: true }),
+        sessionHandle: "sess-123",
+        tokensIn: 100,
+        tokensOut: 50,
+      };
+
+      hooks.onTaskStart?.("analyze", "api");
+      hooks.onTaskSpawnResult?.("analyze", spawnResult);
+      hooks.onTaskComplete?.("analyze", { fixed: true }, makeTaskMetrics());
+      await hooks.onWorkflowComplete?.({ fixed: true }, makeMetrics());
+
+      const trace = traceStore.traces[0];
+      expect(trace.taskTraces[0].spawnResult).toEqual(spawnResult);
+    });
+
+    it("TaskTrace.spawnArgs and spawnResult are both omitted when hooks never fire", async () => {
+      const traceStore = makeTraceStore();
+      const hooks = createLearningHooks({
+        skillStore: makeSkillStore(),
+        traceStore,
+        workflowName: "bug-fix",
+      });
+
+      // Neither spawn hook is called
+      hooks.onTaskStart?.("analyze", "api");
+      hooks.onTaskComplete?.("analyze", { fixed: true }, makeTaskMetrics());
+      await hooks.onWorkflowComplete?.({ fixed: true }, makeMetrics());
+
+      const trace = traceStore.traces[0];
+      expect(trace.taskTraces[0].spawnArgs).toBeUndefined();
+      expect(trace.taskTraces[0].spawnResult).toBeUndefined();
+    });
+
+    it("spawnArgs and spawnResult reset correctly between runs", async () => {
+      const traceStore = makeTraceStore();
+      const hooks = createLearningHooks({
+        skillStore: makeSkillStore(),
+        traceStore,
+        workflowName: "bug-fix",
+      });
+
+      const spawnArgs1 = {
+        prompt: "Run 1 prompt",
+        taskName: "taskA",
+        systemPrompt: "",
+      };
+
+      // Run 1: with spawn args
+      hooks.onTaskStart?.("taskA", "api");
+      hooks.onTaskSpawnArgs?.("taskA", spawnArgs1);
+      hooks.onTaskComplete?.("taskA", "out1", makeTaskMetrics());
+      await hooks.onWorkflowComplete?.({}, makeMetrics());
+
+      // Run 2: without spawn args
+      hooks.onTaskStart?.("taskB", "api");
+      // No onTaskSpawnArgs for taskB
+      hooks.onTaskComplete?.("taskB", "out2", makeTaskMetrics());
+      await hooks.onWorkflowComplete?.({}, makeMetrics());
+
+      expect(traceStore.traces[0].taskTraces[0].spawnArgs).toEqual(spawnArgs1);
+      expect(traceStore.traces[1].taskTraces[0].spawnArgs).toBeUndefined();
+    });
+  });
+
   // ─── #171: reflectEvery scheduler ────────────────────────────────────────────
 
   describe("#171: reflectEvery scheduler", () => {

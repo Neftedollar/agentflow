@@ -25,6 +25,18 @@ export const TaskTraceSchema = z.object({
   tokensOut: z.number(),
   durationMs: z.number(),
   retryCount: z.number(),
+  /**
+   * The resolved spawn args passed to runner.spawn() — captured via
+   * onTaskSpawnArgs. Includes the full prompt, tool list, MCP servers, etc.
+   * Present only when the onTaskSpawnArgs hook fired for this task.
+   */
+  spawnArgs: z.unknown().optional(),
+  /**
+   * The raw runner.spawn() result — captured via onTaskSpawnResult.
+   * Includes stdout, sessionHandle, token counts and tool-call trail.
+   * Present only when the onTaskSpawnResult hook fired for this task.
+   */
+  spawnResult: z.unknown().optional(),
 });
 
 export type TaskTrace = z.infer<typeof TaskTraceSchema>;

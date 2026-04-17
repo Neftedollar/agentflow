@@ -1,5 +1,11 @@
 import path from "node:path";
-import type { TaskMetrics, WorkflowDef, WorkflowMetrics } from "@ageflow/core";
+import type {
+  RunnerSpawnArgs,
+  RunnerSpawnResult,
+  TaskMetrics,
+  WorkflowDef,
+  WorkflowMetrics,
+} from "@ageflow/core";
 import { shutdownAllRunners } from "@ageflow/core";
 import { WorkflowExecutor } from "@ageflow/executor";
 import type { Command } from "commander";
@@ -69,6 +75,23 @@ export function registerRunCommand(program: Command): void {
             renderWorkflowComplete(summary);
             existingHooks?.onWorkflowComplete?.(result, summary);
           },
+          ...(existingHooks?.onTaskSpawnArgs !== undefined
+            ? {
+                onTaskSpawnArgs: (taskName: string, args: RunnerSpawnArgs) => {
+                  existingHooks.onTaskSpawnArgs?.(taskName as never, args);
+                },
+              }
+            : {}),
+          ...(existingHooks?.onTaskSpawnResult !== undefined
+            ? {
+                onTaskSpawnResult: (
+                  taskName: string,
+                  result: RunnerSpawnResult,
+                ) => {
+                  existingHooks.onTaskSpawnResult?.(taskName as never, result);
+                },
+              }
+            : {}),
         };
 
         const executor = new WorkflowExecutor({ ...workflow, hooks });

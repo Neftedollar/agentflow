@@ -340,7 +340,29 @@ export async function runNode<
         spawnArgs.permissions = permissions;
       }
 
+      // Fire onTaskSpawnArgs hook (best-effort — errors must not crash the task)
+      try {
+        hooks?.onTaskSpawnArgs?.(taskName, spawnArgs);
+      } catch (hookErr) {
+        console.warn(
+          "[agentflow] onTaskSpawnArgs hook error for task %s:",
+          taskName,
+          hookErr,
+        );
+      }
+
       const spawnResult = await runner.spawn(spawnArgs);
+
+      // Fire onTaskSpawnResult hook (best-effort — errors must not crash the task)
+      try {
+        hooks?.onTaskSpawnResult?.(taskName, spawnResult);
+      } catch (hookErr) {
+        console.warn(
+          "[agentflow] onTaskSpawnResult hook error for task %s:",
+          taskName,
+          hookErr,
+        );
+      }
 
       // Parse and validate output through Zod security boundary
       const output = parseAgentOutput(

@@ -213,6 +213,26 @@ export function createTestHarness(workflow: WorkflowDef): TestHarness {
         ...(workflowHooks?.onCheckpoint !== undefined
           ? { onCheckpoint: workflowHooks.onCheckpoint }
           : {}),
+        ...(workflowHooks?.onTaskSpawnArgs !== undefined
+          ? {
+              onTaskSpawnArgs: (
+                taskName: string,
+                args: import("@ageflow/core").RunnerSpawnArgs,
+              ) => {
+                workflowHooks.onTaskSpawnArgs?.(taskName as never, args);
+              },
+            }
+          : {}),
+        ...(workflowHooks?.onTaskSpawnResult !== undefined
+          ? {
+              onTaskSpawnResult: (
+                taskName: string,
+                result: import("@ageflow/core").RunnerSpawnResult,
+              ) => {
+                workflowHooks.onTaskSpawnResult?.(taskName as never, result);
+              },
+            }
+          : {}),
       };
 
       const wrappedWorkflow: WorkflowDef = { ...workflow, hooks: harnessHooks };

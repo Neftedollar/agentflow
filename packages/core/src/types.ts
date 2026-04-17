@@ -748,6 +748,28 @@ export interface WorkflowHooks<T extends TasksMap = TasksMap> {
   readonly getSystemPromptPrefix?: (
     taskName: keyof T & string,
   ) => string | undefined | Promise<string | undefined>;
+  /**
+   * Called just before a task's runner.spawn() is invoked. Receives the
+   * resolved spawn args (prompt, tools, MCP servers, session handle, etc.).
+   *
+   * Best-effort: errors thrown from this hook are caught, logged via
+   * console.warn, and do NOT interrupt the task.
+   */
+  readonly onTaskSpawnArgs?: (
+    taskName: keyof T & string,
+    args: RunnerSpawnArgs,
+  ) => void;
+  /**
+   * Called just after a task's runner.spawn() returns. Receives the result
+   * (stdout, sessionHandle, token counts, tool-call trail).
+   *
+   * Best-effort: errors thrown from this hook are caught, logged via
+   * console.warn, and do NOT interrupt the task.
+   */
+  readonly onTaskSpawnResult?: (
+    taskName: keyof T & string,
+    result: RunnerSpawnResult,
+  ) => void;
 }
 
 // ─── MCP exposure config ─────────────────────────────────────────────────────

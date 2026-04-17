@@ -1,4 +1,8 @@
-import type { WorkflowHooks } from "@ageflow/core";
+import type {
+  RunnerSpawnArgs,
+  RunnerSpawnResult,
+  WorkflowHooks,
+} from "@ageflow/core";
 import type { SkillStore, TraceStore } from "./interfaces.js";
 import type { ExecutionTrace, LearningConfig, TaskTrace } from "./types.js";
 import { DEFAULT_CONFIG } from "./types.js";
@@ -43,6 +47,10 @@ export function createLearningHooks(
   // #173: runner brand per task — populated in onTaskStart, read in onTaskComplete/onTaskError
   const taskRunnerMap = new Map<string, string>();
 
+  // #169: spawn args/result per task — populated by onTaskSpawnArgs/onTaskSpawnResult
+  const taskSpawnArgsMap = new Map<string, RunnerSpawnArgs>();
+  const taskSpawnResultMap = new Map<string, RunnerSpawnResult>();
+
   return {
     // #172: capture workflow input once at run start
     onWorkflowStart(input) {
@@ -57,6 +65,8 @@ export function createLearningHooks(
         skillCache.clear();
         resolvedSkillContent.clear();
         taskRunnerMap.clear();
+        taskSpawnArgsMap.clear();
+        taskSpawnResultMap.clear();
         isFirstTaskOfRun = false;
       }
 
@@ -81,6 +91,16 @@ export function createLearningHooks(
       }
     },
 
+    // #169: capture resolved spawn args before each runner.spawn() call
+    onTaskSpawnArgs(taskName, args) {
+      taskSpawnArgsMap.set(taskName, args);
+    },
+
+    // #169: capture raw spawn result after each runner.spawn() returns
+    onTaskSpawnResult(taskName, result) {
+      taskSpawnResultMap.set(taskName, result);
+    },
+
     async getSystemPromptPrefix(taskName) {
       // Await the pending promise so skills are never silently dropped.
       const pending = skillCache.get(taskName);
@@ -99,6 +119,10 @@ export function createLearningHooks(
       // #173: read runner brand captured in onTaskStart
       const agentRunner = taskRunnerMap.get(taskName) ?? "";
 
+      // #169: retrieve captured spawn args/result for this task
+      const spawnArgs = taskSpawnArgsMap.get(taskName);
+      const spawnResult = taskSpawnResultMap.get(taskName);
+
       taskTraces.push({
         taskName,
         agentRunner,
@@ -111,6 +135,8 @@ export function createLearningHooks(
         tokensOut: metrics.tokensOut,
         durationMs: metrics.latencyMs,
         retryCount: metrics.retries,
+        ...(spawnArgs !== undefined ? { spawnArgs } : {}),
+        ...(spawnResult !== undefined ? { spawnResult } : {}),
       });
 
       // Mark next onTaskStart as still part of this run

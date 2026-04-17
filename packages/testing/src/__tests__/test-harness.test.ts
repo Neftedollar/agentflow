@@ -382,4 +382,54 @@ describe("createTestHarness", () => {
     // Assert that the hook was called with the workflow input
     expect(receivedInput).toEqual(workflowInput);
   });
+
+  it("onTaskSpawnArgs hook is forwarded and receives task name + args", async () => {
+    const captured: { taskName: string; prompt: string }[] = [];
+
+    const workflow = defineWorkflow({
+      name: "test-spawn-args-hook",
+      tasks: {
+        analyze: { agent: analyzeAgent, input: { value: "src/" } },
+      },
+      hooks: {
+        onTaskSpawnArgs: (taskName, args) => {
+          captured.push({ taskName, prompt: args.prompt });
+        },
+      },
+    });
+
+    const harness = createTestHarness(workflow);
+    harness.mockAgent("analyze", { issues: [] });
+
+    await harness.run();
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0].taskName).toBe("analyze");
+    expect(typeof captured[0].prompt).toBe("string");
+  });
+
+  it("onTaskSpawnResult hook is forwarded and receives task name + result", async () => {
+    const captured: { taskName: string; stdout: string }[] = [];
+
+    const workflow = defineWorkflow({
+      name: "test-spawn-result-hook",
+      tasks: {
+        analyze: { agent: analyzeAgent, input: { value: "src/" } },
+      },
+      hooks: {
+        onTaskSpawnResult: (taskName, result) => {
+          captured.push({ taskName, stdout: result.stdout });
+        },
+      },
+    });
+
+    const harness = createTestHarness(workflow);
+    harness.mockAgent("analyze", { issues: ["a", "b"] });
+
+    await harness.run();
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0].taskName).toBe("analyze");
+    expect(JSON.parse(captured[0].stdout)).toEqual({ issues: ["a", "b"] });
+  });
 });
