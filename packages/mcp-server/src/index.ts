@@ -7,7 +7,19 @@ export type {
   McpMiddlewareRequest,
   McpHitlHandler,
   McpTransportConfig,
+  McpHttpTransportConfig,
 } from "./programmatic.js";
+
+// ─── HTTP transport (advanced / programmatic use) ────────────────────────────
+export { createHttpTransport } from "./http-transport.js";
+export type {
+  HttpTransportOptions,
+  HttpTransportHandle,
+  HttpTransportAuth,
+  HttpTransportCors,
+  HttpTransportRateLimit,
+  AuditEvent,
+} from "./http-transport.js";
 
 // ─── Internal single-workflow server (CLI + advanced use) ────────────────────
 export { createSingleWorkflowServer } from "./server.js";

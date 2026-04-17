@@ -16,6 +16,11 @@
 import type { WorkflowDef } from "@ageflow/core";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
+  type HttpTransportHandle,
+  type HttpTransportOptions,
+  createHttpTransport,
+} from "./http-transport.js";
+import {
   type McpServerHandle,
   type McpToolResult,
   createSingleWorkflowServer,
@@ -71,13 +76,41 @@ export type McpHitlHandler = (
 ) => Promise<boolean>;
 
 /**
+ * HTTP transport configuration object for `McpTransportConfig`.
+ *
+ * When `type` is `"http"`, `createMcpServer()` starts a Node.js HTTP server
+ * backed by `StreamableHTTPServerTransport` from the MCP SDK.
+ *
+ * Security defaults:
+ * - `host` defaults to `"127.0.0.1"` (loopback). Non-loopback hosts require
+ *   `auth: { type: "bearer", token: "..." }`.
+ * - CORS is disabled by default.
+ * - This transport speaks plain HTTP — use a reverse proxy for TLS.
+ *
+ * @example
+ * ```ts
+ * createMcpServer({
+ *   workflows: [myWorkflow],
+ *   transport: {
+ *     type: "http",
+ *     port: 3000,
+ *     auth: { type: "bearer", token: process.env.MCP_TOKEN! },
+ *   },
+ * });
+ * ```
+ */
+export interface McpHttpTransportConfig extends HttpTransportOptions {
+  readonly type: "http";
+}
+
+/**
  * Transport configuration for the MCP server.
  *
  * - `"stdio"` (default): connect to process stdin/stdout.
- * - HTTP transport is NOT yet implemented — tracked in #21.
+ * - `{ type: "http", port, ... }`: Streamable HTTP transport (#21).
  * - You may pass a raw `Transport` instance (e.g. InMemoryTransport for tests).
  */
-export type McpTransportConfig = "stdio" | Transport;
+export type McpTransportConfig = "stdio" | McpHttpTransportConfig | Transport;
 
 /**
  * Configuration for `createMcpServer()`.
@@ -132,8 +165,13 @@ export interface McpServerConfig {
   serverVersion?: string;
 
   /**
-   * Transport to use. Default: "stdio".
-   * HTTP transport is not yet implemented (#21).
+   * Transport to use. Default: `"stdio"`.
+   *
+   * - `"stdio"` — connects to `process.stdin`/`stdout` (default).
+   * - `{ type: "http", port, host?, path?, auth?, cors?, rateLimit?, auditLog? }` —
+   *   Streamable HTTP transport. Bind is loopback-only by default; non-loopback
+   *   requires `auth: { type: "bearer", token }`.
+   * - Raw `Transport` instance — useful for tests (`InMemoryTransport`).
    */
   transport?: McpTransportConfig;
 
@@ -151,7 +189,8 @@ export interface McpHandle {
    * Start listening on the configured transport.
    *
    * For stdio (default), this connects to process.stdin/stdout.
-   * Returns a promise that resolves when the transport is connected.
+   * For HTTP transport, this binds the TCP port.
+   * Returns a promise that resolves when the transport is ready.
    */
   listen(): Promise<void>;
 
@@ -159,6 +198,13 @@ export interface McpHandle {
    * Stop the server and release resources.
    */
   close(): Promise<void>;
+
+  /**
+   * When the server is configured with `transport: { type: "http", ... }`,
+   * this is the HTTP transport handle (exposes `.address()`, `.sessionCount`).
+   * `undefined` for stdio / raw Transport.
+   */
+  readonly httpHandle: HttpTransportHandle | undefined;
 
   /**
    * The underlying multi-workflow router handle (pre-middleware).
@@ -307,8 +353,18 @@ function applyMiddleware(
  * Return `true` from `onHitl` to approve, `false` to reject.
  *
  * ## Transport
- * Defaults to stdio. HTTP transport is not yet implemented (tracked in #21).
- * Pass a `Transport` instance (e.g. `InMemoryTransport`) for testing.
+ * Defaults to stdio. For remote / team deployment use HTTP transport:
+ * ```ts
+ * createMcpServer({
+ *   workflows: [myWorkflow],
+ *   transport: {
+ *     type: "http",
+ *     port: 3000,
+ *     auth: { type: "bearer", token: process.env.MCP_TOKEN! },
+ *   },
+ * });
+ * ```
+ * Pass a raw `Transport` instance (e.g. `InMemoryTransport`) for testing.
  *
  * ## CLI
  * The CLI `agentwf mcp serve workflow.ts` continues to work unchanged.
@@ -409,10 +465,13 @@ export function createMcpServer(config: McpServerConfig): McpHandle {
 
   const serverVersion = config.serverVersion ?? "0.1.0";
 
-  // SDK Server instance (lazily created on listen)
+  // SDK Server instance (for stdio / raw Transport path — lazily set on listen)
   let sdkServer:
     | import("@modelcontextprotocol/sdk/server/index.js").Server
     | undefined;
+
+  // HTTP transport handle (for the { type: "http", ... } path)
+  let httpHandle: HttpTransportHandle | undefined;
 
   const handle: McpHandle = {
     // Expose the raw router (pre-middleware) so tests can inject _testRunExecutor
@@ -422,24 +481,58 @@ export function createMcpServer(config: McpServerConfig): McpHandle {
     // Expose the middleware-wrapped handle for middleware verification in tests.
     _finalHandle: finalHandle,
 
-    async listen() {
-      const transportArg: Transport | undefined =
-        config.transport === undefined || config.transport === "stdio"
-          ? undefined
-          : (config.transport as Transport);
+    get httpHandle(): HttpTransportHandle | undefined {
+      return httpHandle;
+    },
 
-      sdkServer = await startStdioTransport({
-        serverName,
-        serverVersion,
-        handle: finalHandle,
-        stderr,
-        ...(transportArg !== undefined ? { transport: transportArg } : {}),
-      });
+    async listen() {
+      const transportConfig = config.transport;
+
+      if (
+        transportConfig !== undefined &&
+        typeof transportConfig === "object" &&
+        "type" in transportConfig &&
+        transportConfig.type === "http"
+      ) {
+        // HTTP transport path
+        const httpConfig = transportConfig as McpHttpTransportConfig;
+        const { type: _type, ...httpOpts } = httpConfig;
+        httpHandle = createHttpTransport(
+          finalHandle,
+          httpOpts,
+          serverName,
+          serverVersion,
+        );
+        await httpHandle.start();
+      } else {
+        // stdio / raw Transport path
+        const transportArg: Transport | undefined =
+          transportConfig === undefined || transportConfig === "stdio"
+            ? undefined
+            : (transportConfig as Transport);
+
+        sdkServer = await startStdioTransport({
+          serverName,
+          serverVersion,
+          handle: finalHandle,
+          stderr,
+          ...(transportArg !== undefined ? { transport: transportArg } : {}),
+        });
+      }
     },
 
     async close() {
       // Dispose per-workflow handles (stop background reapers etc.)
       finalHandle.dispose?.();
+
+      if (httpHandle !== undefined) {
+        try {
+          await httpHandle.stop();
+        } catch {
+          // ignore close errors during shutdown
+        }
+        httpHandle = undefined;
+      }
 
       if (sdkServer !== undefined) {
         try {

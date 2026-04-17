@@ -151,6 +151,141 @@ Response (still running):
               "arguments": { "jobId": "550e8400-e29b-41d4-a716-446655440000" } } }
 ```
 
+## HTTP transport
+
+By default `agentwf mcp serve` uses stdio (suitable for `claude_desktop_config.json`). For remote or team deployment, use the **Streamable HTTP transport** (MCP spec 2025-03-26).
+
+### CLI
+
+```bash
+# Loopback only — no auth required
+agentwf mcp serve ./workflow.ts --http --port 3000
+
+# Non-loopback — bearer auth is mandatory
+agentwf mcp serve ./workflow.ts --http --port 3000 \
+  --host 0.0.0.0 --auth-bearer "$MCP_TOKEN"
+```
+
+Flags:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--http` | — | Enable HTTP transport instead of stdio |
+| `--port <n>` | — | TCP port to bind (required with `--http`) |
+| `--host <addr>` | `127.0.0.1` | Bind address |
+| `--auth-bearer <token>` | — | Bearer token for auth (required for non-loopback hosts) |
+| `--trust-proxy` | `false` | Trust `X-Forwarded-For` header (see below) |
+| `--max-body-bytes <n>` | `1048576` | Maximum request body size in bytes (default: 1 MiB) |
+| `--max-sessions <n>` | `1000` | Maximum concurrent MCP sessions |
+
+### Programmatic API
+
+```ts
+import { createMcpServer } from "@ageflow/mcp-server";
+
+const server = createMcpServer({
+  workflows: [myWorkflow],
+  transport: {
+    type: "http",
+    port: 3000,
+    // host defaults to "127.0.0.1" (loopback-only)
+    auth: { type: "bearer", token: process.env.MCP_TOKEN! },
+    // Optional CORS for browser-based MCP clients:
+    cors: { origin: "https://app.example.com" },
+    // Optional in-memory rate limiter:
+    rateLimit: { windowMs: 60_000, max: 100 },
+    // Optional audit log:
+    auditLog: (event) => {
+      console.log(JSON.stringify(event));
+    },
+    // Set true ONLY when behind a trusted reverse proxy (nginx, Caddy, etc.).
+    // See "trustProxy guidance" below. Default: false.
+    trustProxy: false,
+    // Maximum request body bytes — default 1 MiB. Excess → 413.
+    maxBodyBytes: 1_048_576,
+    // Maximum concurrent sessions — default 1000. Excess → 429.
+    maxSessions: 1_000,
+  },
+});
+
+await server.listen();
+// server.httpHandle?.address() → { port: 3000, host: "127.0.0.1" }
+```
+
+### Security model
+
+| Property | Default | Notes |
+|----------|---------|-------|
+| Bind address | `127.0.0.1` | Loopback-only. Use `0.0.0.0` for network-wide access. |
+| Auth | `none` | Only valid on loopback. Non-loopback **requires** bearer auth. |
+| CORS | disabled | Enable only if you have browser-based MCP clients. |
+| TLS | none | **This transport speaks plain HTTP.** |
+| `trustProxy` | `false` | See below. |
+| `maxBodyBytes` | `1 MiB` | Requests larger than this are rejected with 413. |
+| `maxSessions` | `1000` | Excess `initialize` requests are rejected with 429. |
+
+#### `trustProxy` guidance
+
+By default the server determines the client IP from the TCP socket's remote address. Set `trustProxy: true` **only** when the server runs behind a reverse proxy you control (nginx, Caddy, etc.) that sets `X-Forwarded-For` to the real client IP.
+
+**Never set `trustProxy: true` on a server exposed directly to the internet.** Any client can forge the `X-Forwarded-For` header, which would let them bypass rate limiting and fake audit log entries.
+
+```
+# Safe: proxy you control sets X-Forwarded-For
+Internet → nginx (sets X-Forwarded-For) → ageflow mcp (trustProxy: true)
+
+# Unsafe: direct internet exposure
+Internet → ageflow mcp (trustProxy: true)  ← attacker can set any X-Forwarded-For
+```
+
+### TLS guidance
+
+The HTTP transport does not handle TLS. For production deployments on non-loopback interfaces, terminate TLS with a reverse proxy:
+
+**Caddy** (automatic certificates):
+```
+mcp.example.com {
+  reverse_proxy 127.0.0.1:3000
+}
+```
+
+**nginx:**
+```nginx
+server {
+  listen 443 ssl;
+  server_name mcp.example.com;
+  # ... TLS config ...
+  location /mcp {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_buffering off;   # required for SSE streaming
+  }
+}
+```
+
+### Audit log example
+
+```ts
+const server = createMcpServer({
+  workflows: [myWorkflow],
+  transport: {
+    type: "http",
+    port: 3000,
+    auth: { type: "bearer", token: process.env.MCP_TOKEN! },
+    auditLog: (event) => {
+      // event shape: { ts, remoteIp, toolName, method, authDenied, rateLimited }
+      if (event.authDenied) {
+        securityLogger.warn("MCP auth failure", { ip: event.remoteIp });
+      }
+      metricsClient.increment("mcp.request", {
+        method: event.method ?? "unknown",
+        tool: event.toolName ?? "none",
+      });
+    },
+  },
+});
+```
+
 ## Before you expose
 
 - Add HITL checkpoints for any destructive operations (`git push --force`, `rm -rf`, privileged Docker)

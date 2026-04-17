@@ -13,6 +13,10 @@
  *   --hitl <strategy>     HITL strategy: elicit | auto | fail (default: elicit)
  *   --name <name>         MCP server name (default: workflow name)
  *   --log-file <path>     write stderr log to a file
+ *   --http                use Streamable HTTP transport instead of stdio
+ *   --port <n>            HTTP port (required with --http)
+ *   --host <addr>         HTTP bind address (default: 127.0.0.1)
+ *   --auth-bearer <token> bearer token for HTTP auth (required for non-loopback --host)
  *
  * Uses raw argv parsing so the unit test can import parseMcpServeArgs directly.
  */
@@ -22,6 +26,7 @@ import path from "node:path";
 import type { WorkflowDef } from "@ageflow/core";
 import type { CliCeilings, HitlStrategy } from "@ageflow/mcp-server";
 import {
+  createHttpTransport,
   createSingleWorkflowServer,
   startStdioTransport,
 } from "@ageflow/mcp-server";
@@ -43,6 +48,14 @@ export interface McpServeArgs {
   readonly jobTtlMs?: number;
   /** Override default 1-hour checkpoint TTL in ms (--checkpoint-ttl <ms>). */
   readonly jobCheckpointTtlMs?: number;
+  /** Use Streamable HTTP transport instead of stdio (--http). */
+  readonly http?: boolean;
+  /** HTTP port (--port <n>, required with --http). */
+  readonly port?: number;
+  /** HTTP bind host (--host <addr>, default: 127.0.0.1). */
+  readonly httpHost?: string;
+  /** Bearer token for HTTP auth (--auth-bearer <token>). */
+  readonly authBearer?: string;
 }
 
 // ─── Raw argv parser ─────────────────────────────────────────────────────────
@@ -77,6 +90,10 @@ export function parseMcpServeArgs(argv: readonly string[]): McpServeArgs {
   let asyncMode: boolean | undefined = undefined;
   let jobTtlMs: number | undefined = undefined;
   let jobCheckpointTtlMs: number | undefined = undefined;
+  let httpMode: boolean | undefined = undefined;
+  let httpPort: number | undefined = undefined;
+  let httpHost: string | undefined = undefined;
+  let authBearer: string | undefined = undefined;
 
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
@@ -198,6 +215,43 @@ export function parseMcpServeArgs(argv: readonly string[]): McpServeArgs {
         break;
       }
 
+      case "--http":
+        httpMode = true;
+        break;
+
+      case "--port": {
+        const val = args[++i];
+        if (val === undefined || val.startsWith("-")) {
+          throw new Error("--port requires a numeric argument");
+        }
+        const n = Number(val);
+        if (!Number.isInteger(n) || n <= 0 || n > 65535) {
+          throw new Error(
+            `--port must be a valid port number (1-65535), got: ${val}`,
+          );
+        }
+        httpPort = n;
+        break;
+      }
+
+      case "--host": {
+        const val = args[++i];
+        if (val === undefined || val.startsWith("-")) {
+          throw new Error("--host requires a host argument");
+        }
+        httpHost = val;
+        break;
+      }
+
+      case "--auth-bearer": {
+        const val = args[++i];
+        if (val === undefined || val.startsWith("-")) {
+          throw new Error("--auth-bearer requires a token argument");
+        }
+        authBearer = val;
+        break;
+      }
+
       default:
         throw new Error(`Unknown flag: ${flag}`);
     }
@@ -208,6 +262,33 @@ export function parseMcpServeArgs(argv: readonly string[]): McpServeArgs {
     (jobTtlMs !== undefined || jobCheckpointTtlMs !== undefined)
   ) {
     throw new Error("--job-ttl / --checkpoint-ttl requires --async");
+  }
+
+  if (httpPort !== undefined && httpMode !== true) {
+    throw new Error("--port requires --http");
+  }
+  if (httpHost !== undefined && httpMode !== true) {
+    throw new Error("--host requires --http");
+  }
+  if (authBearer !== undefined && httpMode !== true) {
+    throw new Error("--auth-bearer requires --http");
+  }
+  if (httpMode === true && httpPort === undefined) {
+    throw new Error("--http requires --port <n>");
+  }
+
+  // Non-loopback host without auth is caught later in createHttpTransport, but
+  // emit a clear CLI error here so users see it immediately.
+  const loopbackHosts = new Set(["127.0.0.1", "::1", "localhost"]);
+  const resolvedHost = httpHost ?? "127.0.0.1";
+  if (
+    httpMode === true &&
+    !loopbackHosts.has(resolvedHost) &&
+    authBearer === undefined
+  ) {
+    throw new Error(
+      `HTTP transport on non-loopback host "${resolvedHost}" requires --auth-bearer; this prevents accidentally exposing your workflows to the public internet.`,
+    );
   }
 
   return {
@@ -221,6 +302,10 @@ export function parseMcpServeArgs(argv: readonly string[]): McpServeArgs {
     ...(asyncMode !== undefined ? { async: asyncMode } : {}),
     ...(jobTtlMs !== undefined ? { jobTtlMs } : {}),
     ...(jobCheckpointTtlMs !== undefined ? { jobCheckpointTtlMs } : {}),
+    ...(httpMode !== undefined ? { http: httpMode } : {}),
+    ...(httpPort !== undefined ? { port: httpPort } : {}),
+    ...(httpHost !== undefined ? { httpHost } : {}),
+    ...(authBearer !== undefined ? { authBearer } : {}),
   };
 }
 
@@ -298,28 +383,61 @@ async function runMcpServe(rawArgv: string[]): Promise<void> {
       : {}),
   });
 
-  // Start stdio transport
-  const server = await startStdioTransport({
-    serverName,
-    serverVersion: "0.1.0",
-    handle,
-    stderr,
-  });
+  if (parsed.http === true) {
+    // ── HTTP transport path ────────────────────────────────────────────────────
+    const httpHandle = createHttpTransport(
+      handle,
+      {
+        port: parsed.port as number,
+        ...(parsed.httpHost !== undefined ? { host: parsed.httpHost } : {}),
+        ...(parsed.authBearer !== undefined
+          ? { auth: { type: "bearer" as const, token: parsed.authBearer } }
+          : { auth: { type: "none" as const } }),
+        stderr,
+      },
+      serverName,
+      "0.1.0",
+    );
 
-  // Graceful shutdown: close SDK server, flush log file, exit cleanly.
-  const shutdown = async (): Promise<void> => {
-    try {
-      await server.close();
-    } catch {
-      // ignore close errors — we're shutting down anyway
-    }
-    logStream?.end();
-    process.exit(0);
-  };
+    await httpHandle.start();
 
-  process.on("SIGTERM", shutdown);
-  process.on("SIGINT", shutdown);
-  process.stdin.on("end", shutdown);
+    const shutdown = async (): Promise<void> => {
+      try {
+        await httpHandle.stop();
+      } catch {
+        // ignore
+      }
+      logStream?.end();
+      process.exit(0);
+    };
+
+    process.on("SIGTERM", shutdown);
+    process.on("SIGINT", shutdown);
+    // HTTP transport: don't exit on stdin end (no stdin in HTTP mode)
+  } else {
+    // ── stdio transport path (default) ────────────────────────────────────────
+    const server = await startStdioTransport({
+      serverName,
+      serverVersion: "0.1.0",
+      handle,
+      stderr,
+    });
+
+    // Graceful shutdown: close SDK server, flush log file, exit cleanly.
+    const shutdown = async (): Promise<void> => {
+      try {
+        await server.close();
+      } catch {
+        // ignore close errors — we're shutting down anyway
+      }
+      logStream?.end();
+      process.exit(0);
+    };
+
+    process.on("SIGTERM", shutdown);
+    process.on("SIGINT", shutdown);
+    process.stdin.on("end", shutdown);
+  }
 }
 
 // ─── Commander registration ───────────────────────────────────────────────────
@@ -332,7 +450,7 @@ export function registerMcpCommand(program: Command): void {
   mcp
     .command("serve <workflow> [args...]")
     .description(
-      "Expose a workflow as an MCP tool via stdio transport\n\n" +
+      "Expose a workflow as an MCP tool via stdio or HTTP transport\n\n" +
         "Flags (passed after the workflow file):\n" +
         "  --max-cost <n>         max cost in USD\n" +
         "  --no-max-cost          disable cost ceiling\n" +
@@ -345,7 +463,11 @@ export function registerMcpCommand(program: Command): void {
         "  --log-file <path>      log stderr to file\n" +
         "  --async                enable async job mode (5 extra tools)\n" +
         "  --job-ttl <ms>         job TTL in ms (default: 1800000, requires --async)\n" +
-        "  --checkpoint-ttl <ms>  checkpoint TTL in ms (default: 3600000, requires --async)",
+        "  --checkpoint-ttl <ms>  checkpoint TTL in ms (default: 3600000, requires --async)\n" +
+        "  --http                 use Streamable HTTP transport instead of stdio\n" +
+        "  --port <n>             HTTP port (required with --http)\n" +
+        "  --host <addr>          HTTP bind address (default: 127.0.0.1, requires --http)\n" +
+        "  --auth-bearer <token>  bearer token for HTTP auth (required for non-loopback --host)",
     )
     .allowUnknownOption(true) // raw flags parsed manually
     .action(async (workflowFile: string, extraArgs: string[]) => {
