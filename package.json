@@ -15,7 +15,8 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "lint": "biome check .",
-    "lint:fix": "biome check --write ."
+    "lint:fix": "biome check --write .",
+    "prepublish:check": "! grep -r 'workspace:' packages/*/package.json packages/runners/*/package.json"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0",

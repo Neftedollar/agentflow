@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/testing",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "description": "Test harness for ageflow workflows — mock agents, inspect call counts, no API calls needed",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/testing",
   "type": "module",
@@ -19,8 +19,8 @@
     "lint": "biome check src/"
   },
   "dependencies": {
-    "@ageflow/core": "workspace:*",
-    "@ageflow/executor": "workspace:*",
+    "@ageflow/core": "^0.3.2",
+    "@ageflow/executor": "^0.3.2",
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
   "devDependencies": {

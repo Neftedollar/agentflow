@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/learning-sqlite",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "description": "SQLite + sqlite-vec storage for @ageflow/learning",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/learning-sqlite",
   "type": "module",
@@ -16,7 +16,7 @@
     "lint": "biome check src/"
   },
   "dependencies": {
-    "@ageflow/learning": "workspace:*"
+    "@ageflow/learning": "^0.3.2"
   },
   "devDependencies": {
     "@types/bun": "^1.1.0",

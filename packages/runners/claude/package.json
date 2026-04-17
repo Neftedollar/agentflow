@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/runner-claude",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "description": "Claude CLI subprocess runner for ageflow",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/runners/claude",
   "type": "module",
@@ -19,7 +19,7 @@
     "lint": "biome check src/"
   },
   "dependencies": {
-    "@ageflow/core": "workspace:*"
+    "@ageflow/core": "^0.3.2"
   },
   "devDependencies": {
     "@types/bun": "^1.1.0",

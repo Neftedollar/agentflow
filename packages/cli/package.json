@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/cli",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "CLI for ageflow — agentwf run / validate / dry-run / init",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/cli",
   "type": "module",
@@ -22,11 +22,11 @@
     "lint": "biome check src/"
   },
   "dependencies": {
-    "@ageflow/core": "workspace:*",
-    "@ageflow/executor": "workspace:*",
-    "@ageflow/learning": "workspace:*",
-    "@ageflow/learning-sqlite": "workspace:*",
-    "@ageflow/mcp-server": "workspace:*",
+    "@ageflow/core": "^0.3.2",
+    "@ageflow/executor": "^0.3.2",
+    "@ageflow/learning": "^0.3.2",
+    "@ageflow/learning-sqlite": "^0.3.2",
+    "@ageflow/mcp-server": "^0.3.2",
     "chalk": "^5.3.0",
     "ora": "^8.0.0",
     "boxen": "^8.0.0",
