@@ -154,15 +154,15 @@ describe("runPreflight — DAG validation", () => {
     const workflow = defineWorkflow({
       name: "test",
       tasks: {
-        // biome-ignore lint/suspicious/noExplicitAny: intentional cycle for testing
         a: {
           agent: claudeAgent,
+          // biome-ignore lint/suspicious/noExplicitAny: intentional cycle for testing
           dependsOn: ["b"] as any,
           input: { text: "a" },
         },
-        // biome-ignore lint/suspicious/noExplicitAny: intentional cycle for testing
         b: {
           agent: claudeAgent,
+          // biome-ignore lint/suspicious/noExplicitAny: intentional cycle for testing
           dependsOn: ["a"] as any,
           input: { text: "b" },
         },
@@ -180,9 +180,9 @@ describe("runPreflight — DAG validation", () => {
     const workflow = defineWorkflow({
       name: "test",
       tasks: {
-        // biome-ignore lint/suspicious/noExplicitAny: intentional unresolved dep for testing
         a: {
           agent: claudeAgent,
+          // biome-ignore lint/suspicious/noExplicitAny: intentional unresolved dep for testing
           dependsOn: ["nonexistent"] as any,
           input: { text: "a" },
         },
@@ -277,7 +277,6 @@ describe("runPreflight — cross-provider session warning", () => {
     const sess = sessionToken("shared-ctx", "claude");
 
     // Force codex agent to use the same session token (bypassing phantom brand at runtime)
-    // biome-ignore lint/suspicious/noExplicitAny: intentional cross-provider for testing
     const workflow = defineWorkflow({
       name: "test",
       tasks: {

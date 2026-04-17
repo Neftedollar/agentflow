@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ErrorCode, McpServerError } from "../errors.js";
 import { buildMcpHooks } from "../hitl-bridge.js";
 
+// biome-ignore lint/suspicious/noExplicitAny: test helper accepts arbitrary mock response shapes
 const mkConn = (supportsElicit: boolean, elicitResponse?: any) => ({
   supports: (cap: string) => cap === "elicitation" && supportsElicit,
   elicit: vi

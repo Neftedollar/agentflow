@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ErrorCode, McpServerError } from "../errors.js";
 import { buildToolDefinition } from "../tool-registry.js";
 
+// biome-ignore lint/suspicious/noExplicitAny: test helper accepts arbitrary mcp config shapes
 const mkWorkflow = (mcp?: any): WorkflowDef =>
   ({
     name: "test-flow",
@@ -17,8 +18,10 @@ const mkWorkflow = (mcp?: any): WorkflowDef =>
           output: z.object({ y: z.number() }),
           prompt: () => "",
         },
+        // biome-ignore lint/suspicious/noExplicitAny: casting partial task config for test fixture
       } as any,
     },
+    // biome-ignore lint/suspicious/noExplicitAny: casting partial workflow config for test fixture
   }) as any;
 
 describe("buildToolDefinition", () => {
