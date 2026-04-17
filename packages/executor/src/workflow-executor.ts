@@ -461,11 +461,12 @@ export class WorkflowExecutor<T extends TasksMap> {
             } catch (err) {
               // Fire onTaskError hook
               if (err instanceof Error) {
-                const latencyMs = Date.now() - taskStart;
+                const attemptCount =
+                  err instanceof NodeMaxRetriesError ? err.attempts.length : 1;
                 hooks?.onTaskError?.(
                   taskName as keyof T & string,
                   err,
-                  latencyMs,
+                  attemptCount,
                 );
               }
               throw err;
@@ -561,6 +562,20 @@ export class WorkflowExecutor<T extends TasksMap> {
               } catch (err) {
                 const e = err instanceof Error ? err : new Error(String(err));
                 hooks?.onTaskError?.(taskName as keyof T & string, e, 0);
+                push({
+                  type: "task:error",
+                  runId,
+                  workflowName,
+                  timestamp: Date.now(),
+                  taskName,
+                  error: {
+                    name: e.name,
+                    message: e.message,
+                    ...(e.stack !== undefined ? { stack: e.stack } : {}),
+                  },
+                  attempt: 0,
+                  terminal: true,
+                });
                 throw e;
               }
               if (shouldSkip) {
@@ -776,13 +791,15 @@ export class WorkflowExecutor<T extends TasksMap> {
               });
             } catch (err) {
               const e = err instanceof Error ? err : new Error(String(err));
-              // Fire onTaskError hook
-              const latencyMs = Date.now() - taskStart;
-              hooks?.onTaskError?.(taskName as keyof T & string, e, latencyMs);
-
               // Derive actual attempt count from NodeMaxRetriesError when available
               const attemptCount =
                 err instanceof NodeMaxRetriesError ? err.attempts.length : 1;
+              // Fire onTaskError hook
+              hooks?.onTaskError?.(
+                taskName as keyof T & string,
+                e,
+                attemptCount,
+              );
 
               // Emit task:error event (terminal: true — retries exhausted or non-retryable)
               push({

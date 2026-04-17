@@ -494,6 +494,110 @@ describe("TaskDef.skipIf (stream path)", () => {
   });
 });
 
+describe("#130: skipIf throw emits task:error in stream", () => {
+  it("emits task:error when skipIf throws — not just fires hook", async () => {
+    const wfSkipThrow = defineWorkflow({
+      name: "skip-throw",
+      tasks: {
+        a: {
+          agent,
+          input: {},
+          skipIf: () => {
+            throw new Error("skipIf predicate crash");
+          },
+        },
+      },
+    });
+
+    const executor = new WorkflowExecutor(wfSkipThrow);
+    const events: WorkflowEvent[] = [];
+    try {
+      for await (const ev of executor.stream({})) {
+        events.push(ev);
+      }
+    } catch {
+      // expected — executor rethrows after emitting workflow:error
+    }
+
+    // task:error must be present (Bug #130: was missing before fix)
+    const taskErr = events.find((e) => e.type === "task:error");
+    expect(taskErr).toBeDefined();
+    if (taskErr?.type === "task:error") {
+      expect(taskErr.taskName).toBe("a");
+      expect(taskErr.terminal).toBe(true);
+      expect(taskErr.attempt).toBe(0);
+      expect(taskErr.error.message).toBe("skipIf predicate crash");
+    }
+    // workflow:error must follow
+    expect(events[events.length - 1]?.type).toBe("workflow:error");
+  });
+});
+
+describe("#131: onTaskError receives attempt count, not latencyMs", () => {
+  it("passes attempt=1 to onTaskError for a single non-retryable failure", async () => {
+    const errorArgs: Array<[string, Error, number]> = [];
+    const wfErr = defineWorkflow({
+      name: "err-hook",
+      tasks: {
+        a: { agent, input: {} },
+      },
+      hooks: {
+        onTaskError: (taskName, error, attempt) => {
+          errorArgs.push([taskName, error, attempt]);
+        },
+      },
+    });
+
+    // Override runner to fail once (non-retryable via 0 max retries)
+    const failRunner: Runner = {
+      validate: async () => ({ ok: true }),
+      spawn: async () => {
+        throw new Error("task failure");
+      },
+    };
+    registerRunner("fail131", failRunner);
+    try {
+      const agentFail = defineAgent({
+        runner: "fail131",
+        input: z.object({}),
+        output: z.object({ x: z.string() }),
+        prompt: () => "p",
+        // max:1 means 1 attempt total — attempt 0 runs, fails, attempts.length === 1
+        retry: { max: 1, on: ["subprocess_error"], backoff: "fixed" },
+      });
+      const wfFail = defineWorkflow({
+        name: "fail131-wf",
+        tasks: { t: { agent: agentFail, input: {} } },
+        hooks: {
+          onTaskError: (taskName, error, attempt) => {
+            errorArgs.push([taskName, error, attempt]);
+          },
+        },
+      });
+      const ex = new WorkflowExecutor(wfFail);
+      try {
+        for await (const _ev of ex.stream({})) {
+          // drain
+        }
+      } catch {
+        // expected
+      }
+      // attempt must be a small integer (1), NOT a large latency value (e.g. 50+)
+      expect(errorArgs).toHaveLength(1);
+      const firstCall = errorArgs[0];
+      expect(firstCall).toBeDefined();
+      const attempt = firstCall?.[2];
+      // A latencyMs value would be >> 10 in almost every scenario;
+      // attempt count is always 1 for a single-attempt failure with max:0.
+      expect(attempt).toBe(1);
+      // Sanity: must not look like a latency value
+      expect(attempt).toBeLessThan(10);
+    } finally {
+      unregisterRunner("fail131");
+    }
+  });
+});
+
 describe("run() is a drain over stream()", () => {
   it("produces the same WorkflowResult as draining stream()", async () => {
     const executor = new WorkflowExecutor(wf);

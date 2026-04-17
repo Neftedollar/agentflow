@@ -247,7 +247,7 @@ export function unregisterRunner(name: string): void {
 export async function shutdownAllRunners(): Promise<void> {
   const runners = getRunners();
   const results = await Promise.allSettled(
-    [...runners.values()].map((r) => r.shutdown?.()),
+    [...runners.values()].map(async (r) => r.shutdown?.()),
   );
   for (const r of results) {
     if (r.status === "rejected") {

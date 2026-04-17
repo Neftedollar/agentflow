@@ -420,4 +420,27 @@ describe("shutdownAllRunners", () => {
   it("resolves immediately when no runners are registered", async () => {
     await expect(shutdownAllRunners()).resolves.toBeUndefined();
   });
+
+  it("#138: swallows sync throw from shutdown() — does not propagate", async () => {
+    // If shutdown() throws synchronously (not returning a rejected promise),
+    // the async wrapper converts the sync throw to a rejected promise so
+    // Promise.allSettled can catch it. The overall call must still resolve.
+    const syncThrowShutdown = vi.fn(() => {
+      throw new Error("sync shutdown crash");
+    });
+
+    registerRunner(RUNNER_A, {
+      validate: async () => ({ ok: true }),
+      spawn: async () => ({
+        stdout: "{}",
+        sessionHandle: "",
+        tokensIn: 0,
+        tokensOut: 0,
+      }),
+      shutdown: syncThrowShutdown,
+    });
+
+    await expect(shutdownAllRunners()).resolves.toBeUndefined();
+    expect(syncThrowShutdown).toHaveBeenCalledOnce();
+  });
 });

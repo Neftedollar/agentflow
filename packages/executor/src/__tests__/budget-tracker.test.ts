@@ -245,5 +245,22 @@ describe("BudgetTracker", () => {
         ),
       ).resolves.toBeUndefined();
     });
+
+    it("#133: fires callback only once — subsequent calls after first crossing are no-ops", async () => {
+      // onExceeded must fire exactly once, even if fireOnExceeded is called
+      // after every task once the threshold is crossed.
+      const tracker = new BudgetTracker();
+      tracker.addCost("claude-sonnet-4-6", 1_000_000, 1_000_000); // $18.00 — over limit
+
+      const onExceeded = vi.fn();
+      const config = { maxCost: 5.0, onExceed: "warn" as const, onExceeded };
+
+      await tracker.fireOnExceeded(config, "task-1", "wf");
+      await tracker.fireOnExceeded(config, "task-2", "wf");
+      await tracker.fireOnExceeded(config, "task-3", "wf");
+
+      // Must have fired exactly once despite three calls after threshold
+      expect(onExceeded).toHaveBeenCalledOnce();
+    });
   });
 });

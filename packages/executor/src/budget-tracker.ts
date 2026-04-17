@@ -18,6 +18,7 @@ const MODEL_PRICES: Record<
 
 export class BudgetTracker {
   private totalCost = 0;
+  private _exceededNotified = false;
 
   costFor(model: string, tokensIn: number, tokensOut: number): number {
     const prices =
@@ -68,6 +69,8 @@ export class BudgetTracker {
   ): Promise<void> {
     if (!config.onExceeded) return;
     if (!this.exceeded(config)) return;
+    if (this._exceededNotified) return;
+    this._exceededNotified = true;
 
     const info: BudgetExceededInfo = {
       currentCostUsd: this.totalCost,
