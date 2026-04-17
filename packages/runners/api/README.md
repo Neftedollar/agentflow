@@ -297,20 +297,20 @@ are expensive to initialize.
 
 ### `runner.shutdown()` — draining the pool
 
-Call `runner.shutdown()` after all tasks are complete to gracefully stop pooled
-servers. **`runner.shutdown()` must be called manually by the caller** — the
-workflow executor does not call it automatically yet (auto-wiring is tracked in
-issue #75). Forgetting to call it will leak MCP server subprocesses.
+`runner.shutdown()` is **process-scoped** — it is called automatically by the
+AgentFlow CLI (`agentwf run`) and the server's `close()` method at process exit.
+You do not need to call it manually when using those entry points.
+
+If you are using `ApiRunner` directly (outside the CLI or server), call
+`shutdownAllRunners()` from `@ageflow/core` when your process exits:
 
 ```ts
-const runner = new ApiRunner({ baseUrl: "...", apiKey: "..." });
+import { shutdownAllRunners } from "@ageflow/core";
 
-try {
-  await runner.spawn({ ... });
-  await runner.spawn({ ... });
-} finally {
-  await runner.shutdown(); // stops all reusePerRunner servers
-}
+process.on("SIGTERM", async () => {
+  await shutdownAllRunners();
+  process.exit(0);
+});
 ```
 
 ## API reference

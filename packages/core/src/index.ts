@@ -66,6 +66,7 @@ export {
   resolveAgentDef,
   sessionToken,
   shareSessionWith,
+  shutdownAllRunners,
   unregisterRunner,
 } from "./builders.js";
 

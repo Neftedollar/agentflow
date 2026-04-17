@@ -43,7 +43,7 @@ describe("createRunner().stream", () => {
     expect(events[events.length - 1]).toMatchObject({
       type: "workflow:complete",
     });
-    runner.close();
+    await runner.close();
   });
 
   it("registers the run and evicts on terminal + TTL", async () => {
@@ -54,6 +54,6 @@ describe("createRunner().stream", () => {
     expect(runner.list().length).toBeLessThanOrEqual(1);
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(runner.list().length).toBe(0);
-    runner.close();
+    await runner.close();
   });
 });

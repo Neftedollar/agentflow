@@ -55,6 +55,6 @@ export interface Runner {
   cancel(runId: string): void;
   get(runId: string): RunHandle | undefined;
   list(): readonly RunHandle[];
-  /** Stop the reaper (tests). Idempotent. */
-  close(): void;
+  /** Stop the reaper and shut down all registered runners. Process-level teardown. */
+  close(): Promise<void>;
 }

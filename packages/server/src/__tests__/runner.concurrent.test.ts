@@ -108,7 +108,7 @@ describe("concurrent fire(): two runs complete independently", () => {
     expect(allIds).toContain(handleA.runId);
     expect(allIds).toContain(handleB.runId);
 
-    runner.close();
+    await runner.close();
   });
 });
 
@@ -211,7 +211,7 @@ describe("concurrent fire(): slow+fast — fast finishes first, slow completes c
       )?.result?.outputs.t,
     ).toMatchObject({ tag: "slow" });
 
-    runner.close();
+    await runner.close();
   }, 10_000);
 });
 
@@ -308,6 +308,6 @@ describe("concurrent fire(): event isolation between workflows", () => {
     expect(eventsA.length).toBeGreaterThan(0);
     expect(eventsB.length).toBeGreaterThan(0);
 
-    runner.close();
+    await runner.close();
   });
 });

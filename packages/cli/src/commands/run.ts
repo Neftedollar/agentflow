@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { TaskMetrics, WorkflowDef, WorkflowMetrics } from "@ageflow/core";
+import { shutdownAllRunners } from "@ageflow/core";
 import { WorkflowExecutor } from "@ageflow/executor";
 import type { Command } from "commander";
 import {
@@ -71,7 +72,11 @@ export function registerRunCommand(program: Command): void {
         };
 
         const executor = new WorkflowExecutor({ ...workflow, hooks });
-        await executor.run();
+        try {
+          await executor.run();
+        } finally {
+          await shutdownAllRunners();
+        }
       } catch (err) {
         renderError(err instanceof Error ? err.message : String(err));
         process.exit(1);

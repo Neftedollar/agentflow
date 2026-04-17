@@ -52,7 +52,7 @@ describe("cancel", () => {
       while (!step.done) step = await gen.next();
     } catch {}
     expect(runner.get(runId)?.state).toBe("cancelled");
-    runner.close();
+    await runner.close();
   });
 
   it("options.signal aborts stream() mid-flight", async () => {
@@ -68,13 +68,13 @@ describe("cancel", () => {
       while (!step.done) step = await gen.next();
     } catch {}
     expect(runner.get(runId)?.state).toBe("cancelled");
-    runner.close();
+    await runner.close();
   });
 
-  it("cancel(unknown) is idempotent (no throw)", () => {
+  it("cancel(unknown) is idempotent (no throw)", async () => {
     const runner = createRunner();
     expect(() => runner.cancel("nope")).not.toThrow();
-    runner.close();
+    await runner.close();
   });
 
   it("P2-4: cancel() is no-op on already-done run (does not overwrite state)", async () => {
@@ -86,6 +86,6 @@ describe("cancel", () => {
     // Run is now done — cancel() must not overwrite state
     runner.cancel(handle.runId);
     expect(runner.get(handle.runId)?.state).toBe("done");
-    runner.close();
+    await runner.close();
   });
 });

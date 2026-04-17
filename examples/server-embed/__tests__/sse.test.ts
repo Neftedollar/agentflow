@@ -45,7 +45,7 @@ describe("server-embed demo", () => {
     expect(types[0]).toBe("workflow:start");
     expect(types).toContain("checkpoint");
     expect(types[types.length - 1]).toBe("workflow:complete");
-    runner.close();
+    await runner.close();
   });
 
   it("streams events and supports resume-false (rejected checkpoint)", async () => {
@@ -66,7 +66,7 @@ describe("server-embed demo", () => {
     }
     expect(events).toContain("checkpoint");
     expect(events[events.length - 1]).toBe("workflow:error");
-    runner.close();
+    await runner.close();
   });
 });
 
@@ -118,7 +118,7 @@ describe("P2-5: resume endpoint — malformed JSON returns 400", () => {
     expect(res.status).toBe(400);
 
     await new Promise<void>((resolve) => srv.close(() => resolve()));
-    runner.close();
+    await runner.close();
   });
 });
 
@@ -140,6 +140,6 @@ describe("P2-6: stream — checkpoint does not break generator", () => {
 
     expect(types).toContain("checkpoint");
     expect(types[types.length - 1]).toBe("workflow:complete");
-    runner.close();
+    await runner.close();
   });
 });

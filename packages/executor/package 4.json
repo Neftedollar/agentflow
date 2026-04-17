@@ -1,13 +1,10 @@
 {
-  "name": "@ageflow/cli",
-  "version": "0.4.0",
-  "description": "CLI for ageflow — agentwf run / validate / dry-run / init",
-  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/cli",
+  "name": "@ageflow/executor",
+  "version": "0.3.1",
+  "description": "DAG executor, loop runner, session manager, HITL, budget tracker, and preflight checks for ageflow",
+  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/executor",
   "type": "module",
   "private": false,
-  "bin": {
-    "agentwf": "./dist/bin.js"
-  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -22,15 +19,8 @@
     "lint": "biome check src/"
   },
   "dependencies": {
-    "@ageflow/core": "^0.3.2",
-    "@ageflow/executor": "^0.3.2",
-    "@ageflow/learning": "^0.3.2",
-    "@ageflow/learning-sqlite": "^0.3.2",
-    "@ageflow/mcp-server": "^0.3.2",
-    "chalk": "^5.3.0",
-    "ora": "^8.0.0",
-    "boxen": "^8.0.0",
-    "commander": "^12.0.0"
+    "@ageflow/core": "workspace:*",
+    "zod-to-json-schema": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

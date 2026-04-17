@@ -185,9 +185,10 @@ export interface Runner {
   validate(): Promise<{ ok: boolean; version?: string; error?: string }>;
   spawn(args: RunnerSpawnArgs): Promise<RunnerSpawnResult>;
   /**
-   * Optional cleanup hook. Runners holding long-lived resources (e.g. the
-   * API runner's per-runner MCP pool) drain them here. Invoked by the
-   * workflow executor on completion / abort.
+   * Clean up long-lived resources (MCP subprocess pools, connections).
+   * Process-scoped — called by CLI/server at exit, NOT per-workflow-run.
+   * Idempotent. Safe to call multiple times.
+   * Concurrent-safe: never called while workflows are in-flight.
    */
   shutdown?(): Promise<void>;
 }

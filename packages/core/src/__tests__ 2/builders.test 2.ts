@@ -4,12 +4,9 @@ import {
   defineAgent,
   defineWorkflow,
   loop,
-  registerRunner,
   resolveAgentDef,
   sessionToken,
   shareSessionWith,
-  shutdownAllRunners,
-  unregisterRunner,
 } from "../builders.js";
 
 describe("defineAgent", () => {
@@ -123,40 +120,6 @@ describe("defineAgent", () => {
         mcps: [{ server: "my-mcp-server.v2" }],
       }),
     ).not.toThrow();
-  });
-});
-
-describe("resolveAgentDef — mcps migration shim", () => {
-  it("migrates deprecated mcps field to mcp.servers", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const def = defineAgent({
-      runner: "claude",
-      input: z.object({}),
-      output: z.object({ ok: z.boolean() }),
-      prompt: () => "x",
-      mcps: [{ server: "filesystem", args: ["/tmp"], autoStart: true }],
-    });
-    const resolved = resolveAgentDef(def);
-    expect(resolved.mcp?.servers).toHaveLength(1);
-    expect(resolved.mcp?.servers?.[0]?.name).toBe("filesystem");
-    expect(resolved.mcp?.servers?.[0]?.args).toEqual(["/tmp"]);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("mcps"));
-    warnSpy.mockRestore();
-  });
-
-  it("new mcp.servers wins over mcps when both set", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const def = defineAgent({
-      runner: "claude",
-      input: z.object({}),
-      output: z.object({ ok: z.boolean() }),
-      prompt: () => "x",
-      mcp: { servers: [{ name: "new", command: "npx" }] },
-      mcps: [{ server: "old" }],
-    });
-    const resolved = resolveAgentDef(def);
-    expect(resolved.mcp?.servers?.[0]?.name).toBe("new");
-    warnSpy.mockRestore();
   });
 });
 
@@ -328,96 +291,5 @@ describe("loop", () => {
     expect(loopDef.kind).toBe("loop");
     expect(loopDef.max).toBe(5);
     expect(loopDef.context).toBe("persistent");
-  });
-});
-
-describe("shutdownAllRunners", () => {
-  const RUNNER_A = "__test_shutdown_a__";
-  const RUNNER_B = "__test_shutdown_b__";
-
-  afterEach(() => {
-    unregisterRunner(RUNNER_A);
-    unregisterRunner(RUNNER_B);
-  });
-
-  it("calls shutdown() on all registered runners that implement it", async () => {
-    const shutdownA = vi.fn().mockResolvedValue(undefined);
-    const shutdownB = vi.fn().mockResolvedValue(undefined);
-
-    registerRunner(RUNNER_A, {
-      validate: async () => ({ ok: true }),
-      spawn: async () => ({
-        stdout: "{}",
-        sessionHandle: "",
-        tokensIn: 0,
-        tokensOut: 0,
-      }),
-      shutdown: shutdownA,
-    });
-    registerRunner(RUNNER_B, {
-      validate: async () => ({ ok: true }),
-      spawn: async () => ({
-        stdout: "{}",
-        sessionHandle: "",
-        tokensIn: 0,
-        tokensOut: 0,
-      }),
-      shutdown: shutdownB,
-    });
-
-    await shutdownAllRunners();
-
-    expect(shutdownA).toHaveBeenCalledOnce();
-    expect(shutdownB).toHaveBeenCalledOnce();
-  });
-
-  it("does not throw for runners without shutdown()", async () => {
-    registerRunner(RUNNER_A, {
-      validate: async () => ({ ok: true }),
-      spawn: async () => ({
-        stdout: "{}",
-        sessionHandle: "",
-        tokensIn: 0,
-        tokensOut: 0,
-      }),
-      // no shutdown
-    });
-
-    await expect(shutdownAllRunners()).resolves.toBeUndefined();
-  });
-
-  it("swallows individual runner shutdown errors (allSettled)", async () => {
-    const shutdownA = vi.fn().mockRejectedValue(new Error("cleanup failure"));
-    const shutdownB = vi.fn().mockResolvedValue(undefined);
-
-    registerRunner(RUNNER_A, {
-      validate: async () => ({ ok: true }),
-      spawn: async () => ({
-        stdout: "{}",
-        sessionHandle: "",
-        tokensIn: 0,
-        tokensOut: 0,
-      }),
-      shutdown: shutdownA,
-    });
-    registerRunner(RUNNER_B, {
-      validate: async () => ({ ok: true }),
-      spawn: async () => ({
-        stdout: "{}",
-        sessionHandle: "",
-        tokensIn: 0,
-        tokensOut: 0,
-      }),
-      shutdown: shutdownB,
-    });
-
-    // Must not throw even though runner A's shutdown rejects
-    await expect(shutdownAllRunners()).resolves.toBeUndefined();
-    // Runner B was still called despite runner A failing
-    expect(shutdownB).toHaveBeenCalledOnce();
-  });
-
-  it("resolves immediately when no runners are registered", async () => {
-    await expect(shutdownAllRunners()).resolves.toBeUndefined();
   });
 });

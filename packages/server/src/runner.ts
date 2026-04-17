@@ -5,6 +5,7 @@ import type {
   WorkflowDef,
   WorkflowEvent,
 } from "@ageflow/core";
+import { shutdownAllRunners } from "@ageflow/core";
 import { WorkflowExecutor, type WorkflowResult } from "@ageflow/executor";
 import { InvalidRunStateError, RunNotFoundError } from "./errors.js";
 import { createDeferred } from "./run-handle.js";
@@ -205,6 +206,9 @@ export function createRunner(config: RunnerConfig = {}): Runner {
 
     get: (runId) => registry.get(runId),
     list: () => registry.list(),
-    close: () => registry.stop(),
+    async close(): Promise<void> {
+      registry.stop();
+      await shutdownAllRunners();
+    },
   };
 }

@@ -50,7 +50,7 @@ describe("fire()", () => {
     expect(
       events.some((e) => (e as { type: string }).type === "workflow:complete"),
     ).toBe(true);
-    runner.close();
+    await runner.close();
   });
 
   it("invokes onError when the workflow fails", async () => {
@@ -78,7 +78,7 @@ describe("fire()", () => {
         runner.fire(wfb, {}, { onError: resolve });
       });
       expect(err.message).toMatch(/boom/);
-      runner.close();
+      await runner.close();
     } finally {
       unregisterRunner("boom2");
     }
@@ -100,15 +100,15 @@ describe("fire()", () => {
       );
     });
     await done;
-    runner.close();
+    await runner.close();
   });
 
-  it("returns a RunHandle synchronously with state=running", () => {
+  it("returns a RunHandle synchronously with state=running", async () => {
     const runner = createRunner();
     const handle = runner.fire(wf, {});
     expect(handle.runId).toBeDefined();
     expect(handle.state).toBe("running");
     expect(handle.workflowName).toBe("fire-wf");
-    runner.close();
+    await runner.close();
   });
 });

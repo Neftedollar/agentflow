@@ -34,7 +34,7 @@ describe("createRunner().run", () => {
     const runner = createRunner();
     const r = await runner.run(wf, {});
     expect(r.outputs.t).toEqual({ ok: true });
-    runner.close();
+    await runner.close();
   });
 
   it("auto-rejects checkpoints when onCheckpoint is omitted", async () => {
@@ -51,6 +51,6 @@ describe("createRunner().run", () => {
     });
     const runner = createRunner();
     await expect(runner.run(gated, {})).rejects.toThrow();
-    runner.close();
+    await runner.close();
   });
 });

@@ -69,7 +69,7 @@ describe("async HITL", () => {
       next = await gen.next();
     }
     expect(events.at(-1)?.type).toBe("workflow:complete");
-    runner.close();
+    await runner.close();
   });
 
   it("resume(false) fails with workflow:error", async () => {
@@ -96,7 +96,7 @@ describe("async HITL", () => {
       // driver throws — acceptable
     }
     expect(events.at(-1)?.type).toBe("workflow:error");
-    runner.close();
+    await runner.close();
   });
 
   it("auto-rejects after checkpointTtlMs", async () => {
@@ -120,14 +120,14 @@ describe("async HITL", () => {
       }
     } catch {}
     expect(events.at(-1)?.type).toBe("workflow:error");
-    runner.close();
+    await runner.close();
     vi.useRealTimers();
   });
 
-  it("resume() on unknown runId throws RunNotFoundError", () => {
+  it("resume() on unknown runId throws RunNotFoundError", async () => {
     const runner = createRunner();
     expect(() => runner.resume("does-not-exist", true)).toThrow(/not found/i);
-    runner.close();
+    await runner.close();
   });
 
   it("resume() on running run throws InvalidRunStateError", async () => {
@@ -145,6 +145,6 @@ describe("async HITL", () => {
     await runner.run(wfp, {});
     const id = runner.list()[0]?.runId;
     if (id) expect(() => runner.resume(id, true)).toThrow();
-    runner.close();
+    await runner.close();
   });
 });
