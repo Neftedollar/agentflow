@@ -168,12 +168,15 @@ agentwf mcp serve ./workflow.ts --http --port 3000 \
 
 Flags:
 
-| Flag | Description |
-|------|-------------|
-| `--http` | Enable HTTP transport instead of stdio |
-| `--port <n>` | TCP port to bind (required with `--http`) |
-| `--host <addr>` | Bind address (default: `127.0.0.1`) |
-| `--auth-bearer <token>` | Bearer token for auth (required for non-loopback hosts) |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--http` | — | Enable HTTP transport instead of stdio |
+| `--port <n>` | — | TCP port to bind (required with `--http`) |
+| `--host <addr>` | `127.0.0.1` | Bind address |
+| `--auth-bearer <token>` | — | Bearer token for auth (required for non-loopback hosts) |
+| `--trust-proxy` | `false` | Trust `X-Forwarded-For` header (see below) |
+| `--max-body-bytes <n>` | `1048576` | Maximum request body size in bytes (default: 1 MiB) |
+| `--max-sessions <n>` | `1000` | Maximum concurrent MCP sessions |
 
 ### Programmatic API
 
@@ -195,6 +198,13 @@ const server = createMcpServer({
     auditLog: (event) => {
       console.log(JSON.stringify(event));
     },
+    // Set true ONLY when behind a trusted reverse proxy (nginx, Caddy, etc.).
+    // See "trustProxy guidance" below. Default: false.
+    trustProxy: false,
+    // Maximum request body bytes — default 1 MiB. Excess → 413.
+    maxBodyBytes: 1_048_576,
+    // Maximum concurrent sessions — default 1000. Excess → 429.
+    maxSessions: 1_000,
   },
 });
 
@@ -210,6 +220,23 @@ await server.listen();
 | Auth | `none` | Only valid on loopback. Non-loopback **requires** bearer auth. |
 | CORS | disabled | Enable only if you have browser-based MCP clients. |
 | TLS | none | **This transport speaks plain HTTP.** |
+| `trustProxy` | `false` | See below. |
+| `maxBodyBytes` | `1 MiB` | Requests larger than this are rejected with 413. |
+| `maxSessions` | `1000` | Excess `initialize` requests are rejected with 429. |
+
+#### `trustProxy` guidance
+
+By default the server determines the client IP from the TCP socket's remote address. Set `trustProxy: true` **only** when the server runs behind a reverse proxy you control (nginx, Caddy, etc.) that sets `X-Forwarded-For` to the real client IP.
+
+**Never set `trustProxy: true` on a server exposed directly to the internet.** Any client can forge the `X-Forwarded-For` header, which would let them bypass rate limiting and fake audit log entries.
+
+```
+# Safe: proxy you control sets X-Forwarded-For
+Internet → nginx (sets X-Forwarded-For) → ageflow mcp (trustProxy: true)
+
+# Unsafe: direct internet exposure
+Internet → ageflow mcp (trustProxy: true)  ← attacker can set any X-Forwarded-For
+```
 
 ### TLS guidance
 

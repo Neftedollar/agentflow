@@ -125,6 +125,35 @@ export interface HttpTransportOptions {
    * Defaults to `process.stderr.write`.
    */
   readonly stderr?: (line: string) => void;
+  /**
+   * Whether to trust the `X-Forwarded-For` header when determining the client
+   * IP address for rate limiting and audit logging.
+   *
+   * **Default: `false` (secure default).**
+   *
+   * Set to `true` ONLY when the server runs behind a reverse proxy you
+   * control (nginx, Caddy, etc.) that sets `X-Forwarded-For` to the real
+   * client IP. Direct internet exposure MUST leave this `false` — otherwise
+   * any client can spoof their IP, bypassing rate limits and forging audit
+   * log entries.
+   */
+  readonly trustProxy?: boolean;
+  /**
+   * Maximum size of the request body in bytes.
+   *
+   * Default: `1_048_576` (1 MiB). Requests exceeding this limit are rejected
+   * with `413 Payload Too Large` before any parsing — preventing OOM DoS via
+   * unbounded `Buffer.concat`.
+   */
+  readonly maxBodyBytes?: number;
+  /**
+   * Maximum number of concurrent MCP sessions.
+   *
+   * Default: `1000`. When exceeded, new `initialize` requests are rejected
+   * with `429 Too Many Sessions` without creating a new session or transport
+   * pair. Existing sessions continue unaffected.
+   */
+  readonly maxSessions?: number;
 }
 
 /** Handle returned by `createHttpTransport()`. */
@@ -148,6 +177,12 @@ export interface HttpTransportHandle {
    * @internal
    */
   readonly sessionCount: number;
+  /**
+   * Exposes the rate-limiter's current tracked IP count.
+   * Only set when `rateLimit` is configured. For testing only.
+   * @internal
+   */
+  readonly _rateLimiterSize: number | undefined;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -158,10 +193,12 @@ function isLoopback(host: string): boolean {
   return LOOPBACK_HOSTS.has(host);
 }
 
-function remoteIp(req: http.IncomingMessage): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string") {
-    return forwarded.split(",")[0]?.trim() ?? "unknown";
+function remoteIp(req: http.IncomingMessage, trustProxy: boolean): string {
+  if (trustProxy) {
+    const forwarded = req.headers["x-forwarded-for"];
+    if (typeof forwarded === "string") {
+      return forwarded.split(",")[0]?.trim() ?? "unknown";
+    }
   }
   return req.socket?.remoteAddress ?? "unknown";
 }
@@ -178,6 +215,9 @@ function jsonResponse(
   });
   res.end(payload);
 }
+
+/** Hard cap on tracked IP entries to prevent unbounded memory growth. */
+const RATE_LIMITER_MAX_ENTRIES = 10_000;
 
 /** Simple fixed-window rate limiter (in-memory, per-IP). */
 class RateLimiter {
@@ -196,6 +236,28 @@ class RateLimiter {
   /** Returns `true` if the request should be allowed, `false` if rate-limited. */
   check(ip: string): boolean {
     const now = Date.now();
+
+    // Lazy prune: evict all entries whose window expired more than 2× ago.
+    // This runs on every check so no background timer is needed (and no leak).
+    const cutoff = now - this.windowMs * 2;
+    for (const [key, entry] of this.windows) {
+      if (entry.windowStart < cutoff) {
+        this.windows.delete(key);
+      }
+    }
+
+    // Hard cap: if the map is still over the limit after pruning, evict the
+    // oldest entries (insertion order) until we're back under the cap.
+    if (this.windows.size >= RATE_LIMITER_MAX_ENTRIES) {
+      const toEvict = this.windows.size - RATE_LIMITER_MAX_ENTRIES + 1;
+      let evicted = 0;
+      for (const key of this.windows.keys()) {
+        this.windows.delete(key);
+        evicted++;
+        if (evicted >= toEvict) break;
+      }
+    }
+
     const entry = this.windows.get(ip);
     if (entry === undefined || now - entry.windowStart >= this.windowMs) {
       this.windows.set(ip, { count: 1, windowStart: now });
@@ -207,22 +269,58 @@ class RateLimiter {
     entry.count++;
     return true;
   }
+
+  /** Expose map size for testing. @internal */
+  get size(): number {
+    return this.windows.size;
+  }
 }
 
-/** Read the full request body and JSON-parse it. Returns `undefined` on error. */
-async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
-  return new Promise<unknown>((resolve) => {
+/**
+ * Read the full request body and JSON-parse it.
+ *
+ * Returns `{ ok: true, body }` on success, `{ ok: false, tooLarge: true }` if
+ * the body exceeds `maxBytes`, or `{ ok: false, tooLarge: false }` on any
+ * other error.
+ */
+async function readJsonBody(
+  req: http.IncomingMessage,
+  maxBytes: number,
+): Promise<{ ok: true; body: unknown } | { ok: false; tooLarge: boolean }> {
+  return new Promise((resolve) => {
     const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    let totalBytes = 0;
+    let aborted = false;
+
+    req.on("data", (chunk: Buffer) => {
+      if (aborted) return;
+      totalBytes += chunk.byteLength;
+      if (totalBytes > maxBytes) {
+        aborted = true;
+        // Drain the socket so the client gets the response.
+        req.resume();
+        resolve({ ok: false, tooLarge: true });
+        return;
+      }
+      chunks.push(chunk);
+    });
+
     req.on("end", () => {
+      if (aborted) return;
       try {
         const raw = Buffer.concat(chunks).toString("utf8");
-        resolve(raw.length > 0 ? JSON.parse(raw) : undefined);
+        resolve({
+          ok: true,
+          body: raw.length > 0 ? JSON.parse(raw) : undefined,
+        });
       } catch {
-        resolve(undefined);
+        resolve({ ok: false, tooLarge: false });
       }
     });
-    req.on("error", () => resolve(undefined));
+
+    req.on("error", () => {
+      if (!aborted) resolve({ ok: false, tooLarge: false });
+    });
   });
 }
 
@@ -283,6 +381,9 @@ export function createHttpTransport(
   const cors = opts.cors;
   const rateLimitOpts = opts.rateLimit;
   const auditLog = opts.auditLog;
+  const trustProxy = opts.trustProxy ?? false;
+  const maxBodyBytes = opts.maxBodyBytes ?? 1_048_576;
+  const maxSessions = opts.maxSessions ?? 1_000;
   const writeStderr =
     opts.stderr ??
     ((line: string) => {
@@ -430,7 +531,7 @@ export function createHttpTransport(
     req: http.IncomingMessage,
     res: http.ServerResponse,
   ): Promise<void> {
-    const ip = remoteIp(req);
+    const ip = remoteIp(req, trustProxy);
     const method = req.method?.toUpperCase() ?? "";
     const url = req.url ?? "/";
 
@@ -487,7 +588,18 @@ export function createHttpTransport(
     // Parse request body for POST requests (needed by handleRequest + audit log).
     let parsedBody: unknown;
     if (method === "POST") {
-      parsedBody = await readJsonBody(req);
+      const bodyResult = await readJsonBody(req, maxBodyBytes);
+      if (!bodyResult.ok) {
+        if (bodyResult.tooLarge) {
+          applyCors(req, res);
+          jsonResponse(res, 413, { error: "Payload Too Large" });
+          return;
+        }
+        // Parse error — let the SDK handle downstream with undefined body.
+        parsedBody = undefined;
+      } else {
+        parsedBody = bodyResult.body;
+      }
     }
 
     // Audit log for legitimate POST requests.
@@ -519,6 +631,20 @@ export function createHttpTransport(
       }
     } else if (method === "POST") {
       // No session ID on a POST = new session (initialize request).
+      // Enforce session cap before allocating new resources.
+      if (sessions.size >= maxSessions) {
+        auditLog?.({
+          ts: Date.now(),
+          remoteIp: ip,
+          toolName: undefined,
+          method: extractRpcMethod(parsedBody),
+          authDenied: false,
+          rateLimited: false,
+        });
+        applyCors(req, res);
+        jsonResponse(res, 429, { error: "Too Many Sessions" });
+        return;
+      }
       record = await createSession();
     } else {
       // GET or DELETE without session ID is invalid.
@@ -536,6 +662,10 @@ export function createHttpTransport(
   return {
     get sessionCount(): number {
       return sessions.size;
+    },
+
+    get _rateLimiterSize(): number | undefined {
+      return rateLimiter?.size;
     },
 
     async start(): Promise<void> {
