@@ -75,7 +75,10 @@ import { ApiRunner } from "@ageflow/runner-api";
 import { z } from "zod";
 
 // Register a runner backed by any fetch-compatible endpoint
-registerRunner("api", new ApiRunner({ fetch: globalThis.fetch }));
+registerRunner("api", new ApiRunner({
+  baseUrl: "https://api.openai.com/v1",
+  apiKey: process.env.OPENAI_API_KEY ?? "",
+}));
 
 const summarizeAgent = defineAgent({
   runner: "api",
@@ -95,7 +98,8 @@ const workflow = defineWorkflow({
   },
 });
 
-const result = await WorkflowExecutor.run(workflow);
+const executor = new WorkflowExecutor(workflow);
+const result = await executor.run({});
 console.log(result.outputs.summarize.summary);
 ```
 
