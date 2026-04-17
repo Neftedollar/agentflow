@@ -60,6 +60,5 @@ export function parseAgentOutput<O extends ZodType>(
     throw new OutputValidationError(taskName, result.error.message);
   }
 
-  // biome-ignore lint/suspicious/noExplicitAny: inferred from generic O
   return result.data as import("zod").infer<O>;
 }

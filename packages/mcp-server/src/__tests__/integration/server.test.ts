@@ -38,6 +38,7 @@ describe("createMcpServer (integration)", () => {
     });
     const result = await server.callTool("greet", { name: 123 });
     expect(result.isError).toBe(true);
+    // biome-ignore lint/suspicious/noExplicitAny: accessing untyped structuredContent in test assertion
     expect((result.structuredContent as any).errorCode).toBe(
       "INPUT_VALIDATION_FAILED",
     );
@@ -51,11 +52,13 @@ describe("createMcpServer (integration)", () => {
     });
     // Mock executor to hang so we can test concurrency
     const hangPromise = new Promise(() => {});
+    // biome-ignore lint/suspicious/noExplicitAny: accessing internal test hook on server instance
     (server as any)._testRunExecutor = () => hangPromise;
 
     server.callTool("greet", { name: "a" }); // no await
     const result = await server.callTool("greet", { name: "b" });
     expect(result.isError).toBe(true);
+    // biome-ignore lint/suspicious/noExplicitAny: accessing untyped structuredContent in test assertion
     expect((result.structuredContent as any).errorCode).toBe("BUSY");
   });
 
@@ -81,6 +84,7 @@ describe("createMcpServer (integration)", () => {
 
       const result = await server.callTool("hang", { name: "x" });
       expect(result.isError).toBe(true);
+      // biome-ignore lint/suspicious/noExplicitAny: accessing untyped structuredContent in test assertion
       expect((result.structuredContent as any).errorCode).toBe(
         "DURATION_EXCEEDED",
       );
@@ -104,6 +108,7 @@ describe("createMcpServer (integration)", () => {
         tasks: {
           ...args.workflow.tasks,
           greet: {
+            // biome-ignore lint/suspicious/noExplicitAny: spreading typed task config via untyped access for test injection
             ...(args.workflow.tasks as any).greet,
             input: args.input,
           },
@@ -125,6 +130,7 @@ describe("createMcpServer (integration)", () => {
 
     const result = await server.callTool("greet", { name: "Alice" });
     expect(result.isError).toBe(false);
+    // biome-ignore lint/suspicious/noExplicitAny: accessing untyped structuredContent in test assertion
     expect((result.structuredContent as any).greeting).toBe("hello, Alice!");
   });
 });

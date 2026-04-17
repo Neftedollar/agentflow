@@ -301,9 +301,9 @@ export interface ResolvedAgentDef<
 
 // ─── Task map types ───────────────────────────────────────────────────────────
 
-// biome-ignore lint/suspicious/noExplicitAny: structural constraint — any AgentDef shape
 export type TasksMap = Record<
   string,
+  // biome-ignore lint/suspicious/noExplicitAny: structural constraint — any AgentDef shape
   TaskDef<AgentDef<any, any, any>, readonly string[]> | LoopDef<TasksMap>
 >;
 
@@ -346,7 +346,7 @@ export type InputOf<A> = A extends { input: infer I extends ZodType }
 export type RunnerOfTask<
   T extends TasksMap,
   K extends keyof T,
-> = T[K] extends TaskDef<infer A, readonly string[]> ? RunnerOf<A> : never; // biome-ignore lint/suspicious/noExplicitAny: structural infer
+> = T[K] extends TaskDef<infer A, readonly string[]> ? RunnerOf<A> : never;
 
 /**
  * Extract the direct dependsOn keys of task K in workflow T.
@@ -368,7 +368,6 @@ export type DependsOnOf<
  * Loop outputs are typed as unknown (v1 known limitation).
  */
 export type CtxFor<T extends TasksMap, K extends keyof T> = {
-  // biome-ignore lint/suspicious/noExplicitAny: structural infer
   readonly [P in DependsOnOf<T, K>]: T[P] extends TaskDef<
     infer A,
     readonly string[]
