@@ -243,7 +243,7 @@ describe("WorkflowExecutor", () => {
 
   it("budget halt + onExceeded callback: callback fires BEFORE halt throws (#132)", async () => {
     const onExceeded = vi.fn();
-    let taskATokensOut = 1_000_000; // Set to generate expensive output
+    const taskATokensOut = 1_000_000; // Set to generate expensive output
     const mockRunner = makeMockRunner(async (args) => {
       if (args.prompt.includes("Process")) {
         return {
