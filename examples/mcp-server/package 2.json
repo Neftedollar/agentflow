@@ -1,0 +1,25 @@
+{
+  "name": "@ageflow/example-mcp-server",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "serve": "agentwf mcp serve workflow.ts",
+    "serve:auto": "agentwf mcp serve workflow.ts --hitl auto",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "smoke": "PATH=\"$PWD/__mocks__:$PATH\" agentwf mcp serve workflow.ts --hitl auto"
+  },
+  "dependencies": {
+    "@ageflow/cli": "workspace:*",
+    "@ageflow/core": "workspace:*",
+    "@ageflow/runner-claude": "workspace:*"
+  },
+  "devDependencies": {
+    "@ageflow/mcp-server": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@types/node": "^22.0.0",
+    "vitest": "^2.1.0",
+    "zod": "^3.23.0"
+  }
+}

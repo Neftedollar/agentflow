@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Mock claude CLI for smoke-testing without real LLM.
+# Usage: claude --output-format json --print "<prompt>"
+# Outputs a hardcoded JSONL result line.
+
+# Parse the last argument as the prompt
+PROMPT="${@: -1}"
+
+# Detect which agent based on prompt content and return appropriate mock
+if echo "$PROMPT" | grep -qi "analyze\|codebase\|bugs"; then
+  RESULT='{"issues":[{"id":"i1","file":"src/app.ts","description":"Null pointer dereference","severity":"high"}],"summary":"Found 1 issue"}'
+elif echo "$PROMPT" | grep -qi "fix\|patch\|issue"; then
+  RESULT='{"patch":"- obj.method()\n+ obj?.method()","explanation":"Added optional chaining","confidence":0.9}'
+elif echo "$PROMPT" | grep -qi "evaluat\|satisfied\|score"; then
+  RESULT='{"satisfied":true,"feedback":"Fix looks correct","score":8}'
+elif echo "$PROMPT" | grep -qi "summar\|report\|fixed"; then
+  RESULT='{"report":"Fixed 1 critical issue","fixedCount":1,"remainingCount":0}'
+else
+  RESULT='{"result":"ok"}'
+fi
+
+# Output in claude JSONL format (--output-format json produces a result line)
+echo '{"type":"system","subtype":"init","session_id":"mock-session-123","tools":[],"mcp_servers":[]}'
+echo "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":$(echo "$RESULT" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))'),\"session_id\":\"mock-session-123\",\"usage\":{\"input_tokens\":100,\"output_tokens\":50}}"

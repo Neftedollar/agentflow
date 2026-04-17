@@ -8,6 +8,7 @@ export type {
   BoundCtx,
   ResolvedAgentDef,
   BudgetConfig,
+  BudgetExceededInfo,
   BudgetWarningEvent,
   CheckpointEvent,
   CtxFor,

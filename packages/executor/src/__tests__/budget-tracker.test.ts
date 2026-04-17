@@ -1,5 +1,6 @@
 import { BudgetExceededError } from "@ageflow/core";
-import { describe, expect, it } from "vitest";
+import type { BudgetExceededInfo } from "@ageflow/core";
+import { describe, expect, it, vi } from "vitest";
 import { BudgetTracker } from "../budget-tracker.js";
 
 describe("BudgetTracker", () => {
@@ -153,6 +154,96 @@ describe("BudgetTracker", () => {
       // total = 0, maxCost = 0 → 0 > 0 = false
       const tracker = new BudgetTracker();
       expect(tracker.exceeded({ maxCost: 0, onExceed: "halt" })).toBe(false);
+    });
+  });
+
+  // ─── onExceeded callback ──────────────────────────────────────────────────
+
+  describe("onExceeded callback", () => {
+    it("fires callback when budget is exceeded", async () => {
+      const tracker = new BudgetTracker();
+      tracker.addCost("claude-sonnet-4-6", 1_000_000, 1_000_000); // $18.00
+
+      const onExceeded = vi.fn();
+      await tracker.fireOnExceeded(
+        { maxCost: 5.0, onExceed: "warn", onExceeded },
+        "task-a",
+        "my-workflow",
+      );
+
+      expect(onExceeded).toHaveBeenCalledOnce();
+      const info = onExceeded.mock.calls[0]?.[0] as BudgetExceededInfo;
+      expect(info.currentCostUsd).toBeCloseTo(18.0);
+      expect(info.maxCostUsd).toBe(5.0);
+      expect(info.taskName).toBe("task-a");
+      expect(info.workflowName).toBe("my-workflow");
+    });
+
+    it("does NOT fire callback when within budget", async () => {
+      const tracker = new BudgetTracker();
+      tracker.addCost("claude-haiku-4-5", 100, 100); // tiny cost
+
+      const onExceeded = vi.fn();
+      await tracker.fireOnExceeded(
+        { maxCost: 100.0, onExceed: "warn", onExceeded },
+        "task-a",
+        "my-workflow",
+      );
+
+      expect(onExceeded).not.toHaveBeenCalled();
+    });
+
+    it("awaits async callback before returning", async () => {
+      const tracker = new BudgetTracker();
+      tracker.addCost("claude-sonnet-4-6", 1_000_000, 0); // $3.00
+
+      const calls: string[] = [];
+      const onExceeded = vi.fn(async () => {
+        await Promise.resolve();
+        calls.push("async-completed");
+      });
+
+      await tracker.fireOnExceeded(
+        { maxCost: 1.0, onExceed: "warn", onExceeded },
+        "task-b",
+        "wf-2",
+      );
+
+      expect(calls).toEqual(["async-completed"]);
+    });
+
+    it("does not throw or crash when callback throws — warns and continues", async () => {
+      const tracker = new BudgetTracker();
+      tracker.addCost("claude-sonnet-4-6", 1_000_000, 0); // $3.00
+
+      const onExceeded = vi.fn(async () => {
+        throw new Error("Slack API down");
+      });
+
+      // Should resolve (not reject) even if callback throws
+      await expect(
+        tracker.fireOnExceeded(
+          { maxCost: 1.0, onExceed: "warn", onExceeded },
+          "task-c",
+          "wf-3",
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(onExceeded).toHaveBeenCalledOnce();
+    });
+
+    it("no-ops when onExceeded is undefined", async () => {
+      const tracker = new BudgetTracker();
+      tracker.addCost("claude-sonnet-4-6", 1_000_000, 0); // $3.00
+
+      // Should not throw even if no callback
+      await expect(
+        tracker.fireOnExceeded(
+          { maxCost: 1.0, onExceed: "warn" },
+          "task-d",
+          "wf-4",
+        ),
+      ).resolves.toBeUndefined();
     });
   });
 });

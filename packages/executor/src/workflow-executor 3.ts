@@ -305,26 +305,6 @@ export class WorkflowExecutor<T extends TasksMap> {
             // This is a TaskDef<AgentDef<...>>
             // biome-ignore lint/suspicious/noExplicitAny: structural constraint
             const task = taskDef as TaskDef<AgentDef<any, any, any>>;
-
-            // Evaluate skipIf predicate before any runner/HITL/budget work
-            if (task.skipIf !== undefined) {
-              let shouldSkip: boolean;
-              try {
-                shouldSkip = (
-                  task.skipIf as (ctx: Record<string, CtxEntry>) => boolean
-                )(ctx);
-              } catch (err) {
-                const e = err instanceof Error ? err : new Error(String(err));
-                hooks?.onTaskError?.(taskName as keyof T & string, e, 0);
-                throw e;
-              }
-              if (shouldSkip) {
-                ctx[taskName] = { output: undefined, _source: "skipped" };
-                hooks?.onTaskSkip?.(taskName as keyof T & string, "skipIf");
-                continue;
-              }
-            }
-
             const runnerName: string = task.agent.runner;
 
             // Get runner from registry
@@ -413,20 +393,11 @@ export class WorkflowExecutor<T extends TasksMap> {
 
               // Check budget per-task after adding cost (I2 fix: catch overrun mid-batch)
               if (budget !== undefined && this.budgetTracker.exceeded(budget)) {
-                // Fire onExceeded callback BEFORE halt/warn — ensures it runs even if halt throws
-                await this.budgetTracker.fireOnExceeded(
-                  budget,
-                  taskName,
-                  this.workflow.name,
-                );
-                // THEN halt or warn
                 if (budget.onExceed === "halt") {
                   this.budgetTracker.checkBudget(budget);
                 } else if (budget.onExceed === "warn") {
                   console.warn(
-                    "[AgentFlow] Budget warning: spent $%s (limit $%s)",
-                    this.budgetTracker.total.toFixed(4),
-                    budget.maxCost.toFixed(4),
+                    `[AgentFlow] Budget warning: spent $${this.budgetTracker.total.toFixed(4)} (limit $${budget.maxCost.toFixed(4)})`,
                   );
                 }
               }
@@ -550,35 +521,6 @@ export class WorkflowExecutor<T extends TasksMap> {
             // This is a TaskDef<AgentDef<...>>
             // biome-ignore lint/suspicious/noExplicitAny: structural constraint
             const task = taskDef as TaskDef<AgentDef<any, any, any>>;
-
-            // Evaluate skipIf predicate before any runner/HITL/budget work
-            if (task.skipIf !== undefined) {
-              let shouldSkip: boolean;
-              try {
-                shouldSkip = (
-                  task.skipIf as (ctx: Record<string, CtxEntry>) => boolean
-                )(ctx);
-              } catch (err) {
-                const e = err instanceof Error ? err : new Error(String(err));
-                hooks?.onTaskError?.(taskName as keyof T & string, e, 0);
-                throw e;
-              }
-              if (shouldSkip) {
-                ctx[taskName] = { output: undefined, _source: "skipped" };
-                hooks?.onTaskSkip?.(taskName as keyof T & string, "skipIf");
-                // Emit task:skip event
-                push({
-                  type: "task:skip",
-                  runId,
-                  workflowName,
-                  timestamp: Date.now(),
-                  taskName,
-                  reason: "skipIf",
-                });
-                continue;
-              }
-            }
-
             const runnerName: string = task.agent.runner;
 
             // Get runner from registry
@@ -712,13 +654,6 @@ export class WorkflowExecutor<T extends TasksMap> {
 
               // Check budget per-task after adding cost
               if (budget !== undefined && this.budgetTracker.exceeded(budget)) {
-                // Fire onExceeded callback BEFORE halt/warn — ensures it runs even if halt throws
-                await this.budgetTracker.fireOnExceeded(
-                  budget,
-                  taskName,
-                  workflowName,
-                );
-                // THEN halt or warn
                 if (budget.onExceed === "halt") {
                   this.budgetTracker.checkBudget(budget);
                 } else if (budget.onExceed === "warn") {

@@ -46,19 +46,10 @@ export interface RetryConfig {
   readonly timeoutMs?: number;
 }
 
-export interface BudgetExceededInfo {
-  readonly currentCostUsd: number;
-  readonly maxCostUsd: number;
-  readonly taskName: string;
-  readonly workflowName: string;
-}
-
 export interface BudgetConfig {
   /** Maximum cost in USD. */
   readonly maxCost: number;
   readonly onExceed: "halt" | "warn";
-  /** Called when budget threshold is crossed. Receives current spend + config. */
-  readonly onExceeded?: (info: BudgetExceededInfo) => void | Promise<void>;
 }
 
 export interface MCPConfig {
@@ -447,15 +438,6 @@ export interface TaskDef<
   readonly mustUse?: readonly string[];
   /** Override which resolved MCP servers are available for this specific task. */
   readonly mcpOverride?: TaskMcpOverride;
-  /**
-   * Conditional skip predicate. When defined and returns `true` at runtime,
-   * the executor skips this task entirely (sets output to `undefined`).
-   * Downstream tasks still run; they receive `undefined` for this task's output.
-   * Budget is NOT charged for skipped tasks.
-   *
-   * Errors thrown from `skipIf` surface as task errors (onTaskError is fired).
-   */
-  readonly skipIf?: (ctx: BoundCtx<D>) => boolean;
 }
 
 // ─── Loop definition ──────────────────────────────────────────────────────────
@@ -510,8 +492,6 @@ export interface WorkflowHooks<T extends TasksMap = TasksMap> {
     error: Error,
     attempt: number,
   ) => void;
-  /** Called when a task is skipped due to its `skipIf` predicate returning `true`. */
-  readonly onTaskSkip?: (taskName: keyof T & string, reason: "skipIf") => void;
   /**
    * Called when a checkpoint HITL gate is reached.
    * Use this to send Telegram/Slack notifications before proceeding.
@@ -636,12 +616,6 @@ export interface TaskRetryEvent extends EventBase {
   readonly reason: string;
 }
 
-export interface TaskSkipEvent extends EventBase {
-  readonly type: "task:skip";
-  readonly taskName: string;
-  readonly reason: "skipIf";
-}
-
 export interface CheckpointEvent extends EventBase {
   readonly type: "checkpoint";
   readonly taskName: string;
@@ -677,7 +651,6 @@ export type WorkflowEvent =
   | TaskCompleteEvent
   | TaskErrorEvent
   | TaskRetryEvent
-  | TaskSkipEvent
   | CheckpointEvent
   | BudgetWarningEvent
   | WorkflowCompleteEvent

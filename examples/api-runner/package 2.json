@@ -1,0 +1,22 @@
+{
+  "name": "@ageflow-example/api-runner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo": "bun workflow.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ageflow/core": "workspace:*",
+    "@ageflow/runner-api": "workspace:*",
+    "@ageflow/executor": "workspace:*",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@ageflow/testing": "workspace:*",
+    "@types/node": "^22.0.0",
+    "vitest": "^2.1.0"
+  }
+}

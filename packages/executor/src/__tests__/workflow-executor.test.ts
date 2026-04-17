@@ -241,6 +241,56 @@ describe("WorkflowExecutor", () => {
     expect(taskBRan).toBe(false);
   });
 
+  it("budget halt + onExceeded callback: callback fires BEFORE halt throws (#132)", async () => {
+    const onExceeded = vi.fn();
+    let taskATokensOut = 1_000_000; // Set to generate expensive output
+    const mockRunner = makeMockRunner(async (args) => {
+      if (args.prompt.includes("Process")) {
+        return {
+          stdout: JSON.stringify({ result: "from-A" }),
+          sessionHandle: "sess-abc",
+          tokensIn: 10,
+          tokensOut: taskATokensOut,
+        };
+      }
+      return makeSuccessResult({ final: "from-B" });
+    });
+    registerRunner("mock-wf", mockRunner);
+
+    // Start with fresh budget tracker (0 cost)
+    const budgetTracker = new BudgetTracker();
+
+    const workflow = defineWorkflow({
+      name: "test-budget-halt-callback",
+      tasks: {
+        taskA: { agent: agentA, input: { value: "test" } },
+      },
+      budget: {
+        maxCost: 0.01, // Very low limit so 1M output tokens will exceed
+        onExceed: "halt",
+        onExceeded, // callback should fire before halt throws
+      },
+    });
+
+    const executor = new WorkflowExecutor(workflow, { budgetTracker });
+
+    // Should throw BudgetExceededError, but onExceeded should have been called first
+    await expect(executor.run()).rejects.toThrow();
+
+    // Verify onExceeded was called with correct info
+    expect(onExceeded).toHaveBeenCalledOnce();
+    const callArg = onExceeded.mock.calls[0]?.[0] as {
+      currentCostUsd: number;
+      maxCostUsd: number;
+      taskName: string;
+      workflowName: string;
+    };
+    expect(callArg.currentCostUsd).toBeGreaterThan(0.01);
+    expect(callArg.maxCostUsd).toBe(0.01);
+    expect(callArg.taskName).toBe("taskA");
+    expect(callArg.workflowName).toBe("test-budget-halt-callback");
+  });
+
   it("session reuse: second task receives sessionHandle from first", async () => {
     const tok = sessionToken("wf-session", "mock-wf");
     const receivedHandles: (string | undefined)[] = [];
