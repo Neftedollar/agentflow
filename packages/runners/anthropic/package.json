@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/runner-anthropic",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Native Anthropic Messages API runner for ageflow (/v1/messages)",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/runners/anthropic",
   "type": "module",
@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@ageflow/core": "^0.4.0",
-    "@ageflow/runner-api": "^0.3.3"
+    "@ageflow/runner-api": "^0.3.4"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
