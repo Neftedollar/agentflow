@@ -500,3 +500,81 @@ describe("runPreflight — MCP config validation", () => {
     ).toBe(true);
   });
 });
+
+// ─── warnAllDepsSkippable ──────────────────────────────────────────────────────
+
+describe("runPreflight — warnAllDepsSkippable", () => {
+  it("warns when ALL deps of a task have skipIf defined", async () => {
+    const workflow = defineWorkflow({
+      name: "test-all-deps-skippable",
+      tasks: {
+        a: {
+          agent: claudeAgent,
+          input: { text: "hello" },
+          skipIf: () => false,
+        },
+        b: {
+          agent: claudeAgent,
+          dependsOn: ["a"] as const,
+          input: { text: "world" },
+          // b depends on a, and a has skipIf → all deps of b are skippable
+        },
+      },
+    });
+
+    const result = await runPreflight(workflow, { whichFn: alwaysFoundWhich });
+    expect(result.warnings.some((w) => w.includes("all dependencies"))).toBe(
+      true,
+    );
+    expect(result.warnings.some((w) => w.includes('"b"'))).toBe(true);
+  });
+
+  it("does NOT warn when only some deps have skipIf defined", async () => {
+    const workflow = defineWorkflow({
+      name: "test-partial-deps-skippable",
+      tasks: {
+        a: {
+          agent: claudeAgent,
+          input: { text: "hello" },
+          skipIf: () => false,
+        },
+        c: {
+          agent: claudeAgent,
+          input: { text: "hello" },
+          // no skipIf on c
+        },
+        b: {
+          agent: claudeAgent,
+          dependsOn: ["a", "c"] as const,
+          input: { text: "world" },
+          // only a has skipIf, c does not → partial — no warning
+        },
+      },
+    });
+
+    const result = await runPreflight(workflow, { whichFn: alwaysFoundWhich });
+    const skippableWarnings = result.warnings.filter((w) =>
+      w.includes("all dependencies"),
+    );
+    expect(skippableWarnings).toHaveLength(0);
+  });
+
+  it("does NOT warn when task has no deps", async () => {
+    const workflow = defineWorkflow({
+      name: "test-no-deps",
+      tasks: {
+        a: {
+          agent: claudeAgent,
+          input: { text: "hello" },
+          // No dependsOn — no deps to be skippable
+        },
+      },
+    });
+
+    const result = await runPreflight(workflow, { whichFn: alwaysFoundWhich });
+    const skippableWarnings = result.warnings.filter((w) =>
+      w.includes("all dependencies"),
+    );
+    expect(skippableWarnings).toHaveLength(0);
+  });
+});

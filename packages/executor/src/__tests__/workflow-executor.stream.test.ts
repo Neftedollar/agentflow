@@ -411,6 +411,89 @@ describe("P2-1: task:error attempt count", () => {
   });
 });
 
+describe("TaskDef.skipIf (stream path)", () => {
+  it("emits task:skip event when skipIf returns true", async () => {
+    const wfSkip = defineWorkflow({
+      name: "skip-demo",
+      tasks: {
+        a: {
+          agent,
+          input: {},
+          skipIf: () => true,
+        },
+        b: { agent, input: {}, dependsOn: ["a"] as const },
+      },
+    });
+
+    const executor = new WorkflowExecutor(wfSkip);
+    const events: WorkflowEvent[] = [];
+    for await (const ev of executor.stream({})) {
+      events.push(ev);
+    }
+
+    const types = events.map((e) => e.type);
+    expect(types).toContain("task:skip");
+    // task:start must NOT be emitted for the skipped task
+    const taskStartNames = events
+      .filter((e) => e.type === "task:start")
+      .map((e) => (e as { taskName: string }).taskName);
+    expect(taskStartNames).not.toContain("a");
+    // downstream task b still ran
+    expect(taskStartNames).toContain("b");
+  });
+
+  it("task:skip event has correct shape", async () => {
+    const wfSkip = defineWorkflow({
+      name: "skip-shape",
+      tasks: {
+        a: {
+          agent,
+          input: {},
+          skipIf: () => true,
+        },
+      },
+    });
+
+    const executor = new WorkflowExecutor(wfSkip);
+    const events: WorkflowEvent[] = [];
+    for await (const ev of executor.stream({})) {
+      events.push(ev);
+    }
+
+    const skipEv = events.find((e) => e.type === "task:skip");
+    expect(skipEv).toBeDefined();
+    if (skipEv?.type === "task:skip") {
+      expect(skipEv.taskName).toBe("a");
+      expect(skipEv.reason).toBe("skipIf");
+      expect(typeof skipEv.runId).toBe("string");
+      expect(typeof skipEv.workflowName).toBe("string");
+      expect(typeof skipEv.timestamp).toBe("number");
+    }
+  });
+
+  it("does NOT emit task:skip when skipIf returns false", async () => {
+    const wfNoSkip = defineWorkflow({
+      name: "no-skip",
+      tasks: {
+        a: {
+          agent,
+          input: {},
+          skipIf: () => false,
+        },
+      },
+    });
+
+    const executor = new WorkflowExecutor(wfNoSkip);
+    const events: WorkflowEvent[] = [];
+    for await (const ev of executor.stream({})) {
+      events.push(ev);
+    }
+
+    expect(events.some((e) => e.type === "task:skip")).toBe(false);
+    expect(events.some((e) => e.type === "task:complete")).toBe(true);
+  });
+});
+
 describe("run() is a drain over stream()", () => {
   it("produces the same WorkflowResult as draining stream()", async () => {
     const executor = new WorkflowExecutor(wf);

@@ -355,6 +355,223 @@ describe("WorkflowExecutor", () => {
     expect(result.metrics.totalTokensOut).toBe(40); // 2 tasks × 20 tokens each
   });
 
+  // ─── TaskDef.skipIf ─────────────────────────────────────────────────────────
+
+  describe("TaskDef.skipIf", () => {
+    it("skips a task when skipIf returns true and downstream reads undefined output", async () => {
+      let taskBRan = false;
+      const mockRunner = makeMockRunner(async (args) => {
+        if (args.prompt.includes("Process")) {
+          return makeSuccessResult({ result: "from-A" });
+        }
+        taskBRan = true;
+        return makeSuccessResult({ final: "from-B" });
+      });
+      registerRunner("mock-wf", mockRunner);
+
+      const workflow = defineWorkflow({
+        name: "test-skipif-basic",
+        tasks: {
+          taskA: {
+            agent: agentA,
+            input: { value: "test" },
+            skipIf: () => true,
+          },
+          taskB: {
+            agent: agentB,
+            dependsOn: ["taskA"],
+            input: (_ctx) => ({ upstream: "no-upstream" }),
+          },
+        },
+      });
+
+      const executor = new WorkflowExecutor(workflow);
+      const result = await executor.run();
+
+      // taskA was skipped — its output is undefined
+      expect(result.outputs.taskA).toBeUndefined();
+      // taskB still ran (skipped tasks don't block downstream)
+      expect(taskBRan).toBe(true);
+    });
+
+    it("does not skip when skipIf returns false", async () => {
+      let taskARan = false;
+      const mockRunner = makeMockRunner(async (args) => {
+        if (args.prompt.includes("Process")) {
+          taskARan = true;
+          return makeSuccessResult({ result: "from-A" });
+        }
+        return makeSuccessResult({ final: "from-B" });
+      });
+      registerRunner("mock-wf", mockRunner);
+
+      const workflow = defineWorkflow({
+        name: "test-skipif-false",
+        tasks: {
+          taskA: {
+            agent: agentA,
+            input: { value: "test" },
+            skipIf: () => false,
+          },
+        },
+      });
+
+      const executor = new WorkflowExecutor(workflow);
+      const result = await executor.run();
+
+      expect(taskARan).toBe(true);
+      expect(result.outputs.taskA).toEqual({ result: "from-A" });
+    });
+
+    it("passes ctx to skipIf predicate", async () => {
+      let capturedCtx: unknown;
+      const mockRunner = makeMockRunner(async (args) => {
+        if (args.prompt.includes("Process")) {
+          return makeSuccessResult({ result: "from-A" });
+        }
+        return makeSuccessResult({ final: "from-B" });
+      });
+      registerRunner("mock-wf", mockRunner);
+
+      const workflow = defineWorkflow({
+        name: "test-skipif-ctx",
+        tasks: {
+          taskA: {
+            agent: agentA,
+            input: { value: "test" },
+          },
+          taskB: {
+            agent: agentB,
+            dependsOn: ["taskA"],
+            input: (_ctx) => ({ upstream: "no-upstream" }),
+            skipIf: (ctx) => {
+              capturedCtx = ctx;
+              return false;
+            },
+          },
+        },
+      });
+
+      const executor = new WorkflowExecutor(workflow);
+      await executor.run();
+
+      // ctx should contain taskA's output since taskB depends on it
+      expect(capturedCtx).toBeDefined();
+      expect((capturedCtx as Record<string, unknown>).taskA).toBeDefined();
+    });
+
+    it("fires onTaskSkip hook when task is skipped", async () => {
+      const onTaskSkip = vi.fn();
+
+      const workflow = defineWorkflow({
+        name: "test-skipif-hook",
+        tasks: {
+          taskA: {
+            agent: agentA,
+            input: { value: "test" },
+            skipIf: () => true,
+          },
+        },
+        hooks: { onTaskSkip },
+      });
+
+      const executor = new WorkflowExecutor(workflow);
+      await executor.run();
+
+      expect(onTaskSkip).toHaveBeenCalledOnce();
+      expect(onTaskSkip).toHaveBeenCalledWith("taskA", "skipIf");
+    });
+
+    it("does NOT fire onTaskSkip hook when task is NOT skipped", async () => {
+      const onTaskSkip = vi.fn();
+
+      const workflow = defineWorkflow({
+        name: "test-skipif-hook-not-fired",
+        tasks: {
+          taskA: {
+            agent: agentA,
+            input: { value: "test" },
+            skipIf: () => false,
+          },
+        },
+        hooks: { onTaskSkip },
+      });
+
+      const executor = new WorkflowExecutor(workflow);
+      await executor.run();
+
+      expect(onTaskSkip).not.toHaveBeenCalled();
+    });
+
+    it("does NOT call onTaskStart or onTaskComplete for skipped tasks", async () => {
+      const onTaskStart = vi.fn();
+      const onTaskComplete = vi.fn();
+
+      const workflow = defineWorkflow({
+        name: "test-skipif-no-hooks",
+        tasks: {
+          taskA: {
+            agent: agentA,
+            input: { value: "test" },
+            skipIf: () => true,
+          },
+        },
+        hooks: { onTaskStart, onTaskComplete },
+      });
+
+      const executor = new WorkflowExecutor(workflow);
+      await executor.run();
+
+      expect(onTaskStart).not.toHaveBeenCalled();
+      expect(onTaskComplete).not.toHaveBeenCalled();
+    });
+
+    it("does NOT charge budget for skipped tasks", async () => {
+      const budgetTracker = new BudgetTracker();
+      const costBefore = budgetTracker.total;
+
+      const workflow = defineWorkflow({
+        name: "test-skipif-budget",
+        tasks: {
+          taskA: {
+            agent: agentA,
+            input: { value: "test" },
+            skipIf: () => true,
+          },
+        },
+      });
+
+      const executor = new WorkflowExecutor(workflow, { budgetTracker });
+      await executor.run();
+
+      // Budget should not have increased (no task ran)
+      expect(budgetTracker.total).toBe(costBefore);
+    });
+
+    it("skipIf throws — fires onTaskError and rethrows", async () => {
+      const onTaskError = vi.fn();
+      const boom = new Error("skipIf exploded");
+
+      const workflow = defineWorkflow({
+        name: "test-skipif-throws",
+        tasks: {
+          taskA: {
+            agent: agentA,
+            input: { value: "test" },
+            skipIf: () => {
+              throw boom;
+            },
+          },
+        },
+        hooks: { onTaskError },
+      });
+
+      const executor = new WorkflowExecutor(workflow);
+      await expect(executor.run()).rejects.toThrow("skipIf exploded");
+      expect(onTaskError).toHaveBeenCalledWith("taskA", boom, 0);
+    });
+  });
+
   describe("promptSent in TaskMetrics", () => {
     it("onTaskComplete receives promptSent containing the user prompt", async () => {
       const onTaskComplete = vi.fn();

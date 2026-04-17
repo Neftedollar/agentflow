@@ -324,6 +324,36 @@ function validateMcpConfigs(
   }
 }
 
+function warnAllDepsSkippable(tasks: TasksMap, warnings: string[]): void {
+  for (const [taskName, task] of Object.entries(tasks)) {
+    if (task === undefined || "kind" in task) {
+      // LoopDef — recurse into inner tasks
+      if (task !== undefined && "kind" in task && task.kind === "loop") {
+        warnAllDepsSkippable(task.tasks as TasksMap, warnings);
+      }
+      continue;
+    }
+
+    const deps = task.dependsOn;
+    if (deps === undefined || deps.length === 0) {
+      continue;
+    }
+
+    // Check whether ALL declared deps have skipIf defined
+    const allSkippable = deps.every((depName) => {
+      const depTask = tasks[depName];
+      if (depTask === undefined || "kind" in depTask) return false;
+      return depTask.skipIf !== undefined;
+    });
+
+    if (allSkippable) {
+      warnings.push(
+        `Task "${taskName}": all dependencies (${deps.map((d) => `"${d}"`).join(", ")}) have \`skipIf\` defined — "${taskName}" may receive undefined inputs at runtime`,
+      );
+    }
+  }
+}
+
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 export async function runPreflight(
@@ -355,6 +385,9 @@ export async function runPreflight(
 
   // 7. Validate MCP server configs (duplicates, unknown overrides, missing env vars)
   validateMcpConfigs(workflow, errors, warnings);
+
+  // 8. Warn when ALL deps of a task have skipIf defined
+  warnAllDepsSkippable(tasks, warnings);
 
   return { errors, warnings };
 }
