@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/core",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Type-safe DSL for multi-agent AI workflows — defineAgent, defineWorkflow, loop, sessionToken",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/core",
   "type": "module",

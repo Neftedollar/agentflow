@@ -41,6 +41,7 @@ export type {
   TaskMcpOverride,
   TaskMetrics,
   TaskRetryEvent,
+  TaskSkipEvent,
   TasksMap,
   TaskStartEvent,
   ToolCallRecord,
