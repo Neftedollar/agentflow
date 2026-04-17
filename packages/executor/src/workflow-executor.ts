@@ -417,9 +417,16 @@ export class WorkflowExecutor<T extends TasksMap> {
                   this.budgetTracker.checkBudget(budget);
                 } else if (budget.onExceed === "warn") {
                   console.warn(
-                    `[AgentFlow] Budget warning: spent $${this.budgetTracker.total.toFixed(4)} (limit $${budget.maxCost.toFixed(4)})`,
+                    "[AgentFlow] Budget warning: spent $%s (limit $%s)",
+                    this.budgetTracker.total.toFixed(4),
+                    budget.maxCost.toFixed(4),
                   );
                 }
+                await this.budgetTracker.fireOnExceeded(
+                  budget,
+                  taskName,
+                  this.workflow.name,
+                );
               }
 
               // Store output in context with token metadata for aggregation
@@ -715,6 +722,11 @@ export class WorkflowExecutor<T extends TasksMap> {
                     limitUsd: budget.maxCost,
                   });
                 }
+                await this.budgetTracker.fireOnExceeded(
+                  budget,
+                  taskName,
+                  workflowName,
+                );
               }
 
               // Store output in context with token metadata for aggregation

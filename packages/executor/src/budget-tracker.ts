@@ -1,4 +1,4 @@
-import type { BudgetConfig } from "@ageflow/core";
+import type { BudgetConfig, BudgetExceededInfo } from "@ageflow/core";
 import { BudgetExceededError } from "@ageflow/core";
 
 /** Model pricing (USD per 1M tokens). Update when Anthropic/OpenAI change prices. */
@@ -40,6 +40,11 @@ export class BudgetTracker {
     return this.totalCost;
   }
 
+  /** Alias for total — semantic clarity when reading as "current spend". */
+  get currentCost(): number {
+    return this.totalCost;
+  }
+
   checkBudget(config: BudgetConfig): void {
     if (config.onExceed === "halt" && this.totalCost > config.maxCost) {
       throw new BudgetExceededError(config.maxCost, this.totalCost);
@@ -49,5 +54,32 @@ export class BudgetTracker {
 
   exceeded(config: BudgetConfig): boolean {
     return this.totalCost > config.maxCost;
+  }
+
+  /**
+   * If the budget is exceeded and `config.onExceeded` is defined, calls the
+   * callback with current spend info. Errors thrown by the callback are caught
+   * and logged as warnings — they never crash the workflow.
+   */
+  async fireOnExceeded(
+    config: BudgetConfig,
+    taskName: string,
+    workflowName: string,
+  ): Promise<void> {
+    if (!config.onExceeded) return;
+    if (!this.exceeded(config)) return;
+
+    const info: BudgetExceededInfo = {
+      currentCostUsd: this.totalCost,
+      maxCostUsd: config.maxCost,
+      taskName,
+      workflowName,
+    };
+
+    try {
+      await config.onExceeded(info);
+    } catch (err) {
+      console.warn("[AgentFlow] onExceeded callback error", { taskName }, err);
+    }
   }
 }
