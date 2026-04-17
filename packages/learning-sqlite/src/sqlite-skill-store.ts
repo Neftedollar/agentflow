@@ -149,12 +149,12 @@ export class SqliteSkillStore implements SkillStore {
   }
 
   async getBestInLineage(skillId: string): Promise<SkillRecord | null> {
-    // Traverse parent chain to collect all skill ids in the lineage
-    const ids: string[] = [];
+    // Step 1: traverse UP the parent chain to find the root of the lineage.
+    let rootId: string = skillId;
     let currentId: string | null = skillId;
 
     while (currentId !== null) {
-      ids.push(currentId);
+      rootId = currentId;
       const parentRow = this.db
         .query<{ parent_id: string | null }, { $id: string }>(
           "SELECT parent_id FROM skills WHERE id = $id",
@@ -163,20 +163,21 @@ export class SqliteSkillStore implements SkillStore {
       currentId = parentRow?.parent_id ?? null;
     }
 
-    if (ids.length === 0) return null;
-
-    // Among all collected ids, find the one with max score
-    const placeholders = ids.map((_, i) => `$id${i}`).join(", ");
-    const params: Record<string, string> = {};
-    for (let i = 0; i < ids.length; i++) {
-      params[`$id${i}`] = ids[i] as string;
-    }
-
+    // Step 2: traverse DOWN from the root using a recursive CTE to collect
+    // all descendants, then return the one with the highest score.
     const row = this.db
-      .query<SkillRow, Record<string, string>>(
-        `SELECT * FROM skills WHERE id IN (${placeholders}) ORDER BY score DESC LIMIT 1`,
+      .query<SkillRow, { $rootId: string }>(
+        `WITH RECURSIVE lineage(id) AS (
+           SELECT id FROM skills WHERE id = $rootId
+           UNION ALL
+           SELECT s.id FROM skills s JOIN lineage l ON s.parent_id = l.id
+         )
+         SELECT * FROM skills
+         WHERE id IN (SELECT id FROM lineage)
+         ORDER BY score DESC
+         LIMIT 1`,
       )
-      .get(params);
+      .get({ $rootId: rootId });
 
     return row ? rowToRecord(row) : null;
   }

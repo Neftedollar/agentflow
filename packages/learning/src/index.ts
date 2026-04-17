@@ -47,3 +47,25 @@ export type {
   ReflectionInput,
   ReflectionSummary,
 } from "./workflows/reflection.js";
+
+export {
+  hypotheticalComparisonAgent,
+  evaluationWorkflow,
+  runEvaluation,
+  HypotheticalVerdictSchema,
+} from "./workflows/evaluation.js";
+export type {
+  HypotheticalVerdict,
+  EvaluationResult,
+  EvaluationInput,
+  EvaluationSummary,
+} from "./workflows/evaluation.js";
+
+export { runPromotion } from "./workflows/promotion.js";
+export type {
+  PromotionAction,
+  PromotionSummary,
+  PromotionInput,
+  RollbackAction,
+  NoOpAction,
+} from "./workflows/promotion.js";

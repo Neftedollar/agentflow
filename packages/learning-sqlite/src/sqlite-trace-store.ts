@@ -105,8 +105,11 @@ export class SqliteTraceStore implements TraceStore {
 
     const where =
       conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    const limitClause =
-      filter.limit !== undefined ? `LIMIT ${filter.limit}` : "";
+
+    if (filter.limit !== undefined) {
+      params.$limit = filter.limit;
+    }
+    const limitClause = filter.limit !== undefined ? "LIMIT $limit" : "";
 
     const rows = this.db
       .prepare<TraceRow, Record<string, string | number | null | boolean>>(

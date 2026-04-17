@@ -137,7 +137,7 @@ export async function runNode<
       // Build spawn args — only include optional properties when defined
       // (exactOptionalPropertyTypes requires we not pass explicit undefined)
       const baseSystemPrompt = buildOutputSchemaPrompt(resolvedDef.output);
-      const prefix = hooks?.getSystemPromptPrefix?.(taskName);
+      const prefix = await hooks?.getSystemPromptPrefix?.(taskName);
       const systemPrompt = prefix
         ? `${prefix}\n\n${baseSystemPrompt}`
         : baseSystemPrompt;
