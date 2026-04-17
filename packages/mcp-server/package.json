@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/mcp-server",
-  "version": "0.3.5",
+  "version": "0.4.0",
   "description": "Expose ageflow workflows as MCP tools (stdio transport, progress streaming, HITL via elicitation).",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/mcp-server",
   "type": "module",

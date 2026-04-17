@@ -12,7 +12,7 @@
  * _testRunExecutor hook for async-mode tests.
  */
 
-import { createMcpServer } from "@ageflow/mcp-server";
+import { createSingleWorkflowServer } from "@ageflow/mcp-server";
 import type { McpServerHandle, RunWorkflowFn } from "@ageflow/mcp-server";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -97,7 +97,7 @@ describe("mcp-server example — InMemoryTransport client test", () => {
   beforeEach(async () => {
     stderrLines = [];
 
-    const handle = createMcpServer({
+    const handle = createSingleWorkflowServer({
       workflow,
       cliCeilings: {},
       hitlStrategy: "fail",
@@ -184,7 +184,7 @@ describe("mcp-server example — async mode via InMemoryTransport", () => {
     // Build the server handle in async mode (--async --hitl auto equivalent).
     // Use the base workflow directly — no static-input shim needed since
     // dispatchStart now injects runtime args before firing (fix for #84 item 10).
-    const handle = createMcpServer({
+    const handle = createSingleWorkflowServer({
       workflow,
       cliCeilings: {},
       hitlStrategy: "auto",

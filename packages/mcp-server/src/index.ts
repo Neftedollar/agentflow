@@ -1,4 +1,16 @@
-export { createMcpServer } from "./server.js";
+// ─── Programmatic API (primary public surface) ────────────────────────────────
+export { createMcpServer } from "./programmatic.js";
+export type {
+  McpServerConfig,
+  McpHandle,
+  McpMiddleware,
+  McpMiddlewareRequest,
+  McpHitlHandler,
+  McpTransportConfig,
+} from "./programmatic.js";
+
+// ─── Internal single-workflow server (CLI + advanced use) ────────────────────
+export { createSingleWorkflowServer } from "./server.js";
 export type {
   McpServerOptions,
   McpServerHandle,

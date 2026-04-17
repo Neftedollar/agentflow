@@ -21,7 +21,10 @@ import fs from "node:fs";
 import path from "node:path";
 import type { WorkflowDef } from "@ageflow/core";
 import type { CliCeilings, HitlStrategy } from "@ageflow/mcp-server";
-import { createMcpServer, startStdioTransport } from "@ageflow/mcp-server";
+import {
+  createSingleWorkflowServer,
+  startStdioTransport,
+} from "@ageflow/mcp-server";
 import type { Command } from "commander";
 
 // ─── Args model ──────────────────────────────────────────────────────────────
@@ -282,8 +285,8 @@ async function runMcpServe(rawArgv: string[]): Promise<void> {
     logStream?.write(line);
   };
 
-  // Create MCP server handle
-  const handle = createMcpServer({
+  // Create MCP server handle (single-workflow CLI path)
+  const handle = createSingleWorkflowServer({
     workflow,
     cliCeilings,
     hitlStrategy: parsed.hitlStrategy,

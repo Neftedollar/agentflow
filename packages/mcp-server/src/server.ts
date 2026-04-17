@@ -100,14 +100,20 @@ export interface McpServerHandle {
 }
 
 /**
- * Compose an MCP server around a single workflow.
+ * Compose an MCP server handle around a single workflow.
  *
  * The returned handle exposes listTools/callTool for wiring into the MCP
  * transport layer (stdio). A real implementation would forward these to
  * `@modelcontextprotocol/sdk`'s Server class; this minimal form is testable
  * directly without the transport.
+ *
+ * @internal
+ * For the public programmatic API (multi-workflow, middleware, onHitl),
+ * use `createMcpServer` from `programmatic.ts` / the package root export.
  */
-export function createMcpServer(opts: McpServerOptions): McpServerHandle {
+export function createSingleWorkflowServer(
+  opts: McpServerOptions,
+): McpServerHandle {
   // Guard: in async mode the observer tools own fixed names. If the workflow
   // uses one of those names it would be unreachable (shadowed by observer
   // dispatch) and listTools would surface duplicates.
@@ -507,3 +513,11 @@ function makeDefaultRunner(
     return result.outputs[outputTaskName];
   };
 }
+
+/**
+ * @deprecated Use `createSingleWorkflowServer` (internal) or the public
+ * `createMcpServer` from the package root for programmatic embedding.
+ *
+ * Kept for backward compatibility — both names refer to the same function.
+ */
+export const createMcpServer = createSingleWorkflowServer;
