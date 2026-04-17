@@ -143,6 +143,8 @@ Two things `ctx` does NOT contain:
 - **Workflow-level input** — the value passed to `executor.stream(input)` is emitted as the `workflow:start` event but is not injected into `ctx`. Use the **closure pattern** to pass workflow-level data into tasks:
 
 ```ts
+import { WorkflowExecutor } from "@ageflow/executor";
+
 // Closure pattern: wrap defineWorkflow in a factory function
 function buildWorkflow(input: { text: string; targetLang: string }) {
   return defineWorkflow({
@@ -218,13 +220,16 @@ export default defineWorkflow({
             // Outer workflow's "scaffold" output is flat-merged into inner ctx
             const spec = (ctx as Record<string, { output: { code: string } }>)
               .scaffold?.output?.code ?? "";
-            // Previous iteration's full output is at __loop_feedback__
+            // Previous iteration's full output is at __loop_feedback__.output,
+            // which is a task-name-keyed map: Record<string, { output, _source }>
             const feedback = (
-              ctx as Record<string, { output: { reason?: string } }>
-            ).__loop_feedback__?.output?.reason;
+              ctx as Record<string, { output: Record<string, { output: unknown }> }>
+            ).__loop_feedback__?.output;
+            const prevReason = (feedback?.verify?.output as { reason?: string } | undefined)
+              ?.reason;
             return {
               spec,
-              refinementHint: feedback ?? "First attempt — build from spec.",
+              refinementHint: prevReason ?? "First attempt — build from spec.",
             };
           },
         },
@@ -243,6 +248,8 @@ export default defineWorkflow({
 ```
 
 > **Note on types**: `__loop_feedback__` is not part of `BoundCtx<D>` — cast `ctx` to `unknown` or use a type assertion when accessing it. A typed helper will be added in a future version.
+
+> **See also**: canonical `__loop_feedback__` usage in [`dogfooding/workflow.ts`](../../dogfooding/workflow.ts) and [`examples/bug-fix-pipeline/workflow.ts`](../../examples/bug-fix-pipeline/workflow.ts).
 
 ## Error types
 
