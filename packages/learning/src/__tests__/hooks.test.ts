@@ -578,5 +578,94 @@ describe("createLearningHooks", () => {
       expect(spy).toHaveBeenCalledTimes(1);
       spy.mockRestore();
     });
+
+    // ─── #185: serialization (isReflecting guard) ─────────────────────────────
+
+    it("#185: two completions while reflection is slow → only one reflection runs concurrently", async () => {
+      // neverResolve keeps the first reflection in-flight for the duration of the test.
+      const reflectionResult = {
+        workflowScore: 0.9,
+        skillsGenerated: 0,
+        skillsUpdated: 0,
+        tasksReflected: [] as string[],
+        taskScores: {} as Record<string, number>,
+      };
+      const spy = vi
+        .spyOn(reflectionModule, "runReflection")
+        // First call: never resolves during this test (simulates slow reflection)
+        .mockImplementationOnce(() => new Promise(() => {}))
+        // Second call (if guard fails): instant — so the test assertion catches it
+        .mockResolvedValueOnce(reflectionResult);
+
+      const hooks = createLearningHooks({
+        skillStore: makeSkillStore(),
+        traceStore: makeTraceStore(),
+        workflowName: "test-wf",
+        dagStructure,
+        config: { reflectEvery: 1 },
+      });
+
+      // Completion 1 — triggers reflection; leaves it in-flight
+      await runWorkflow(hooks);
+      // Completion 2 — reflection 1 still in-flight → must be debounced (skipped)
+      await runWorkflow(hooks);
+      await Promise.resolve();
+
+      // Only one reflection should have been launched so far
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      spy.mockRestore();
+    });
+
+    it("#185: after first reflection finishes, next eligible completion fires again", async () => {
+      let resolveFirst!: () => void;
+      const reflectionResult = {
+        workflowScore: 0.9,
+        skillsGenerated: 0,
+        skillsUpdated: 0,
+        tasksReflected: [] as string[],
+        taskScores: {} as Record<string, number>,
+      };
+
+      const spy = vi
+        .spyOn(reflectionModule, "runReflection")
+        // First call: slow (controlled via resolveFirst)
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveFirst = () => resolve(reflectionResult);
+            }),
+        )
+        // Second call: instant
+        .mockResolvedValueOnce(reflectionResult);
+
+      const hooks = createLearningHooks({
+        skillStore: makeSkillStore(),
+        traceStore: makeTraceStore(),
+        workflowName: "test-wf",
+        dagStructure,
+        config: { reflectEvery: 1 },
+      });
+
+      // Completion 1 — launches slow reflection
+      await runWorkflow(hooks);
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      // Completion 2 — reflection still in-flight → debounced
+      await runWorkflow(hooks);
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      // Settle the first reflection and allow microtasks to drain
+      resolveFirst();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Completion 3 — isReflecting is now false → new reflection fires
+      await runWorkflow(hooks);
+      await Promise.resolve();
+      expect(spy).toHaveBeenCalledTimes(2);
+
+      spy.mockRestore();
+    });
   });
 });

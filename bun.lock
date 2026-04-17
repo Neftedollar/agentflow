@@ -103,14 +103,14 @@
     },
     "packages/cli": {
       "name": "@ageflow/cli",
-      "version": "0.5.2",
+      "version": "0.5.3",
       "bin": {
         "agentwf": "./dist/bin.js",
       },
       "dependencies": {
         "@ageflow/core": "^0.6.0",
         "@ageflow/executor": "^0.6.0",
-        "@ageflow/learning": "^0.4.3",
+        "@ageflow/learning": "^0.5.0",
         "@ageflow/learning-sqlite": "^0.4.1",
         "@ageflow/mcp-server": "^0.5.0",
         "boxen": "^8.0.0",
@@ -151,7 +151,7 @@
     },
     "packages/learning": {
       "name": "@ageflow/learning",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "dependencies": {
         "@ageflow/core": "^0.6.0",
       },
@@ -171,9 +171,9 @@
     },
     "packages/learning-sqlite": {
       "name": "@ageflow/learning-sqlite",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "dependencies": {
-        "@ageflow/learning": "^0.4.1",
+        "@ageflow/learning": "^0.5.0",
       },
       "devDependencies": {
         "@types/bun": "^1.1.0",
@@ -771,10 +771,6 @@
     "zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
 
     "zod-to-json-schema": ["zod-to-json-schema@3.25.2", "", { "peerDependencies": { "zod": "^3.25.28 || ^4" } }, "sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA=="],
-
-    "@ageflow/cli/@ageflow/learning": ["@ageflow/learning@0.4.6", "", { "dependencies": { "@ageflow/core": "^0.6.0" }, "peerDependencies": { "@ageflow/executor": "^0.6.0" }, "optionalPeers": ["@ageflow/executor"] }, "sha512-bcBippO8KLk3rmN6I4SuOtncQu3sEwO5sKzEMcaZWSdiHTzkAttOKEZ5t2YiuPc+TDvnIOW7panNUMqTNnZ8aQ=="],
-
-    "@ageflow/learning-sqlite/@ageflow/learning": ["@ageflow/learning@0.4.6", "", { "dependencies": { "@ageflow/core": "^0.6.0" }, "peerDependencies": { "@ageflow/executor": "^0.6.0" }, "optionalPeers": ["@ageflow/executor"] }, "sha512-bcBippO8KLk3rmN6I4SuOtncQu3sEwO5sKzEMcaZWSdiHTzkAttOKEZ5t2YiuPc+TDvnIOW7panNUMqTNnZ8aQ=="],
 
     "ansi-align/string-width": ["string-width@4.2.3", "", { "dependencies": { "emoji-regex": "^8.0.0", "is-fullwidth-code-point": "^3.0.0", "strip-ansi": "^6.0.1" } }, "sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g=="],
 

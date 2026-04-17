@@ -51,6 +51,22 @@ export function createLearningHooks(
   const taskSpawnArgsMap = new Map<string, RunnerSpawnArgs>();
   const taskSpawnResultMap = new Map<string, RunnerSpawnResult>();
 
+  /**
+   * #185 — serialization guard for auto-reflection.
+   *
+   * Auto-reflection is intentionally fire-and-forget (it must not block workflow
+   * completion), but running concurrent reflections would race on the skill store
+   * — the second pass could overwrite skills written by the first with stale data.
+   *
+   * `isReflecting` is set to `true` just before a `runReflection` promise is
+   * launched and cleared in its `.then`/`.catch` handler.  Any workflow
+   * completion that would normally trigger reflection while a previous one is
+   * still in flight logs a debounce warning and skips the launch.  Once the
+   * in-flight reflection settles the flag is cleared, so the *next* eligible
+   * completion will fire normally.
+   */
+  let isReflecting = false;
+
   return {
     // #172: capture workflow input once at run start
     onWorkflowStart(input) {
@@ -198,14 +214,30 @@ export function createLearningHooks(
         // "on-failure" and "on-feedback" are intentionally left for future phases.
 
         if (shouldReflect) {
-          runReflection({
-            currentTrace: trace,
-            dagStructure,
-            skillStore,
-            traceStore,
-          }).catch((err: unknown) => {
-            console.warn("[learning] auto-reflection failed", err);
-          });
+          if (isReflecting) {
+            // A previous auto-reflection is still in flight.  Launching another
+            // one concurrently could cause the two passes to race on the skill
+            // store (each writing skills based on a snapshot that doesn't
+            // include the other's writes).  Skip and let the next eligible
+            // workflow completion retry.
+            console.warn(
+              "[learning] auto-reflection debounced — previous reflection still in flight",
+            );
+          } else {
+            isReflecting = true;
+            runReflection({
+              currentTrace: trace,
+              dagStructure,
+              skillStore,
+              traceStore,
+            })
+              .catch((err: unknown) => {
+                console.warn("[learning] auto-reflection failed", err);
+              })
+              .finally(() => {
+                isReflecting = false;
+              });
+          }
         }
       }
     },
