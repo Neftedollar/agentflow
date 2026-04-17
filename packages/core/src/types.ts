@@ -46,10 +46,19 @@ export interface RetryConfig {
   readonly timeoutMs?: number;
 }
 
+export interface BudgetExceededInfo {
+  readonly currentCostUsd: number;
+  readonly maxCostUsd: number;
+  readonly taskName: string;
+  readonly workflowName: string;
+}
+
 export interface BudgetConfig {
   /** Maximum cost in USD. */
   readonly maxCost: number;
   readonly onExceed: "halt" | "warn";
+  /** Called when budget threshold is crossed. Receives current spend + config. */
+  readonly onExceeded?: (info: BudgetExceededInfo) => void | Promise<void>;
 }
 
 export interface MCPConfig {
