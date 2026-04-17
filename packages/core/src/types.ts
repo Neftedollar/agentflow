@@ -434,6 +434,17 @@ export interface TaskDef<
 > {
   readonly agent: A;
   readonly dependsOn?: D;
+  /**
+   * Static input value or a callback that receives completed prior-task outputs.
+   *
+   * When a function, `ctx` contains only outputs of tasks listed in `dependsOn`
+   * (keyed by task name, each as `{ output: unknown }`). It does NOT carry
+   * workflow-level input — use the closure pattern for that.
+   * Inside a loop, outer-workflow task outputs are flat-merged into `ctx` and
+   * the previous iteration's output is at `ctx.__loop_feedback__?.output`.
+   *
+   * See the "ctx in task-input-callbacks" section in the @ageflow/core README.
+   */
   readonly input?:
     | import("zod").infer<
         A extends { input: infer I extends ZodType } ? I : never

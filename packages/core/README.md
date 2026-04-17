@@ -129,6 +129,121 @@ type MyCtx = CtxFor<WorkflowTasks, "summarize">;
 // → { draft: { output: DraftOutput }, translate: { output: TranslateOutput } }
 ```
 
+## ctx in task-input-callbacks
+
+The `ctx` argument passed to a task's `input` function contains **only the outputs of completed tasks from earlier batches** in the current workflow. It is a flat map keyed by task name.
+
+```ts
+ctx.summarize.output  // output of the "summarize" task
+ctx.translate.output  // output of the "translate" task
+```
+
+Two things `ctx` does NOT contain:
+
+- **Workflow-level input** — the value passed to `executor.stream(input)` is emitted as the `workflow:start` event but is not injected into `ctx`. Use the **closure pattern** to pass workflow-level data into tasks:
+
+```ts
+// Closure pattern: wrap defineWorkflow in a factory function
+function buildWorkflow(input: { text: string; targetLang: string }) {
+  return defineWorkflow({
+    name: "translate-pipeline",
+    tasks: {
+      summarize: {
+        agent: summaryAgent,
+        // Close over `input` from the outer function
+        input: { text: input.text, maxWords: 50 },
+      },
+      translate: {
+        agent: translateAgent,
+        dependsOn: ["summarize"],
+        input: (ctx) => ({
+          // Prior task output from ctx
+          text: ctx.summarize.output as string,
+          // Workflow-level data from closure
+          targetLang: input.targetLang,
+        }),
+      },
+    },
+  });
+}
+
+const workflow = buildWorkflow({ text: "...", targetLang: "es" });
+const executor = new WorkflowExecutor(workflow);
+await executor.run();
+```
+
+- **Special keys like `$input`, `$parent`, or `$prev`** — these do not exist. See below for loop-specific context access.
+
+## Accessing outer ctx and previous iteration inside loop
+
+Inside a `loop`, the inner task `ctx` is built as follows:
+
+1. **Outer workflow's completed-task outputs** are flat-merged into the inner ctx. Access them the same way as any other task output — by their task name:
+
+```ts
+// Outer task named "draft" → available as ctx.draft inside the loop
+ctx.draft.output  // NOT ctx.$parent.draft
+```
+
+2. **Previous iteration's output** is available at `ctx.__loop_feedback__?.output` starting from the second iteration. It is `undefined` on the first iteration.
+
+```ts
+ctx.__loop_feedback__?.output  // NOT ctx.$prev
+```
+
+Example — a loop that uses the previous iteration's verify-gate reason to refine the build prompt:
+
+```ts
+import { loop, defineWorkflow } from "@ageflow/core";
+
+export default defineWorkflow({
+  name: "build-verify-loop",
+  tasks: {
+    scaffold: {
+      agent: scaffoldAgent,
+      input: { spec: "..." },
+    },
+    refine: loop({
+      dependsOn: ["scaffold"],
+      max: 5,
+      until: (ctx: unknown) => {
+        const c = ctx as Record<string, { output: { passed: boolean } }>;
+        return c.verify?.output?.passed === true;
+      },
+      tasks: {
+        build: {
+          agent: buildAgent,
+          dependsOn: [],
+          input: (ctx) => {
+            // Outer workflow's "scaffold" output is flat-merged into inner ctx
+            const spec = (ctx as Record<string, { output: { code: string } }>)
+              .scaffold?.output?.code ?? "";
+            // Previous iteration's full output is at __loop_feedback__
+            const feedback = (
+              ctx as Record<string, { output: { reason?: string } }>
+            ).__loop_feedback__?.output?.reason;
+            return {
+              spec,
+              refinementHint: feedback ?? "First attempt — build from spec.",
+            };
+          },
+        },
+        verify: {
+          agent: verifyAgent,
+          dependsOn: ["build"],
+          input: (ctx) => ({
+            code: (ctx as Record<string, { output: { code: string } }>)
+              .build.output.code,
+          }),
+        },
+      },
+    }),
+  },
+});
+```
+
+> **Note on types**: `__loop_feedback__` is not part of `BoundCtx<D>` — cast `ctx` to `unknown` or use a type assertion when accessing it. A typed helper will be added in a future version.
+
 ## Error types
 
 All errors extend `AgentFlowError`. Import individually or catch by base class:
