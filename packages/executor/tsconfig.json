@@ -11,8 +11,8 @@
   "include": ["src/**/*.ts"],
   "exclude": [
     "src/**/*.test.ts",
-    "src/**/* [0-9]*",
-    "src/**/* [0-9]/**",
+    "src/**/* [0-9]*.*",
+    "src/**/* [0-9]*/**",
     "dist",
     "node_modules"
   ]

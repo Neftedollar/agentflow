@@ -8,5 +8,5 @@ dist/
 bun.lockb
 
 # macOS Finder / iCloud duplicates (e.g. "README 2.md", "workflow-executor 5.ts")
-* [0-9].*
-* [0-9]/
+* [0-9]*.*
+* [0-9]*/
