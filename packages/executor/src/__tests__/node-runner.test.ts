@@ -428,19 +428,9 @@ describe("runNode", () => {
 
       const task = { agent: simpleAgent };
       await Promise.all([
-        runNode(
-          task,
-          { text: "hello" },
-          runner,
-          "prefix-task",
-          undefined,
-          undefined,
-          undefined,
-          undefined, // hitlEnforcing
-          undefined,
-          undefined,
+        runNode(task, { text: "hello" }, runner, "prefix-task", undefined, {
           hooks,
-        ),
+        }),
         vi.runAllTimersAsync(),
       ]);
 
@@ -477,19 +467,9 @@ describe("runNode", () => {
 
       const task = { agent: simpleAgent };
       await Promise.all([
-        runNode(
-          task,
-          { text: "hello" },
-          runner,
-          "no-prefix-task",
-          undefined,
-          undefined,
-          undefined,
-          undefined, // hitlEnforcing
-          undefined,
-          undefined,
+        runNode(task, { text: "hello" }, runner, "no-prefix-task", undefined, {
           hooks,
-        ),
+        }),
         vi.runAllTimersAsync(),
       ]);
 
@@ -538,19 +518,9 @@ describe("runNode", () => {
 
       const task = { agent: simpleAgent };
       await Promise.all([
-        runNode(
-          task,
-          { text: "hello" },
-          runner,
-          "my-named-task",
-          undefined,
-          undefined,
-          undefined,
-          undefined, // hitlEnforcing
-          undefined,
-          undefined,
+        runNode(task, { text: "hello" }, runner, "my-named-task", undefined, {
           hooks,
-        ),
+        }),
         vi.runAllTimersAsync(),
       ]);
 

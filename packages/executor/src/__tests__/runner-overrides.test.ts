@@ -190,15 +190,11 @@ describe("runNode — runnerOverrides (per-call tools)", () => {
       runner,
       "test-task",
       undefined, // sessionHandle
-      undefined, // permissions
-      undefined, // filteredTools
-      undefined, // hitlEnforcing
-      undefined, // onRetry
-      undefined, // workflowMcpServers
-      undefined, // hooks
       {
-        "mock-ro": {
-          tools: { per_call_tool: perCallTool },
+        runnerOverrides: {
+          "mock-ro": {
+            tools: { per_call_tool: perCallTool },
+          },
         },
       },
     );
@@ -238,15 +234,11 @@ describe("runNode — runnerOverrides (per-call tools)", () => {
       runner,
       "test-task",
       undefined,
-      undefined,
-      undefined,
-      undefined, // hitlEnforcing
-      undefined,
-      undefined,
-      undefined,
       {
-        "mock-ro": {
-          tools: { shared_tool: perCallTool },
+        runnerOverrides: {
+          "mock-ro": {
+            tools: { shared_tool: perCallTool },
+          },
         },
       },
     );
@@ -275,21 +267,17 @@ describe("runNode — runnerOverrides (per-call tools)", () => {
       runner,
       "test-task",
       undefined,
-      undefined,
-      undefined,
-      undefined, // hitlEnforcing
-      undefined,
-      undefined,
-      undefined,
       {
-        // override for a different brand — should not affect "mock-ro"
-        "other-brand": {
-          tools: {
-            unrelated_tool: makeInlineTool(
-              "unrelated",
-              z.object({}),
-              async () => "x",
-            ),
+        runnerOverrides: {
+          // override for a different brand — should not affect "mock-ro"
+          "other-brand": {
+            tools: {
+              unrelated_tool: makeInlineTool(
+                "unrelated",
+                z.object({}),
+                async () => "x",
+              ),
+            },
           },
         },
       },
@@ -317,15 +305,11 @@ describe("runNode — runnerOverrides (per-call tools)", () => {
       runner,
       "test-task",
       "old-handle", // default session handle
-      undefined,
-      undefined,
-      undefined, // hitlEnforcing
-      undefined,
-      undefined,
-      undefined,
       {
-        "mock-ro": {
-          sessionHandle: "override-handle",
+        runnerOverrides: {
+          "mock-ro": {
+            sessionHandle: "override-handle",
+          },
         },
       },
     );
@@ -459,9 +443,10 @@ describe("HITL security — Issue A: deny-all propagates empty allowlist", () =>
       runner,
       "test-task",
       undefined, // sessionHandle
-      undefined, // permissions
-      [], // filteredTools — deny-all
-      true, // hitlEnforcing
+      {
+        filteredTools: [], // deny-all
+        hitlEnforcing: true,
+      },
     );
 
     const call = spawnCalls[0];
@@ -490,9 +475,10 @@ describe("HITL security — Issue A: deny-all propagates empty allowlist", () =>
       runner,
       "test-task",
       undefined, // sessionHandle
-      undefined, // permissions
-      [], // filteredTools — deny-all
-      true, // hitlEnforcing
+      {
+        filteredTools: [], // deny-all
+        hitlEnforcing: true,
+      },
     );
 
     const call = spawnCalls[0];
@@ -528,15 +514,13 @@ describe("HITL security — Issue B: runnerOverrides.tools filtered through HITL
       runner,
       "test-task",
       undefined, // sessionHandle
-      undefined, // permissions
-      ["tool_y"], // filteredTools — HITL allows only tool_y
-      true, // hitlEnforcing
-      undefined, // onRetry
-      undefined, // workflowMcpServers
-      undefined, // hooks
       {
-        "mock-ro": {
-          tools: { tool_x: toolX, tool_z: toolZ },
+        filteredTools: ["tool_y"], // HITL allows only tool_y
+        hitlEnforcing: true,
+        runnerOverrides: {
+          "mock-ro": {
+            tools: { tool_x: toolX, tool_z: toolZ },
+          },
         },
       },
     );
@@ -574,15 +558,13 @@ describe("HITL security — Issue B: runnerOverrides.tools filtered through HITL
       runner,
       "test-task",
       undefined,
-      undefined,
-      [], // filteredTools — deny-all
-      true, // hitlEnforcing
-      undefined,
-      undefined,
-      undefined,
       {
-        "mock-ro": {
-          tools: { tool_x: toolX },
+        filteredTools: [], // deny-all
+        hitlEnforcing: true,
+        runnerOverrides: {
+          "mock-ro": {
+            tools: { tool_x: toolX },
+          },
         },
       },
     );
@@ -618,9 +600,10 @@ describe("HITL security — Issue B (inline): agent inline tools filtered throug
       runner,
       "test-task",
       undefined,
-      undefined,
-      ["tool_y"], // filteredTools — only tool_y passes
-      true, // hitlEnforcing
+      {
+        filteredTools: ["tool_y"], // only tool_y passes
+        hitlEnforcing: true,
+      },
     );
 
     const call = spawnCalls[0];
@@ -653,22 +636,20 @@ describe("HITL OFF — Issue #164: per-call runnerOverrides tools pass through u
 
     const { runner, spawnCalls } = makeCapturingRunner({ r: "ok" });
 
-    // hitlEnforcing is undefined (HITL OFF) — per-call tools must survive
+    // hitlEnforcing is undefined, filteredTools is undefined → HITL OFF
+    // per-call tools must survive
     await runNode(
       { agent, input: { v: "hi" } },
       { v: "hi" },
       runner,
       "test-task",
       undefined, // sessionHandle
-      undefined, // permissions
-      undefined, // filteredTools
-      undefined, // hitlEnforcing — HITL OFF
-      undefined, // onRetry
-      undefined, // workflowMcpServers
-      undefined, // hooks
       {
-        "mock-ro": {
-          tools: { per_call_tool: perCallTool },
+        // No filteredTools, no hitlEnforcing — defensive default = no filter
+        runnerOverrides: {
+          "mock-ro": {
+            tools: { per_call_tool: perCallTool },
+          },
         },
       },
     );
@@ -703,22 +684,19 @@ describe("HITL OFF — Issue #164: per-call runnerOverrides tools pass through u
 
     const { runner, spawnCalls } = makeCapturingRunner({ r: "ok" });
 
-    // hitlEnforcing is false (HITL OFF) — both tools must survive
+    // hitlEnforcing is explicitly false (HITL OFF) — both tools must survive
     await runNode(
       { agent, input: { v: "hi" } },
       { v: "hi" },
       runner,
       "test-task",
       undefined, // sessionHandle
-      undefined, // permissions
-      undefined, // filteredTools
-      false, // hitlEnforcing — explicitly false (HITL OFF)
-      undefined, // onRetry
-      undefined, // workflowMcpServers
-      undefined, // hooks
       {
-        "mock-ro": {
-          tools: { per_call_tool: perCallTool },
+        hitlEnforcing: false, // explicitly false (HITL OFF)
+        runnerOverrides: {
+          "mock-ro": {
+            tools: { per_call_tool: perCallTool },
+          },
         },
       },
     );
@@ -786,5 +764,143 @@ describe("InlineToolsNotSupportedError — subprocess runner guard", () => {
     expect(err.runnerName).toBe("codex");
     expect(err.message).toContain("codex");
     expect(err.message).toContain("inline tool");
+  });
+});
+
+// ─── Issue #167 regressions: options-object signature + defensive default ─────
+
+describe("Issue #167 — options-object signature + defensive hitlEnforcing default", () => {
+  it("legacy shape: filteredTools without hitlEnforcing → filter applied (regression guard)", async () => {
+    // Regression test: before the fix, passing filteredTools without explicit
+    // hitlEnforcing=true would skip the filter entirely (HITL bypass).
+    // Defensive default: filteredTools present + hitlEnforcing undefined → enforce.
+    const toolA = makeInlineTool("tool A", z.object({}), async () => "a");
+    const toolB = makeInlineTool("tool B", z.object({}), async () => "b");
+
+    const agent = defineAgent({
+      runner: "mock-ro",
+      input: z.object({ v: z.string() }),
+      output: z.object({ r: z.string() }),
+      prompt: ({ v }) => `do: ${v}`,
+      tools: { tool_a: toolA, tool_b: toolB },
+      retry: { max: 1, on: [], backoff: "fixed" },
+    });
+
+    const { runner, spawnCalls } = makeCapturingRunner({ r: "ok" });
+
+    // Legacy call: filteredTools provided, hitlEnforcing NOT provided
+    await runNode(
+      { agent, input: { v: "hi" } },
+      { v: "hi" },
+      runner,
+      "test-task",
+      undefined,
+      {
+        filteredTools: ["tool_a"], // only tool_a allowed — tool_b must be blocked
+        // hitlEnforcing deliberately omitted → defensive default = true
+      },
+    );
+
+    const call = spawnCalls[0];
+    // Defensive default: filter MUST apply even without explicit hitlEnforcing
+    expect(call?.tools).toContain("tool_a");
+    expect(call?.tools).not.toContain("tool_b");
+  });
+
+  it("new shape: hitlEnforcing: true + filteredTools → filter applied", async () => {
+    const toolA = makeInlineTool("tool A", z.object({}), async () => "a");
+    const toolB = makeInlineTool("tool B", z.object({}), async () => "b");
+
+    const agent = defineAgent({
+      runner: "mock-ro",
+      input: z.object({ v: z.string() }),
+      output: z.object({ r: z.string() }),
+      prompt: ({ v }) => `do: ${v}`,
+      tools: { tool_a: toolA, tool_b: toolB },
+      retry: { max: 1, on: [], backoff: "fixed" },
+    });
+
+    const { runner, spawnCalls } = makeCapturingRunner({ r: "ok" });
+
+    await runNode(
+      { agent, input: { v: "hi" } },
+      { v: "hi" },
+      runner,
+      "test-task",
+      undefined,
+      {
+        filteredTools: ["tool_a"],
+        hitlEnforcing: true,
+      },
+    );
+
+    const call = spawnCalls[0];
+    expect(call?.tools).toContain("tool_a");
+    expect(call?.tools).not.toContain("tool_b");
+  });
+
+  it("new shape: hitlEnforcing: false + filteredTools → filter SKIPPED", async () => {
+    const toolA = makeInlineTool("tool A", z.object({}), async () => "a");
+    const toolB = makeInlineTool("tool B", z.object({}), async () => "b");
+
+    const agent = defineAgent({
+      runner: "mock-ro",
+      input: z.object({ v: z.string() }),
+      output: z.object({ r: z.string() }),
+      prompt: ({ v }) => `do: ${v}`,
+      tools: { tool_a: toolA, tool_b: toolB },
+      retry: { max: 1, on: [], backoff: "fixed" },
+    });
+
+    const { runner, spawnCalls } = makeCapturingRunner({ r: "ok" });
+
+    // Explicit false: caller explicitly opts out of HITL filtering
+    await runNode(
+      { agent, input: { v: "hi" } },
+      { v: "hi" },
+      runner,
+      "test-task",
+      undefined,
+      {
+        filteredTools: ["tool_a"], // would block tool_b, but hitlEnforcing=false skips it
+        hitlEnforcing: false,
+      },
+    );
+
+    const call = spawnCalls[0];
+    // Filter skipped — both tools must appear
+    expect(call?.tools).toContain("tool_a");
+    expect(call?.tools).toContain("tool_b");
+  });
+
+  it("no filteredTools at all → no filter regardless of hitlEnforcing", async () => {
+    const toolA = makeInlineTool("tool A", z.object({}), async () => "a");
+
+    const agent = defineAgent({
+      runner: "mock-ro",
+      input: z.object({ v: z.string() }),
+      output: z.object({ r: z.string() }),
+      prompt: ({ v }) => `do: ${v}`,
+      tools: { tool_a: toolA },
+      retry: { max: 1, on: [], backoff: "fixed" },
+    });
+
+    const { runner, spawnCalls } = makeCapturingRunner({ r: "ok" });
+
+    await runNode(
+      { agent, input: { v: "hi" } },
+      { v: "hi" },
+      runner,
+      "test-task",
+      undefined,
+      {
+        // No filteredTools → no filter, tools come from agent definition
+        hitlEnforcing: true,
+      },
+    );
+
+    const call = spawnCalls[0];
+    // Agent tools pass through unchanged (no HITL set to filter against)
+    expect(call?.tools).toContain("tool_a");
   });
 });

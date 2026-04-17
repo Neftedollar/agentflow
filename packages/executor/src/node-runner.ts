@@ -32,6 +32,45 @@ export interface NodeRunResult<O> {
   promptSent: string;
 }
 
+/**
+ * Optional arguments to runNode — grouped into a single object to prevent
+ * positional-argument mis-alignment when new options are added.
+ *
+ * Defensive default for hitlEnforcing:
+ *   - When filteredTools is provided and hitlEnforcing is undefined → behaves
+ *     as hitlEnforcing: true (preserves 0.6.1 strict enforcement; protects
+ *     legacy callers from HITL bypass regression).
+ *   - Only when hitlEnforcing is explicitly false does the filter skip.
+ *   - When filteredTools is undefined → no filter regardless of hitlEnforcing.
+ */
+export interface RunNodeOpts {
+  /** Workflow / task hooks (getSystemPromptPrefix, etc.). */
+  // biome-ignore lint/suspicious/noExplicitAny: hooks generic T not available here
+  hooks?: WorkflowHooks<any>;
+  /** Boolean permission map forwarded to the runner. */
+  permissions?: Record<string, boolean>;
+  /**
+   * HITL-approved tool allowlist. When provided without an explicit
+   * hitlEnforcing value the filter is applied (defensive default = enforcing).
+   */
+  filteredTools?: readonly string[];
+  /**
+   * Whether HITL is actively enforcing the tool allowlist.
+   *
+   * - true  → intersection of candidates with filteredTools is applied.
+   * - false → filter skipped; all candidate tools pass through unchanged.
+   * - undefined (default) → behaves as true when filteredTools is provided,
+   *   false otherwise.
+   */
+  hitlEnforcing?: boolean;
+  /** Callback invoked before each retry attempt. */
+  onRetry?: (attempt: number, reason: string) => void;
+  /** Workflow-level MCP server configs. */
+  workflowMcpServers?: readonly McpServerConfig[];
+  /** Per-runner overrides (session handle, inline tools). */
+  runnerOverrides?: RunnerOverrides;
+}
+
 // ─── Input sanitization ───────────────────────────────────────────────────────
 
 // Patterns cover first-line injection ((?:^|\n)), leading whitespace (\s*),
@@ -109,14 +148,7 @@ export async function runNode<
   runner: Runner,
   taskName: string,
   sessionHandle?: string,
-  permissions?: Record<string, boolean>,
-  filteredTools?: readonly string[],
-  hitlEnforcing?: boolean,
-  onRetry?: (attempt: number, reason: string) => void,
-  workflowMcpServers?: readonly McpServerConfig[],
-  // biome-ignore lint/suspicious/noExplicitAny: hooks generic T not available here
-  hooks?: WorkflowHooks<any>,
-  runnerOverrides?: RunnerOverrides,
+  opts?: RunNodeOpts,
 ): Promise<
   NodeRunResult<
     import("zod").infer<
@@ -124,6 +156,23 @@ export async function runNode<
     >
   >
 > {
+  // Destructure opts with defaults
+  const {
+    hooks,
+    permissions,
+    filteredTools,
+    hitlEnforcing,
+    onRetry,
+    workflowMcpServers,
+    runnerOverrides,
+  } = opts ?? {};
+
+  // Defensive default: when filteredTools is provided and hitlEnforcing is
+  // not explicitly set, treat as enforcing (preserves 0.6.1 strict behavior
+  // and protects legacy callers from HITL bypass regression).
+  const effectiveHitlEnforcing =
+    hitlEnforcing !== undefined ? hitlEnforcing : filteredTools !== undefined;
+
   const resolvedDef = resolveAgentDef(task.agent);
   const maxAttempts = resolvedDef.retry.max;
   const attempts: AttemptRecord[] = [];
@@ -198,13 +247,13 @@ export async function runNode<
       }
 
       // Step 3: Apply HITL filter.
-      // - If hitlEnforcing is true (mode === "permissions"), filteredTools is
+      // - If effectiveHitlEnforcing is true (mode === "permissions"), filteredTools is
       //   the authoritative set.  Any candidate not in filteredTools is dropped —
       //   including per-call overrides.  An empty filteredTools means deny-all.
-      // - If hitlEnforcing is false/undefined (HITL off or checkpoint-only),
+      // - If effectiveHitlEnforcing is false (HITL off or checkpoint-only),
       //   all candidates pass through unchanged.
       let effectiveToolNames: readonly string[] | undefined;
-      if (hitlEnforcing === true && filteredTools !== undefined) {
+      if (effectiveHitlEnforcing === true && filteredTools !== undefined) {
         // HITL is actively enforcing: intersect candidates with the HITL-approved set.
         // candidateToolNames may be undefined when the agent has no tools; in
         // that case effectiveToolNames takes the HITL value directly (which may
@@ -286,7 +335,7 @@ export async function runNode<
         spawnArgs.sessionHandle = effectiveSessionHandle;
       }
 
-      // Pass permissions if available
+      // Pass permissions if available (from opts.permissions)
       if (permissions !== undefined) {
         spawnArgs.permissions = permissions;
       }

@@ -594,19 +594,23 @@ export class WorkflowExecutor<T extends TasksMap> {
 
             const taskStart = Date.now();
             try {
+              const nodeOpts: import("./node-runner.js").RunNodeOpts = {
+                ...(hooks !== undefined ? { hooks } : {}),
+                ...(permissions !== undefined ? { permissions } : {}),
+                ...(filteredTools !== undefined ? { filteredTools } : {}),
+                hitlEnforcing,
+                ...(this.workflow.mcpServers !== undefined
+                  ? { workflowMcpServers: this.workflow.mcpServers }
+                  : {}),
+                ...(runnerOverrides !== undefined ? { runnerOverrides } : {}),
+              };
               const result = await runNode(
                 task,
                 resolvedInput,
                 runner,
                 taskName,
                 sessionHandle,
-                permissions ?? undefined,
-                filteredTools,
-                hitlEnforcing,
-                undefined,
-                this.workflow.mcpServers,
-                hooks,
-                runnerOverrides,
+                nodeOpts,
               );
 
               const latencyMs = Date.now() - taskStart;
@@ -1055,16 +1059,12 @@ export class WorkflowExecutor<T extends TasksMap> {
 
             const taskStart = Date.now();
             try {
-              const result = await runNode(
-                task,
-                resolvedInput,
-                runner,
-                taskName,
-                sessionHandle,
-                permissions ?? undefined,
-                filteredTools,
+              const nodeOpts: import("./node-runner.js").RunNodeOpts = {
+                ...(hooks !== undefined ? { hooks } : {}),
+                ...(permissions !== undefined ? { permissions } : {}),
+                ...(filteredTools !== undefined ? { filteredTools } : {}),
                 hitlEnforcing,
-                (attempt, reason) => {
+                onRetry: (attempt, reason) => {
                   push({
                     type: "task:retry",
                     runId,
@@ -1075,9 +1075,18 @@ export class WorkflowExecutor<T extends TasksMap> {
                     reason,
                   });
                 },
-                this.workflow.mcpServers,
-                hooks,
-                runnerOverrides,
+                ...(this.workflow.mcpServers !== undefined
+                  ? { workflowMcpServers: this.workflow.mcpServers }
+                  : {}),
+                ...(runnerOverrides !== undefined ? { runnerOverrides } : {}),
+              };
+              const result = await runNode(
+                task,
+                resolvedInput,
+                runner,
+                taskName,
+                sessionHandle,
+                nodeOpts,
               );
 
               const latencyMs = Date.now() - taskStart;

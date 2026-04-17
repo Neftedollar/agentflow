@@ -20,17 +20,9 @@ describe("runNode onRetry callback", () => {
     });
     const onRetry = vi.fn();
     await expect(
-      runNode(
-        { agent: a, input: {} },
-        {},
-        alwaysFail,
-        "t",
-        undefined,
-        undefined,
-        undefined,
-        undefined, // hitlEnforcing
+      runNode({ agent: a, input: {} }, {}, alwaysFail, "t", undefined, {
         onRetry,
-      ),
+      }),
     ).rejects.toThrow();
     // With max=1 there is no retry — onRetry must not be called
     expect(onRetry).not.toHaveBeenCalled();
@@ -60,17 +52,9 @@ describe("runNode onRetry callback", () => {
       retry: { max: 3, on: ["subprocess_error"], backoff: "fixed" },
     });
     const onRetry = vi.fn();
-    await runNode(
-      { agent: a, input: {} },
-      {},
-      flaky,
-      "t",
-      undefined,
-      undefined,
-      undefined,
-      undefined, // hitlEnforcing
+    await runNode({ agent: a, input: {} }, {}, flaky, "t", undefined, {
       onRetry,
-    );
+    });
     expect(onRetry).toHaveBeenCalledTimes(2); // two failures before success
     expect(onRetry.mock.calls[0]?.[0]).toBe(1); // attempt about to start (1, then 2)
     expect(String(onRetry.mock.calls[0]?.[1])).toMatch(/subprocess/);
