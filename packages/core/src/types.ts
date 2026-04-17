@@ -501,7 +501,7 @@ export interface WorkflowHooks<T extends TasksMap = TasksMap> {
   readonly onWorkflowComplete?: (
     result: unknown,
     summary: WorkflowMetrics,
-  ) => void;
+  ) => void | Promise<void>;
   /**
    * Returns extra context to prepend to the agent's system prompt.
    * Called before each task spawn. Learning hooks use this to inject skills.
@@ -509,7 +509,7 @@ export interface WorkflowHooks<T extends TasksMap = TasksMap> {
    */
   readonly getSystemPromptPrefix?: (
     taskName: keyof T & string,
-  ) => string | undefined;
+  ) => string | undefined | Promise<string | undefined>;
 }
 
 // ─── MCP exposure config ─────────────────────────────────────────────────────

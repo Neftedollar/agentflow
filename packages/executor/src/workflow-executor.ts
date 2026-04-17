@@ -206,7 +206,7 @@ export class WorkflowExecutor<T extends TasksMap> {
           },
         );
         // Fire onWorkflowComplete hook (was fired at end of old run())
-        this.workflow.hooks?.onWorkflowComplete?.(
+        await this.workflow.hooks?.onWorkflowComplete?.(
           result.outputs,
           result.metrics,
         );

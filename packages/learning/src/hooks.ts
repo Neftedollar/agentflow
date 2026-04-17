@@ -22,9 +22,14 @@ export function createLearningHooks(
   let runCount = 0;
   let isFirstTaskOfRun = true;
 
-  // Cache active skills per task (populated async on onTaskStart)
-  // Maps taskName -> skill content string or null (null = no skill found)
-  const skillCache = new Map<string, string | null>();
+  // Cache active skills per task (populated async on onTaskStart).
+  // Stores Promises so getSystemPromptPrefix can await the result —
+  // eliminates the race condition where the store query hadn't resolved yet.
+  const skillCache = new Map<string, Promise<string | undefined>>();
+
+  // Resolved skill content per task — populated by the promise .then() handler.
+  // Used by onTaskComplete (which is sync) to check whether a skill was applied.
+  const resolvedSkillContent = new Map<string, string | undefined>();
 
   return {
     onTaskStart(taskName) {
@@ -33,37 +38,42 @@ export function createLearningHooks(
         taskTraces = [];
         runStartTime = Date.now();
         skillCache.clear();
+        resolvedSkillContent.clear();
         isFirstTaskOfRun = false;
       }
 
-      // Async pre-populate cache — fire and don't await (sync hook)
-      // The cache will be ready by the time getSystemPromptPrefix is called
-      // if there's any async gap (e.g. executor awaits before spawn).
-      // We store a promise so repeated calls don't double-fetch.
+      // Store a Promise so getSystemPromptPrefix can await it.
+      // Repeated calls for the same taskName reuse the same promise.
       if (!skillCache.has(taskName)) {
-        // Mark as in-flight with undefined to prevent double calls
-        skillStore
+        const promise = skillStore
           .getActiveForTask(taskName, workflowName)
-          .then((skill) => {
-            skillCache.set(taskName, skill?.content ?? null);
-          })
-          .catch(() => {
-            skillCache.set(taskName, null);
-          });
+          .then((skill) => skill?.content)
+          .catch(() => undefined);
+
+        // Also populate the resolved map so onTaskComplete can read it
+        // synchronously after the promise has settled.
+        promise.then((content) => {
+          resolvedSkillContent.set(taskName, content);
+        });
+
+        skillCache.set(taskName, promise);
       }
     },
 
-    getSystemPromptPrefix(taskName) {
-      // Return cached value (sync). May be undefined if cache not yet populated.
-      const cached = skillCache.get(taskName);
-      if (cached === null) return undefined; // explicitly no skill
-      return cached ?? undefined; // undefined if not yet cached
+    async getSystemPromptPrefix(taskName) {
+      // Await the pending promise so skills are never silently dropped.
+      const pending = skillCache.get(taskName);
+      if (pending === undefined) return undefined;
+      return pending;
     },
 
     onTaskComplete(taskName, output, metrics) {
       const appliedSkills: string[] = [];
-      const cachedSkill = skillCache.get(taskName);
-      if (cachedSkill) appliedSkills.push(taskName);
+      // Use the resolved map (populated after the promise settles).
+      // By the time onTaskComplete fires, getSystemPromptPrefix has already
+      // been awaited by the executor, so the resolved value is always present.
+      const resolvedContent = resolvedSkillContent.get(taskName);
+      if (resolvedContent) appliedSkills.push(taskName);
 
       taskTraces.push({
         taskName,

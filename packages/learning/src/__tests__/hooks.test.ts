@@ -108,12 +108,10 @@ describe("createLearningHooks", () => {
       workflowName: "bug-fix",
     });
 
-    // Trigger cache population
+    // Trigger cache population then await the async result directly
     hooks.onTaskStart?.("analyze");
-    await vi.waitFor(() => {
-      const result = hooks.getSystemPromptPrefix?.("analyze");
-      expect(result).toBe("Use structured output always.");
-    });
+    const result = await hooks.getSystemPromptPrefix?.("analyze");
+    expect(result).toBe("Use structured output always.");
   });
 
   it("getSystemPromptPrefix returns undefined when no skill exists", async () => {
@@ -125,10 +123,8 @@ describe("createLearningHooks", () => {
     });
 
     hooks.onTaskStart?.("analyze");
-    await vi.waitFor(() => {
-      const result = hooks.getSystemPromptPrefix?.("analyze");
-      expect(result).toBeUndefined();
-    });
+    const result = await hooks.getSystemPromptPrefix?.("analyze");
+    expect(result).toBeUndefined();
   });
 
   it("onWorkflowComplete saves ExecutionTrace to traceStore", async () => {
@@ -161,11 +157,9 @@ describe("createLearningHooks", () => {
       workflowName: "bug-fix",
     });
 
-    // Pre-populate cache
+    // Pre-populate cache and await the async result
     hooks.onTaskStart?.("analyze");
-    await vi.waitFor(() => {
-      return hooks.getSystemPromptPrefix?.("analyze") !== undefined;
-    });
+    await hooks.getSystemPromptPrefix?.("analyze");
 
     hooks.onTaskComplete?.("analyze", "output text", makeTaskMetrics());
     await hooks.onWorkflowComplete?.({}, makeMetrics());
@@ -184,10 +178,7 @@ describe("createLearningHooks", () => {
     });
 
     hooks.onTaskStart?.("analyze");
-    await vi.waitFor(() => {
-      const result = hooks.getSystemPromptPrefix?.("analyze");
-      return result === undefined;
-    });
+    await hooks.getSystemPromptPrefix?.("analyze");
 
     hooks.onTaskComplete?.("analyze", "output", makeTaskMetrics());
     await hooks.onWorkflowComplete?.({}, makeMetrics());
