@@ -8,7 +8,7 @@ export type { Logger };
  * Package version — keep in sync with package.json.
  * Used as the MCP Client `version` in the protocol handshake.
  */
-export const RUNNER_VERSION = "0.3.5" as const;
+export const RUNNER_VERSION = "0.4.0" as const;
 
 export interface ToolDefinition {
   /** Human-readable description surfaced to the model. */

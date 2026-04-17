@@ -127,6 +127,57 @@ describe("defineAgent", () => {
   });
 });
 
+describe("defineAgent — inline tools (map shape)", () => {
+  it("accepts tools as string[] (legacy allowlist)", () => {
+    const agent = defineAgent({
+      runner: "claude",
+      input: z.object({ text: z.string() }),
+      output: z.object({ result: z.string() }),
+      prompt: () => "test",
+      tools: ["bash", "readFile"],
+    });
+    expect(Array.isArray(agent.tools)).toBe(true);
+    expect(agent.tools).toEqual(["bash", "readFile"]);
+  });
+
+  it("accepts tools as inline map", () => {
+    const getWeather = {
+      description: "Get weather for a city",
+      parameters: z.object({ city: z.string() }),
+      execute: async ({ city }: { city: string }) => ({ temp: 72, city }),
+    };
+    const agent = defineAgent({
+      runner: "api",
+      input: z.object({ query: z.string() }),
+      output: z.object({ answer: z.string() }),
+      prompt: ({ query }) => query,
+      tools: { getWeather },
+    });
+    expect(Array.isArray(agent.tools)).toBe(false);
+    expect(typeof agent.tools).toBe("object");
+    // Keys should be preserved
+    expect(Object.keys(agent.tools as object)).toEqual(["getWeather"]);
+  });
+
+  it("inline tool execute function is callable", async () => {
+    const echo = {
+      description: "Echo input",
+      parameters: z.object({ msg: z.string() }),
+      execute: async ({ msg }: { msg: string }) => ({ echoed: msg }),
+    };
+    const agent = defineAgent({
+      runner: "api",
+      input: z.object({ q: z.string() }),
+      output: z.object({ r: z.string() }),
+      prompt: ({ q }) => q,
+      tools: { echo },
+    });
+    const tools = agent.tools as Record<string, typeof echo>;
+    const result = await tools.echo?.execute({ msg: "hello" });
+    expect(result).toEqual({ echoed: "hello" });
+  });
+});
+
 describe("resolveAgentDef — mcps migration shim", () => {
   it("migrates deprecated mcps field to mcp.servers", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});

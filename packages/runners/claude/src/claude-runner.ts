@@ -1,6 +1,7 @@
 import {
   AgentFlowError,
   AgentHitlConflictError,
+  InlineToolsNotSupportedError,
   mcpToolFqn,
 } from "@ageflow/core";
 import type { Runner, RunnerSpawnArgs, RunnerSpawnResult } from "@ageflow/core";
@@ -139,6 +140,14 @@ export class ClaudeRunner implements Runner {
   }
 
   async spawn(args: RunnerSpawnArgs): Promise<RunnerSpawnResult> {
+    // Inline tools require in-process execution — subprocess runners cannot invoke them.
+    if (
+      args.inlineTools !== undefined &&
+      Object.keys(args.inlineTools).length > 0
+    ) {
+      throw new InlineToolsNotSupportedError("claude");
+    }
+
     const cliArgs: string[] = ["--output-format", "json", "--print"];
 
     if (args.model !== undefined) {

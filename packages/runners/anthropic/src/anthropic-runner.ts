@@ -17,6 +17,7 @@ import type {
 import {
   McpPoolCollisionError,
   mcpToolsToRegistry,
+  mergeInlineTools,
   shutdownAll,
   startMcpClients,
 } from "@ageflow/runner-api";
@@ -199,15 +200,23 @@ export class AnthropicRunner implements Runner {
       history,
     });
 
-    // Filter registry to caller's allowlist
+    // Merge three tool sources: instance < agent-inline < per-call.
+    // args.inlineTools contains the pre-merged map set by the executor.
+    const mergedRegistry = mergeInlineTools(
+      this.tools,
+      undefined,
+      args.inlineTools,
+    );
+
+    // Filter registry to caller's string[] allowlist.
     const filteredRegistry =
       args.tools !== undefined
         ? Object.fromEntries(
-            Object.entries(this.tools).filter(([name]) =>
+            Object.entries(mergedRegistry).filter(([name]) =>
               (args.tools as string[]).includes(name),
             ),
           )
-        : this.tools;
+        : mergedRegistry;
 
     // ── MCP clients ────────────────────────────────────────────────────────────
     const servers = args.mcpServers ?? [];

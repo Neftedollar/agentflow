@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/runner-api",
-  "version": "0.3.5",
+  "version": "0.4.0",
   "description": "OpenAI-compatible HTTP runner for ageflow (OpenAI, Groq, Together, Ollama, vLLM, LM Studio, Azure).",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/runners/api",
   "type": "module",
@@ -17,8 +17,9 @@
     "lint": "biome check src/"
   },
   "dependencies": {
-    "@ageflow/core": "^0.5.0",
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@ageflow/core": "^0.6.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod-to-json-schema": "^3.23.0"
   },
   "devDependencies": {
     "@ageflow/testing": "workspace:*",

@@ -6,6 +6,7 @@ import type {
   RunnerSpawnResult,
 } from "@ageflow/core";
 import { McpPoolCollisionError } from "./errors.js";
+import { mergeInlineTools } from "./inline-tools.js";
 import type { McpClient } from "./mcp-client.js";
 import { shutdownAll, startMcpClients } from "./mcp-client.js";
 import { mcpToolsToRegistry } from "./mcp-tool-adapter.js";
@@ -145,16 +146,28 @@ export class ApiRunner implements Runner {
       history,
     });
 
-    // P1-3: filter the runtime registry to the caller's allowlist so that
-    // tools not in args.tools cannot be executed even if the model names them.
+    // Merge three tool sources: instance < agent-inline < per-call.
+    // args.inlineTools contains the pre-merged map set by the executor
+    // (AgentDef inline tools + runnerOverrides.tools).  We still pass
+    // inlineTools as the "agent + per-call" layer, instance tools are always
+    // the base.
+    const mergedRegistry = mergeInlineTools(
+      this.tools,
+      undefined,
+      args.inlineTools,
+    );
+
+    // P1-3: filter the runtime registry to the caller's string[] allowlist so
+    // that tools not in args.tools cannot be executed even if the model names them.
+    // When inlineTools are present, their names are already in args.tools (set by executor).
     const filteredRegistry =
       args.tools !== undefined
         ? Object.fromEntries(
-            Object.entries(this.tools).filter(([name]) =>
+            Object.entries(mergedRegistry).filter(([name]) =>
               (args.tools as string[]).includes(name),
             ),
           )
-        : this.tools;
+        : mergedRegistry;
 
     // ── MCP clients ────────────────────────────────────────────────────────
     const servers = args.mcpServers ?? [];

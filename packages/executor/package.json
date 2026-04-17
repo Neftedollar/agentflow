@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/executor",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "DAG executor, loop runner, session manager, HITL, budget tracker, and preflight checks for ageflow",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/executor",
   "type": "module",
@@ -19,7 +19,7 @@
     "lint": "biome check src/"
   },
   "dependencies": {
-    "@ageflow/core": "^0.5.0",
+    "@ageflow/core": "^0.6.0",
     "zod-to-json-schema": "^3.23.0"
   },
   "devDependencies": {

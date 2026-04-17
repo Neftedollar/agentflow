@@ -1,4 +1,8 @@
-import { AgentFlowError, AgentHitlConflictError } from "@ageflow/core";
+import {
+  AgentFlowError,
+  AgentHitlConflictError,
+  InlineToolsNotSupportedError,
+} from "@ageflow/core";
 import type { Runner, RunnerSpawnArgs, RunnerSpawnResult } from "@ageflow/core";
 import { renderCodexMcpFlags } from "./mcp-render.js";
 
@@ -156,6 +160,14 @@ export class CodexRunner implements Runner {
   }
 
   async spawn(args: RunnerSpawnArgs): Promise<RunnerSpawnResult> {
+    // Inline tools require in-process execution — subprocess runners cannot invoke them.
+    if (
+      args.inlineTools !== undefined &&
+      Object.keys(args.inlineTools).length > 0
+    ) {
+      throw new InlineToolsNotSupportedError("codex");
+    }
+
     // Codex CLI invocation: `codex exec --json [--model M] [--skip-git-repo-check] "<prompt>"`
     // Session resumption:   `codex exec --json resume <THREAD_ID> "<prompt>"`
     const subArgs: string[] = ["--json"];

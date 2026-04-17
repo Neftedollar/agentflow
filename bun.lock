@@ -103,7 +103,7 @@
     },
     "packages/cli": {
       "name": "@ageflow/cli",
-      "version": "0.4.3",
+      "version": "0.4.4",
       "bin": {
         "agentwf": "./dist/bin.js",
       },
@@ -126,7 +126,7 @@
     },
     "packages/core": {
       "name": "@ageflow/core",
-      "version": "0.5.1",
+      "version": "0.6.0",
       "devDependencies": {
         "@types/node": "^22.0.0",
         "vitest": "^2.1.0",
@@ -138,9 +138,9 @@
     },
     "packages/executor": {
       "name": "@ageflow/executor",
-      "version": "0.5.1",
+      "version": "0.6.0",
       "dependencies": {
-        "@ageflow/core": "^0.5.0",
+        "@ageflow/core": "^0.6.0",
         "zod-to-json-schema": "^3.23.0",
       },
       "devDependencies": {
@@ -151,9 +151,9 @@
     },
     "packages/learning": {
       "name": "@ageflow/learning",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "dependencies": {
-        "@ageflow/core": "^0.5.0",
+        "@ageflow/core": "^0.6.0",
       },
       "devDependencies": {
         "@ageflow/executor": "workspace:*",
@@ -163,7 +163,7 @@
         "zod": "^3.23.0",
       },
       "peerDependencies": {
-        "@ageflow/executor": "^0.5.0",
+        "@ageflow/executor": "^0.6.0",
       },
       "optionalPeers": [
         "@ageflow/executor",
@@ -183,7 +183,7 @@
     },
     "packages/mcp-server": {
       "name": "@ageflow/mcp-server",
-      "version": "0.3.4",
+      "version": "0.3.5",
       "dependencies": {
         "@ageflow/core": "^0.4.3",
         "@ageflow/executor": "^0.4.3",
@@ -200,7 +200,7 @@
     },
     "packages/runners/anthropic": {
       "name": "@ageflow/runner-anthropic",
-      "version": "0.4.2",
+      "version": "0.5.0",
       "dependencies": {
         "@ageflow/core": "^0.4.0",
         "@ageflow/runner-api": "^0.3.3",
@@ -213,10 +213,11 @@
     },
     "packages/runners/api": {
       "name": "@ageflow/runner-api",
-      "version": "0.3.5",
+      "version": "0.4.0",
       "dependencies": {
-        "@ageflow/core": "^0.4.3",
+        "@ageflow/core": "^0.6.0",
         "@modelcontextprotocol/sdk": "^1.0.0",
+        "zod-to-json-schema": "^3.23.0",
       },
       "devDependencies": {
         "@ageflow/testing": "workspace:*",
@@ -227,7 +228,7 @@
     },
     "packages/runners/claude": {
       "name": "@ageflow/runner-claude",
-      "version": "0.3.4",
+      "version": "0.3.5",
       "dependencies": {
         "@ageflow/core": "workspace:*",
       },
@@ -239,7 +240,7 @@
     },
     "packages/runners/codex": {
       "name": "@ageflow/runner-codex",
-      "version": "0.3.4",
+      "version": "0.3.5",
       "dependencies": {
         "@ageflow/core": "workspace:*",
       },
@@ -251,7 +252,7 @@
     },
     "packages/server": {
       "name": "@ageflow/server",
-      "version": "0.4.3",
+      "version": "0.4.4",
       "dependencies": {
         "@ageflow/core": "^0.4.3",
         "@ageflow/executor": "^0.4.3",
@@ -264,10 +265,10 @@
     },
     "packages/testing": {
       "name": "@ageflow/testing",
-      "version": "0.3.4",
+      "version": "0.3.5",
       "dependencies": {
-        "@ageflow/core": "^0.5.0",
-        "@ageflow/executor": "^0.5.0",
+        "@ageflow/core": "^0.6.0",
+        "@ageflow/executor": "^0.6.0",
         "@modelcontextprotocol/sdk": "^1.0.0",
       },
       "devDependencies": {

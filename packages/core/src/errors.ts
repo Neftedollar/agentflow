@@ -205,6 +205,29 @@ export class TimeoutError extends AgentFlowError {
   }
 }
 
+// ─── Inline tools error ───────────────────────────────────────────────────────
+
+/**
+ * Thrown by subprocess runners (runner-claude, runner-codex) when an AgentDef
+ * carries inline tool definitions (`tools: Record<string, InlineToolDef>`).
+ *
+ * Inline tools require in-process execution; subprocess runners cannot invoke
+ * them.  Migrate to the runner's own tool-config mechanism or switch to
+ * runner-api / runner-anthropic.
+ */
+export class InlineToolsNotSupportedError extends AgentFlowError {
+  readonly code = "inline_tools_not_supported" as const;
+  constructor(
+    readonly runnerName: string,
+    options?: ErrorOptions,
+  ) {
+    super(
+      `Runner "${runnerName}" does not support inline tool definitions (AgentDef.tools as a map). Use a string[] allowlist with the runner's constructor tools config, or switch to runner-api / runner-anthropic.`,
+      options,
+    );
+  }
+}
+
 // ─── MCP error hierarchy ──────────────────────────────────────────────────────
 
 /**

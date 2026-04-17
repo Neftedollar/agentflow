@@ -1,5 +1,30 @@
 import type { ZodType } from "zod";
 
+// ─── Inline tool definitions ──────────────────────────────────────────────────
+
+/**
+ * Inline tool definition attached directly to an AgentDef.
+ *
+ * `parameters` is a Zod schema — the executor/runner converts it to JSON schema
+ * before sending to the model.
+ *
+ * Runners that support inline tools (runner-api, runner-anthropic) invoke
+ * `execute` directly in-process.  Subprocess runners (runner-claude, runner-codex)
+ * throw `InlineToolsNotSupportedError` at spawn time when an AgentDef carries an
+ * inline tool map — migrate to the runner's own tool-config mechanism.
+ */
+export interface InlineToolDef<
+  // biome-ignore lint/suspicious/noExplicitAny: must accept any Zod input/output
+  I = any,
+  // biome-ignore lint/suspicious/noExplicitAny: must accept any Zod input/output
+  O = any,
+> {
+  readonly description: string;
+  /** Zod schema used for JSON-schema conversion and runtime arg validation. */
+  readonly parameters: ZodType<I>;
+  readonly execute: (args: I) => Promise<O>;
+}
+
 // ─── Error kinds ──────────────────────────────────────────────────────────────
 
 export type RetryErrorKind =
@@ -158,7 +183,49 @@ export interface RunnerSpawnArgs {
    * without relying on shared mutable state (safe under parallel execution).
    */
   taskName?: string;
+  /**
+   * Pre-merged inline tool registry (per-call > per-agent > per-instance).
+   * Set by the executor when any inline tools are in scope for this spawn.
+   * Runners that support inline tools (runner-api, runner-anthropic) use this
+   * registry directly; subprocess runners reject it at spawn time.
+   */
+  inlineTools?: Readonly<Record<string, InlineToolDef>>;
 }
+
+/**
+ * Per-runner overrides for a single `execute()` / `stream()` call.
+ *
+ * Keyed by runner brand (e.g. `"api"`, `"anthropic"`).
+ *
+ * @example
+ * await execute(workflow, {
+ *   input: { ... },
+ *   runnerOverrides: {
+ *     api: {
+ *       tools: makeToolsScopedTo(sellerAccountId),
+ *       sessionHandle: resumeHandle,
+ *     },
+ *   },
+ * });
+ */
+export type RunnerOverrides = Readonly<
+  Record<
+    string,
+    {
+      /**
+       * Per-call inline tool definitions.
+       * These are merged on top of per-instance and per-agent tools:
+       * precedence = per-call > per-agent > per-instance.
+       */
+      readonly tools?: Readonly<Record<string, InlineToolDef>>;
+      /**
+       * Override the session handle for this specific run.
+       * When set, the runner resumes (or starts) a session with this handle.
+       */
+      readonly sessionHandle?: string;
+    }
+  >
+>;
 
 /**
  * Observability record for a single tool invocation performed by a runner.
@@ -262,8 +329,20 @@ export interface AgentDef<
    */
   readonly output: O;
   readonly prompt: (input: import("zod").infer<I>) => string;
-  /** Tool identifiers. Static values only — no functions. */
-  readonly tools?: readonly string[];
+  /**
+   * Tool definitions for this agent.
+   *
+   * Two forms:
+   * - `readonly string[]` — allowlist of tool names; implementations live on
+   *   the runner instance (legacy form, backwards-compatible).
+   * - `Readonly<Record<string, InlineToolDef>>` — inline definitions; the map
+   *   IS the allowlist (only listed names are passed to the model).
+   *
+   * Runners that do not support inline tools (runner-claude, runner-codex)
+   * throw `InlineToolsNotSupportedError` at spawn time when a map is passed.
+   * Static values only — no functions.
+   */
+  readonly tools?: readonly string[] | Readonly<Record<string, InlineToolDef>>;
   /** Skill identifiers. Static values only — no functions. */
   readonly skills?: readonly string[];
   /** MCP server configuration (v0.2). */

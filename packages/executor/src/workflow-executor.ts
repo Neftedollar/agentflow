@@ -6,6 +6,7 @@ import type {
   FunctionDef,
   FunctionTaskDef,
   RetryConfig,
+  RunnerOverrides,
   TaskDef,
   TaskMetrics,
   TasksMap,
@@ -47,6 +48,20 @@ export interface StreamOptions {
    * `false` rejects. If omitted, the checkpoint defers to HITLManager.
    */
   readonly onCheckpoint?: (ev: CheckpointEvent) => Promise<boolean> | boolean;
+  /**
+   * Per-runner overrides applied to every agent task in this run.
+   *
+   * Keyed by runner brand (e.g. `"api"`, `"anthropic"`). Runners merge
+   * these on top of instance-level and agent-level settings.
+   *
+   * @example
+   * await executor.run(input, {
+   *   runnerOverrides: {
+   *     api: { tools: makeToolsScopedTo(sellerAccountId) },
+   *   },
+   * });
+   */
+  readonly runnerOverrides?: RunnerOverrides;
 }
 
 // ─── Internal event queue ──────────────────────────────────────────────────────
@@ -240,7 +255,10 @@ export class WorkflowExecutor<T extends TasksMap> {
     this.loopExecutor = new LoopExecutor(runBatchesBound);
   }
 
-  async run(input?: unknown): Promise<WorkflowResult<T>> {
+  async run(
+    input?: unknown,
+    options?: Omit<StreamOptions, "onCheckpoint">,
+  ): Promise<WorkflowResult<T>> {
     const legacyHitlAdapter = async (ev: CheckpointEvent): Promise<boolean> => {
       // Legacy HITL adapter: defer to HITLManager (hook-or-TTY path).
       await this.hitlManager.runCheckpoint(
@@ -252,6 +270,7 @@ export class WorkflowExecutor<T extends TasksMap> {
     };
     const gen = this.stream(input, {
       onCheckpoint: legacyHitlAdapter,
+      ...(options ?? {}),
     });
     let result: IteratorResult<WorkflowEvent, WorkflowResult<T>>;
     do {
@@ -305,6 +324,9 @@ export class WorkflowExecutor<T extends TasksMap> {
               : {}),
             ...(options?.signal !== undefined
               ? { signal: options.signal }
+              : {}),
+            ...(options?.runnerOverrides !== undefined
+              ? { runnerOverrides: options.runnerOverrides }
               : {}),
           },
         );
@@ -363,11 +385,13 @@ export class WorkflowExecutor<T extends TasksMap> {
    *
    * @param sessionManagerOverride - When provided (by LoopExecutor), use this
    *   session manager for inner-loop tasks instead of the top-level one (C1 fix).
+   * @param runnerOverrides - Per-runner overrides from execute()/stream() options.
    */
   private async _runBatches(
     tasks: TasksMap,
     initialCtx: Record<string, CtxEntry>,
     sessionManagerOverride?: SessionManager,
+    runnerOverrides?: RunnerOverrides,
   ): Promise<Record<string, CtxEntry>> {
     const { hooks, budget } = this.workflow;
     const sm = sessionManagerOverride ?? this.sessionManager;
@@ -575,6 +599,7 @@ export class WorkflowExecutor<T extends TasksMap> {
                 undefined,
                 this.workflow.mcpServers,
                 hooks,
+                runnerOverrides,
               );
 
               const latencyMs = Date.now() - taskStart;
@@ -682,9 +707,11 @@ export class WorkflowExecutor<T extends TasksMap> {
       push: (ev: WorkflowEvent) => void;
       onCheckpoint?: (ev: CheckpointEvent) => Promise<boolean> | boolean;
       signal?: AbortSignal;
+      runnerOverrides?: RunnerOverrides;
     },
   ): Promise<WorkflowResult<T>> {
-    const { runId, workflowName, push, onCheckpoint, signal } = emitting;
+    const { runId, workflowName, push, onCheckpoint, signal, runnerOverrides } =
+      emitting;
     const { hooks, budget } = this.workflow;
     const sm = sessionManagerOverride ?? this.sessionManager;
     const workflowStart = Date.now();
@@ -1036,6 +1063,7 @@ export class WorkflowExecutor<T extends TasksMap> {
                 },
                 this.workflow.mcpServers,
                 hooks,
+                runnerOverrides,
               );
 
               const latencyMs = Date.now() - taskStart;

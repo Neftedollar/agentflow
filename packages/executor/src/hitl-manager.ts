@@ -1,5 +1,5 @@
 import * as readline from "node:readline";
-import type { HITLConfig, WorkflowHooks } from "@ageflow/core";
+import type { HITLConfig, InlineToolDef, WorkflowHooks } from "@ageflow/core";
 import { HitlNotInteractiveError } from "./errors.js";
 
 export class HITLManager {
@@ -15,17 +15,34 @@ export class HITLManager {
    * Apply permissions config to tools list.
    * Returns filtered tools array based on permission map.
    * Mode "permissions" uses deny-by-default: only explicitly `true` tools pass.
+   *
+   * Accepts both `readonly string[]` (legacy) and
+   * `Readonly<Record<string, InlineToolDef>>` (inline map). When a map is
+   * provided the keys are used as the tool name list for filtering.
    */
   applyPermissions(
-    tools: readonly string[] | undefined,
+    tools:
+      | readonly string[]
+      | Readonly<Record<string, InlineToolDef>>
+      | undefined,
     config: HITLConfig,
   ): {
     tools: readonly string[] | undefined;
     permissions: Record<string, boolean> | undefined;
   } {
-    if (config.mode !== "permissions") return { tools, permissions: undefined };
+    // Normalise tools to string[] for HITL filtering
+    const toolNames: readonly string[] | undefined =
+      tools === undefined
+        ? undefined
+        : Array.isArray(tools)
+          ? (tools as readonly string[])
+          : Object.keys(tools as Record<string, InlineToolDef>);
+
+    if (config.mode !== "permissions") {
+      return { tools: toolNames, permissions: undefined };
+    }
     const perms = config.permissions;
-    const allowed = (tools ?? []).filter((t) => perms[t] === true);
+    const allowed = (toolNames ?? []).filter((t) => perms[t] === true);
     return {
       tools: allowed,
       permissions: Object.fromEntries(Object.entries(perms)),

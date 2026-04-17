@@ -7,8 +7,10 @@ import {
 import type {
   AgentDef,
   AttemptRecord,
+  InlineToolDef,
   McpServerConfig,
   Runner,
+  RunnerOverrides,
   TaskDef,
   WorkflowHooks,
 } from "@ageflow/core";
@@ -113,6 +115,7 @@ export async function runNode<
   workflowMcpServers?: readonly McpServerConfig[],
   // biome-ignore lint/suspicious/noExplicitAny: hooks generic T not available here
   hooks?: WorkflowHooks<any>,
+  runnerOverrides?: RunnerOverrides,
 ): Promise<
   NodeRunResult<
     import("zod").infer<
@@ -150,10 +153,68 @@ export async function runNode<
         spawnArgs.model = resolvedDef.model;
       }
 
-      // Use filteredTools (from HITL permissions) if provided, otherwise use agent tools
-      const effectiveTools = filteredTools ?? resolvedDef.tools;
-      if (effectiveTools !== undefined && effectiveTools.length > 0) {
-        spawnArgs.tools = effectiveTools;
+      // ── Resolve per-runner overrides ────────────────────────────────────────
+      const runnerBrand: string = resolvedDef.runner;
+      const overridesForRunner = runnerOverrides?.[runnerBrand];
+
+      // ── Inline tools: build inlineTools map for spawn args ──────────────────
+      // Precedence: per-call (runnerOverrides) > per-agent (AgentDef inline map) > per-instance
+      // The runner merges them with instance tools internally.
+      const agentInlineTools = Array.isArray(resolvedDef.tools)
+        ? undefined
+        : (resolvedDef.tools as
+            | Readonly<Record<string, InlineToolDef>>
+            | undefined);
+
+      const perCallInlineTools = overridesForRunner?.tools;
+
+      // Build the merged inline map that goes into spawnArgs.inlineTools
+      let mergedInlineTools:
+        | Readonly<Record<string, InlineToolDef>>
+        | undefined;
+      if (agentInlineTools !== undefined || perCallInlineTools !== undefined) {
+        mergedInlineTools = {
+          ...(agentInlineTools ?? {}),
+          ...(perCallInlineTools ?? {}),
+        };
+      }
+
+      if (mergedInlineTools !== undefined) {
+        spawnArgs.inlineTools = mergedInlineTools;
+      }
+
+      // ── String[] allowlist for tools ────────────────────────────────────────
+      // If filteredTools (HITL) is provided, use it.
+      // Otherwise: if agent tools is string[], use that; if inline map, use its keys.
+      // If per-call inline tools exist, append their names to the allowlist.
+      let effectiveToolNames: readonly string[] | undefined;
+      if (filteredTools !== undefined) {
+        // HITL-filtered — already a string[]
+        effectiveToolNames = filteredTools;
+      } else if (Array.isArray(resolvedDef.tools)) {
+        effectiveToolNames = resolvedDef.tools as readonly string[];
+      } else if (resolvedDef.tools !== undefined) {
+        // Inline map — keys are the allowlist
+        effectiveToolNames = Object.keys(
+          resolvedDef.tools as Record<string, InlineToolDef>,
+        );
+      }
+
+      // Merge per-call inline tool names into allowlist
+      if (
+        perCallInlineTools !== undefined &&
+        Object.keys(perCallInlineTools).length > 0
+      ) {
+        const perCallNames = Object.keys(perCallInlineTools);
+        if (effectiveToolNames !== undefined) {
+          effectiveToolNames = [...effectiveToolNames, ...perCallNames];
+        } else {
+          effectiveToolNames = perCallNames;
+        }
+      }
+
+      if (effectiveToolNames !== undefined && effectiveToolNames.length > 0) {
+        spawnArgs.tools = effectiveToolNames;
       }
 
       // Resolve MCP servers: merge workflow + agent + task override, then expand env vars.
@@ -173,9 +234,14 @@ export async function runNode<
         spawnArgs.mcps = resolvedDef.mcps;
       }
 
-      // Pass session handle if available
-      if (sessionHandle !== undefined && sessionHandle !== "") {
-        spawnArgs.sessionHandle = sessionHandle;
+      // Pass session handle if available (runnerOverrides.sessionHandle wins over arg)
+      const effectiveSessionHandle =
+        overridesForRunner?.sessionHandle ?? sessionHandle;
+      if (
+        effectiveSessionHandle !== undefined &&
+        effectiveSessionHandle !== ""
+      ) {
+        spawnArgs.sessionHandle = effectiveSessionHandle;
       }
 
       // Pass permissions if available
