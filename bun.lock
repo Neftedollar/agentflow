@@ -126,7 +126,7 @@
     },
     "packages/core": {
       "name": "@ageflow/core",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "devDependencies": {
         "@types/node": "^22.0.0",
         "vitest": "^2.1.0",
@@ -138,7 +138,7 @@
     },
     "packages/executor": {
       "name": "@ageflow/executor",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "dependencies": {
         "@ageflow/core": "^0.5.0",
         "zod-to-json-schema": "^3.23.0",
