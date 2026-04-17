@@ -151,6 +151,78 @@ describe("registerFeedbackCommand", () => {
   });
 });
 
+// ─── learn evaluate — dagStructure building ───────────────────────────────────
+
+describe("learn evaluate — dagStructure from workflow.tasks", () => {
+  it("builds dagStructure correctly from a workflow with parallel branches", () => {
+    // Simulates what the evaluate action does when --workflow is passed.
+    // Workflow: parse → [analyze, lint] → report (parallel middle tasks)
+    const workflowTasks: Record<string, { dependsOn?: readonly string[] }> = {
+      parse: {},
+      analyze: { dependsOn: ["parse"] },
+      lint: { dependsOn: ["parse"] },
+      report: { dependsOn: ["analyze", "lint"] },
+    };
+
+    const dagStructure: Record<string, readonly string[]> = {};
+    for (const [taskName, task] of Object.entries(workflowTasks)) {
+      dagStructure[taskName] = task.dependsOn ?? [];
+    }
+
+    expect(dagStructure).toEqual({
+      parse: [],
+      analyze: ["parse"],
+      lint: ["parse"],
+      report: ["analyze", "lint"],
+    });
+  });
+
+  it("assigns empty array for tasks with no dependsOn", () => {
+    const workflowTasks: Record<string, { dependsOn?: readonly string[] }> = {
+      root: {},
+      leaf: { dependsOn: ["root"] },
+    };
+
+    const dagStructure: Record<string, readonly string[]> = {};
+    for (const [taskName, task] of Object.entries(workflowTasks)) {
+      dagStructure[taskName] = task.dependsOn ?? [];
+    }
+
+    expect(dagStructure.root).toEqual([]);
+    expect(dagStructure.leaf).toEqual(["root"]);
+  });
+
+  it("learn evaluate subcommand has --workflow option", () => {
+    const program = makeProgram();
+    registerLearnCommand(program);
+    const learn = program.commands.find((c) => c.name() === "learn");
+    const evaluateCmd = learn?.commands.find((c) => c.name() === "evaluate");
+    expect(evaluateCmd).toBeDefined();
+    const workflowOption = evaluateCmd?.options.find(
+      (o) => o.long === "--workflow",
+    );
+    expect(workflowOption).toBeDefined();
+  });
+
+  it("handles workflow with three linear tasks correctly", () => {
+    const workflowTasks: Record<string, { dependsOn?: readonly string[] }> = {
+      fetch: {},
+      transform: { dependsOn: ["fetch"] },
+      store: { dependsOn: ["transform"] },
+    };
+
+    const dagStructure: Record<string, readonly string[]> = {};
+    for (const [taskName, task] of Object.entries(workflowTasks)) {
+      dagStructure[taskName] = task.dependsOn ?? [];
+    }
+
+    expect(Object.keys(dagStructure)).toHaveLength(3);
+    expect(dagStructure.fetch).toEqual([]);
+    expect(dagStructure.transform).toEqual(["fetch"]);
+    expect(dagStructure.store).toEqual(["transform"]);
+  });
+});
+
 // ─── bin.ts integration — both commands appear together ──────────────────────
 
 describe("bin.ts command registration", () => {

@@ -1,5 +1,5 @@
 import { createTestHarness } from "@ageflow/testing";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SkillStore, TraceStore } from "../interfaces.js";
 import type {
   ExecutionTrace,
@@ -902,5 +902,68 @@ describe("runPromotion — rollback logic", () => {
     expect(result.skillsChecked).toBe(2);
     expect(result.rollbacks).toBe(1);
     expect(result.noops).toBe(1);
+  });
+});
+
+// ─── runEvaluation — dagStructure warning (#180) ──────────────────────────────
+
+describe("runEvaluation — dagStructure warning", () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it("logs a warning when dagStructure is undefined", async () => {
+    const skillStore = makeSkillStore();
+    const traceStore = makeTraceStore();
+
+    await runEvaluation({ skillStore, traceStore });
+
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("dagStructure not provided to runEvaluation"),
+    );
+  });
+
+  it("warning message mentions downstream task detection degraded", async () => {
+    const skillStore = makeSkillStore();
+    const traceStore = makeTraceStore();
+
+    await runEvaluation({ skillStore, traceStore });
+
+    const [message] = warnSpy.mock.calls[0] as [string];
+    expect(message).toContain("downstream task detection degraded");
+    expect(message).toContain("credit assignment will be incomplete");
+  });
+
+  it("does NOT warn when dagStructure is provided", async () => {
+    const skillStore = makeSkillStore();
+    const traceStore = makeTraceStore();
+
+    await runEvaluation({
+      skillStore,
+      traceStore,
+      dagStructure: { taskA: [], taskB: ["taskA"] },
+    });
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("does NOT warn when dagStructure is empty object (explicit empty DAG)", async () => {
+    const skillStore = makeSkillStore();
+    const traceStore = makeTraceStore();
+
+    await runEvaluation({
+      skillStore,
+      traceStore,
+      dagStructure: {},
+    });
+
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });

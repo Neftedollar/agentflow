@@ -201,6 +201,12 @@ export interface EvaluationSummary {
 export async function runEvaluation(
   input: EvaluationInput,
 ): Promise<EvaluationSummary> {
+  if (input.dagStructure === undefined) {
+    console.warn(
+      "[learning] dagStructure not provided to runEvaluation — downstream task detection degraded; credit assignment will be incomplete. Pass dagStructure for accurate results.",
+    );
+  }
+
   const traceSample = input.traceSample ?? DEFAULT_TRACE_SAMPLE;
   const statuses = input.statuses ?? (["active", "retired"] as const);
 
