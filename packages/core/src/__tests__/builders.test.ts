@@ -4,9 +4,12 @@ import {
   defineAgent,
   defineWorkflow,
   loop,
+  registerRunner,
   resolveAgentDef,
   sessionToken,
   shareSessionWith,
+  shutdownAllRunners,
+  unregisterRunner,
 } from "../builders.js";
 
 describe("defineAgent", () => {
@@ -325,5 +328,96 @@ describe("loop", () => {
     expect(loopDef.kind).toBe("loop");
     expect(loopDef.max).toBe(5);
     expect(loopDef.context).toBe("persistent");
+  });
+});
+
+describe("shutdownAllRunners", () => {
+  const RUNNER_A = "__test_shutdown_a__";
+  const RUNNER_B = "__test_shutdown_b__";
+
+  afterEach(() => {
+    unregisterRunner(RUNNER_A);
+    unregisterRunner(RUNNER_B);
+  });
+
+  it("calls shutdown() on all registered runners that implement it", async () => {
+    const shutdownA = vi.fn().mockResolvedValue(undefined);
+    const shutdownB = vi.fn().mockResolvedValue(undefined);
+
+    registerRunner(RUNNER_A, {
+      validate: async () => ({ ok: true }),
+      spawn: async () => ({
+        stdout: "{}",
+        sessionHandle: "",
+        tokensIn: 0,
+        tokensOut: 0,
+      }),
+      shutdown: shutdownA,
+    });
+    registerRunner(RUNNER_B, {
+      validate: async () => ({ ok: true }),
+      spawn: async () => ({
+        stdout: "{}",
+        sessionHandle: "",
+        tokensIn: 0,
+        tokensOut: 0,
+      }),
+      shutdown: shutdownB,
+    });
+
+    await shutdownAllRunners();
+
+    expect(shutdownA).toHaveBeenCalledOnce();
+    expect(shutdownB).toHaveBeenCalledOnce();
+  });
+
+  it("does not throw for runners without shutdown()", async () => {
+    registerRunner(RUNNER_A, {
+      validate: async () => ({ ok: true }),
+      spawn: async () => ({
+        stdout: "{}",
+        sessionHandle: "",
+        tokensIn: 0,
+        tokensOut: 0,
+      }),
+      // no shutdown
+    });
+
+    await expect(shutdownAllRunners()).resolves.toBeUndefined();
+  });
+
+  it("swallows individual runner shutdown errors (allSettled)", async () => {
+    const shutdownA = vi.fn().mockRejectedValue(new Error("cleanup failure"));
+    const shutdownB = vi.fn().mockResolvedValue(undefined);
+
+    registerRunner(RUNNER_A, {
+      validate: async () => ({ ok: true }),
+      spawn: async () => ({
+        stdout: "{}",
+        sessionHandle: "",
+        tokensIn: 0,
+        tokensOut: 0,
+      }),
+      shutdown: shutdownA,
+    });
+    registerRunner(RUNNER_B, {
+      validate: async () => ({ ok: true }),
+      spawn: async () => ({
+        stdout: "{}",
+        sessionHandle: "",
+        tokensIn: 0,
+        tokensOut: 0,
+      }),
+      shutdown: shutdownB,
+    });
+
+    // Must not throw even though runner A's shutdown rejects
+    await expect(shutdownAllRunners()).resolves.toBeUndefined();
+    // Runner B was still called despite runner A failing
+    expect(shutdownB).toHaveBeenCalledOnce();
+  });
+
+  it("resolves immediately when no runners are registered", async () => {
+    await expect(shutdownAllRunners()).resolves.toBeUndefined();
   });
 });

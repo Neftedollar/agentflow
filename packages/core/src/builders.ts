@@ -237,3 +237,14 @@ export function getRunners(): ReadonlyMap<string, Runner> {
 export function unregisterRunner(name: string): void {
   _runnerRegistry.delete(name);
 }
+
+/**
+ * Shut down all registered runners that implement shutdown().
+ * Process-level teardown — call from CLI exit handlers or server close().
+ * Errors from individual runners are swallowed so one failure does not
+ * prevent the others from cleaning up.
+ */
+export async function shutdownAllRunners(): Promise<void> {
+  const runners = getRunners();
+  await Promise.allSettled([...runners.values()].map((r) => r.shutdown?.()));
+}
