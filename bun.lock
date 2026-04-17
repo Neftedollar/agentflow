@@ -265,7 +265,7 @@
     },
     "packages/testing": {
       "name": "@ageflow/testing",
-      "version": "0.3.5",
+      "version": "0.3.6",
       "dependencies": {
         "@ageflow/core": "^0.6.0",
         "@ageflow/executor": "^0.6.0",

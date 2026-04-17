@@ -355,4 +355,31 @@ describe("createTestHarness", () => {
     const result = await harness.run();
     expect(result.outputs.task).toEqual({});
   });
+
+  // ── Workflow hooks ───────────────────────────────────────────────────────
+
+  it("onWorkflowStart hook is forwarded to the executor", async () => {
+    const workflowInput = { context: "test-data" };
+    let receivedInput: unknown = undefined;
+
+    const workflow = defineWorkflow({
+      name: "test-onWorkflowStart",
+      tasks: {
+        analyze: { agent: analyzeAgent, input: { value: "src/" } },
+      },
+      hooks: {
+        onWorkflowStart: (input: unknown) => {
+          receivedInput = input;
+        },
+      },
+    });
+
+    const harness = createTestHarness(workflow);
+    harness.mockAgent("analyze", { issues: ["test issue"] });
+
+    await harness.run(workflowInput);
+
+    // Assert that the hook was called with the workflow input
+    expect(receivedInput).toEqual(workflowInput);
+  });
 });

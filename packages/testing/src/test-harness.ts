@@ -163,6 +163,13 @@ export function createTestHarness(workflow: WorkflowDef): TestHarness {
       // Build hooks object carefully — exactOptionalPropertyTypes means we cannot
       // assign `undefined` to an optional property; we must omit the key instead.
       const harnessHooks: WorkflowHooks = {
+        ...(workflowHooks?.onWorkflowStart !== undefined
+          ? {
+              onWorkflowStart: (input: unknown) => {
+                workflowHooks.onWorkflowStart?.(input);
+              },
+            }
+          : {}),
         ...(workflowHooks?.onTaskStart !== undefined
           ? {
               onTaskStart: (taskName: string, runner: string) => {
