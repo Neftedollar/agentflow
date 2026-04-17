@@ -165,8 +165,8 @@ export function createTestHarness(workflow: WorkflowDef): TestHarness {
       const harnessHooks: WorkflowHooks = {
         ...(workflowHooks?.onTaskStart !== undefined
           ? {
-              onTaskStart: (taskName: string) => {
-                workflowHooks.onTaskStart?.(taskName as never);
+              onTaskStart: (taskName: string, runner: string) => {
+                workflowHooks.onTaskStart?.(taskName as never, runner);
               },
             }
           : {}),

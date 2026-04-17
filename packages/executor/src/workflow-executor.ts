@@ -301,6 +301,9 @@ export class WorkflowExecutor<T extends TasksMap> {
       input,
     });
 
+    // Fire onWorkflowStart hook so consumers (e.g. learning) can capture input.
+    this.workflow.hooks?.onWorkflowStart?.(input);
+
     // Run the DAG in the background; push events via queue; close on exit.
     // We use a shared error slot instead of a rejected Promise to avoid
     // unhandled-rejection warnings when the generator is suspended
@@ -469,8 +472,8 @@ export class WorkflowExecutor<T extends TasksMap> {
                 backoff: fnTask.retry?.backoff ?? DEFAULT_FN_RETRY.backoff,
               };
 
-              // Fire onTaskStart hook
-              hooks?.onTaskStart?.(taskName as keyof T & string);
+              // Fire onTaskStart hook (runner is "" — function tasks have no runner)
+              hooks?.onTaskStart?.(taskName as keyof T & string, "");
 
               try {
                 const fnResult = await runFunctionTask(
@@ -589,8 +592,8 @@ export class WorkflowExecutor<T extends TasksMap> {
             // Get existing session handle for this task (use sm: may be loop-local)
             const sessionHandle = sm.getHandle(taskName);
 
-            // Fire onTaskStart hook
-            hooks?.onTaskStart?.(taskName as keyof T & string);
+            // Fire onTaskStart hook — pass runner brand for trace recording (#173)
+            hooks?.onTaskStart?.(taskName as keyof T & string, runnerName);
 
             const taskStart = Date.now();
             try {
@@ -837,8 +840,8 @@ export class WorkflowExecutor<T extends TasksMap> {
                 backoff: fnTask.retry?.backoff ?? DEFAULT_FN_RETRY.backoff,
               };
 
-              // Fire onTaskStart hook + emit task:start event
-              hooks?.onTaskStart?.(taskName as keyof T & string);
+              // Fire onTaskStart hook + emit task:start event (runner "" — fn task has no runner)
+              hooks?.onTaskStart?.(taskName as keyof T & string, "");
               push({
                 type: "task:start",
                 runId,
@@ -1045,8 +1048,8 @@ export class WorkflowExecutor<T extends TasksMap> {
             // Get existing session handle for this task (use sm: may be loop-local)
             const sessionHandle = sm.getHandle(taskName);
 
-            // Fire onTaskStart hook
-            hooks?.onTaskStart?.(taskName as keyof T & string);
+            // Fire onTaskStart hook — pass runner brand for trace recording (#173)
+            hooks?.onTaskStart?.(taskName as keyof T & string, runnerName);
 
             // Emit task:start event
             push({

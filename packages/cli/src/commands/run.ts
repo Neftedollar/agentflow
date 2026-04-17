@@ -49,9 +49,9 @@ export function registerRunCommand(program: Command): void {
         const existingHooks = workflow.hooks;
         const hooks = {
           ...existingHooks,
-          onTaskStart: (taskName: string) => {
+          onTaskStart: (taskName: string, runner: string) => {
             renderTaskStart(taskName);
-            existingHooks?.onTaskStart?.(taskName as never);
+            existingHooks?.onTaskStart?.(taskName as never, runner);
           },
           onTaskComplete: (
             taskName: string,

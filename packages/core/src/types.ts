@@ -708,7 +708,17 @@ export interface WorkflowMetrics {
 }
 
 export interface WorkflowHooks<T extends TasksMap = TasksMap> {
-  readonly onTaskStart?: (taskName: keyof T & string) => void;
+  /**
+   * Called once when the workflow starts, before any tasks run.
+   * Receives the raw workflow input (same value passed to `executor.run()`).
+   * Learning hooks use this to capture `workflowInput` for trace recording.
+   */
+  readonly onWorkflowStart?: (input: unknown) => void;
+  /**
+   * @param runner - Runner brand of the agent (e.g. `"api"`, `"claude"`, `"anthropic"`).
+   *   Empty string `""` for function tasks (no runner).
+   */
+  readonly onTaskStart?: (taskName: keyof T & string, runner: string) => void;
   readonly onTaskComplete?: (
     taskName: keyof T & string,
     output: unknown,

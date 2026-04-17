@@ -526,7 +526,7 @@ describe("function node — hooks", () => {
     });
 
     await new WorkflowExecutor(workflow).run();
-    expect(onTaskStart).toHaveBeenCalledWith("step");
+    expect(onTaskStart).toHaveBeenCalledWith("step", "");
     expect(onTaskComplete).toHaveBeenCalledWith(
       "step",
       { result: 11 },

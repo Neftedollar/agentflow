@@ -109,7 +109,7 @@ describe("createLearningHooks", () => {
     });
 
     // Trigger cache population then await the async result directly
-    hooks.onTaskStart?.("analyze");
+    hooks.onTaskStart?.("analyze", "api");
     const result = await hooks.getSystemPromptPrefix?.("analyze");
     expect(result).toBe("Use structured output always.");
   });
@@ -122,7 +122,7 @@ describe("createLearningHooks", () => {
       workflowName: "bug-fix",
     });
 
-    hooks.onTaskStart?.("analyze");
+    hooks.onTaskStart?.("analyze", "api");
     const result = await hooks.getSystemPromptPrefix?.("analyze");
     expect(result).toBeUndefined();
   });
@@ -135,7 +135,7 @@ describe("createLearningHooks", () => {
       workflowName: "bug-fix",
     });
 
-    hooks.onTaskStart?.("analyze");
+    hooks.onTaskStart?.("analyze", "api");
     hooks.onTaskComplete?.("analyze", { fixed: true }, makeTaskMetrics());
     await hooks.onWorkflowComplete?.({ fixed: true }, makeMetrics());
 
@@ -158,7 +158,7 @@ describe("createLearningHooks", () => {
     });
 
     // Pre-populate cache and await the async result
-    hooks.onTaskStart?.("analyze");
+    hooks.onTaskStart?.("analyze", "api");
     await hooks.getSystemPromptPrefix?.("analyze");
 
     hooks.onTaskComplete?.("analyze", "output text", makeTaskMetrics());
@@ -177,7 +177,7 @@ describe("createLearningHooks", () => {
       workflowName: "bug-fix",
     });
 
-    hooks.onTaskStart?.("analyze");
+    hooks.onTaskStart?.("analyze", "api");
     await hooks.getSystemPromptPrefix?.("analyze");
 
     hooks.onTaskComplete?.("analyze", "output", makeTaskMetrics());
@@ -196,12 +196,12 @@ describe("createLearningHooks", () => {
     });
 
     // Run 1
-    hooks.onTaskStart?.("taskA");
+    hooks.onTaskStart?.("taskA", "api");
     hooks.onTaskComplete?.("taskA", "out1", makeTaskMetrics());
     await hooks.onWorkflowComplete?.({}, makeMetrics());
 
     // Run 2
-    hooks.onTaskStart?.("taskB");
+    hooks.onTaskStart?.("taskB", "api");
     hooks.onTaskComplete?.("taskB", "out2", makeTaskMetrics());
     await hooks.onWorkflowComplete?.({}, makeMetrics());
 
@@ -221,7 +221,7 @@ describe("createLearningHooks", () => {
       workflowName: "bug-fix",
     });
 
-    hooks.onTaskStart?.("analyze");
+    hooks.onTaskStart?.("analyze", "api");
     hooks.onTaskError?.("analyze", new Error("timeout"), 2);
     await hooks.onWorkflowComplete?.({}, makeMetrics());
 
@@ -229,5 +229,136 @@ describe("createLearningHooks", () => {
     expect(trace.taskTraces[0].success).toBe(false);
     expect(trace.taskTraces[0].output).toBe("timeout");
     expect(trace.taskTraces[0].retryCount).toBe(2);
+  });
+
+  // ─── #172: workflowInput threading ────────────────────────────────────────────
+
+  it("#172: ExecutionTrace.workflowInput is populated from onWorkflowStart", async () => {
+    const traceStore = makeTraceStore();
+    const hooks = createLearningHooks({
+      skillStore: makeSkillStore(),
+      traceStore,
+      workflowName: "bug-fix",
+    });
+
+    const workflowInput = { repo: "myapp", issue: 42 };
+    hooks.onWorkflowStart?.(workflowInput);
+    hooks.onTaskStart?.("analyze", "api");
+    hooks.onTaskComplete?.("analyze", { fixed: true }, makeTaskMetrics());
+    await hooks.onWorkflowComplete?.({ fixed: true }, makeMetrics());
+
+    const trace = traceStore.traces[0];
+    expect(trace.workflowInput).toEqual(workflowInput);
+  });
+
+  it("#172: ExecutionTrace.workflowInput is null when onWorkflowStart not called", async () => {
+    const traceStore = makeTraceStore();
+    const hooks = createLearningHooks({
+      skillStore: makeSkillStore(),
+      traceStore,
+      workflowName: "bug-fix",
+    });
+
+    hooks.onTaskStart?.("analyze", "api");
+    hooks.onTaskComplete?.("analyze", { fixed: true }, makeTaskMetrics());
+    await hooks.onWorkflowComplete?.({ fixed: true }, makeMetrics());
+
+    const trace = traceStore.traces[0];
+    expect(trace.workflowInput).toBeNull();
+  });
+
+  it("#172: workflowInput resets between runs", async () => {
+    const traceStore = makeTraceStore();
+    const hooks = createLearningHooks({
+      skillStore: makeSkillStore(),
+      traceStore,
+      workflowName: "bug-fix",
+    });
+
+    // Run 1 with input
+    hooks.onWorkflowStart?.({ run: 1 });
+    hooks.onTaskStart?.("taskA", "api");
+    hooks.onTaskComplete?.("taskA", "out1", makeTaskMetrics());
+    await hooks.onWorkflowComplete?.({}, makeMetrics());
+
+    // Run 2 with different input
+    hooks.onWorkflowStart?.({ run: 2 });
+    hooks.onTaskStart?.("taskB", "api");
+    hooks.onTaskComplete?.("taskB", "out2", makeTaskMetrics());
+    await hooks.onWorkflowComplete?.({}, makeMetrics());
+
+    expect(traceStore.traces[0].workflowInput).toEqual({ run: 1 });
+    expect(traceStore.traces[1].workflowInput).toEqual({ run: 2 });
+  });
+
+  // ─── #173: agentRunner threading ──────────────────────────────────────────────
+
+  it("#173: TaskTrace.agentRunner is populated from onTaskStart runner brand", async () => {
+    const traceStore = makeTraceStore();
+    const hooks = createLearningHooks({
+      skillStore: makeSkillStore(),
+      traceStore,
+      workflowName: "bug-fix",
+    });
+
+    hooks.onTaskStart?.("analyze", "anthropic");
+    hooks.onTaskComplete?.("analyze", { result: "ok" }, makeTaskMetrics());
+    await hooks.onWorkflowComplete?.({}, makeMetrics());
+
+    const trace = traceStore.traces[0];
+    expect(trace.taskTraces[0].agentRunner).toBe("anthropic");
+  });
+
+  it("#173: TaskTrace.agentRunner is empty string for function tasks (runner='')", async () => {
+    const traceStore = makeTraceStore();
+    const hooks = createLearningHooks({
+      skillStore: makeSkillStore(),
+      traceStore,
+      workflowName: "bug-fix",
+    });
+
+    hooks.onTaskStart?.("transform", "");
+    hooks.onTaskComplete?.("transform", { result: "ok" }, makeTaskMetrics());
+    await hooks.onWorkflowComplete?.({}, makeMetrics());
+
+    const trace = traceStore.traces[0];
+    expect(trace.taskTraces[0].agentRunner).toBe("");
+  });
+
+  it("#173: TaskTrace.agentRunner is correct on error path", async () => {
+    const traceStore = makeTraceStore();
+    const hooks = createLearningHooks({
+      skillStore: makeSkillStore(),
+      traceStore,
+      workflowName: "bug-fix",
+    });
+
+    hooks.onTaskStart?.("analyze", "claude");
+    hooks.onTaskError?.("analyze", new Error("rate limit"), 1);
+    await hooks.onWorkflowComplete?.({}, makeMetrics());
+
+    const trace = traceStore.traces[0];
+    expect(trace.taskTraces[0].agentRunner).toBe("claude");
+  });
+
+  it("#173: multiple tasks get correct runner brands independently", async () => {
+    const traceStore = makeTraceStore();
+    const hooks = createLearningHooks({
+      skillStore: makeSkillStore(),
+      traceStore,
+      workflowName: "multi-runner",
+    });
+
+    hooks.onWorkflowStart?.({});
+    hooks.onTaskStart?.("step1", "api");
+    hooks.onTaskComplete?.("step1", "out1", makeTaskMetrics());
+    hooks.onTaskStart?.("step2", "anthropic");
+    hooks.onTaskComplete?.("step2", "out2", makeTaskMetrics());
+    await hooks.onWorkflowComplete?.({}, { ...makeMetrics(), taskCount: 2 });
+
+    const trace = traceStore.traces[0];
+    expect(trace.taskTraces).toHaveLength(2);
+    expect(trace.taskTraces[0].agentRunner).toBe("api");
+    expect(trace.taskTraces[1].agentRunner).toBe("anthropic");
   });
 });

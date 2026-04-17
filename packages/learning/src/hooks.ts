@@ -21,6 +21,8 @@ export function createLearningHooks(
   let runStartTime = Date.now();
   let runCount = 0;
   let isFirstTaskOfRun = true;
+  // #172: captured from onWorkflowStart, threaded into ExecutionTrace
+  let capturedWorkflowInput: unknown = null;
 
   // Cache active skills per task (populated async on onTaskStart).
   // Stores Promises so getSystemPromptPrefix can await the result —
@@ -31,16 +33,28 @@ export function createLearningHooks(
   // Used by onTaskComplete (which is sync) to check whether a skill was applied.
   const resolvedSkillContent = new Map<string, string | undefined>();
 
+  // #173: runner brand per task — populated in onTaskStart, read in onTaskComplete/onTaskError
+  const taskRunnerMap = new Map<string, string>();
+
   return {
-    onTaskStart(taskName) {
+    // #172: capture workflow input once at run start
+    onWorkflowStart(input) {
+      capturedWorkflowInput = input;
+    },
+
+    onTaskStart(taskName, runner) {
       if (isFirstTaskOfRun) {
         // Reset state for the new run
         taskTraces = [];
         runStartTime = Date.now();
         skillCache.clear();
         resolvedSkillContent.clear();
+        taskRunnerMap.clear();
         isFirstTaskOfRun = false;
       }
+
+      // #173: store runner brand for this task
+      taskRunnerMap.set(taskName, runner);
 
       // Store a Promise so getSystemPromptPrefix can await it.
       // Repeated calls for the same taskName reuse the same promise.
@@ -75,9 +89,12 @@ export function createLearningHooks(
       const resolvedContent = resolvedSkillContent.get(taskName);
       if (resolvedContent) appliedSkills.push(taskName);
 
+      // #173: read runner brand captured in onTaskStart
+      const agentRunner = taskRunnerMap.get(taskName) ?? "";
+
       taskTraces.push({
         taskName,
-        agentRunner: "",
+        agentRunner,
         prompt: metrics.promptSent ?? "",
         output: typeof output === "string" ? output : JSON.stringify(output),
         parsedOutput: output,
@@ -94,9 +111,12 @@ export function createLearningHooks(
     },
 
     onTaskError(taskName, error, attempt) {
+      // #173: read runner brand captured in onTaskStart
+      const agentRunner = taskRunnerMap.get(taskName) ?? "";
+
       taskTraces.push({
         taskName,
-        agentRunner: "",
+        agentRunner,
         prompt: "",
         output: error.message,
         parsedOutput: null,
@@ -118,7 +138,8 @@ export function createLearningHooks(
         success: summary.taskCount > 0 && taskTraces.every((t) => t.success),
         totalDurationMs: Date.now() - runStartTime,
         taskTraces,
-        workflowInput: null,
+        // #172: use workflow input captured from onWorkflowStart
+        workflowInput: capturedWorkflowInput,
         workflowOutput: result,
         feedback: [],
       };
@@ -127,6 +148,7 @@ export function createLearningHooks(
 
       // Reset for next run
       isFirstTaskOfRun = true;
+      capturedWorkflowInput = null;
 
       // TODO Phase 6: trigger reflectionWorkflow here based on config.reflectEvery
     },

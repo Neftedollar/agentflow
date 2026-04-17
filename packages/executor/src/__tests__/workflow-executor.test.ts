@@ -124,7 +124,7 @@ describe("WorkflowExecutor", () => {
     const executor = new WorkflowExecutor(workflow);
     await executor.run();
 
-    expect(onTaskStart).toHaveBeenCalledWith("taskA");
+    expect(onTaskStart).toHaveBeenCalledWith("taskA", "mock-wf");
   });
 
   it("hooks.onTaskComplete fires after task with correct latencyMs > 0", async () => {
