@@ -5,6 +5,8 @@ const url = process.env.AGENTFLOW_TEST_API_URL;
 const key = process.env.AGENTFLOW_TEST_API_KEY;
 const model = process.env.AGENTFLOW_TEST_API_MODEL ?? "gpt-4o-mini";
 
+// To run: set AGENTFLOW_TEST_API_URL, AGENTFLOW_TEST_API_KEY (and optionally AGENTFLOW_TEST_API_MODEL).
+// For the opt-in real OpenAI integration test, use AGEFLOW_INTEGRATION=1 instead (see integration.real-api.test.ts).
 const maybe = url && key ? describe : describe.skip;
 
 maybe("ApiRunner (live)", () => {
