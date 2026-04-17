@@ -22,3 +22,10 @@ export {
 
 // Interfaces
 export type { SkillStore, TraceStore } from "./interfaces.js";
+
+// Scoring
+export { shouldRollback, updateScore } from "./scoring.js";
+
+// Hooks
+export { createLearningHooks } from "./hooks.js";
+export type { CreateLearningHooksOptions } from "./hooks.js";
