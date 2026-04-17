@@ -1,0 +1,34 @@
+{
+  "name": "@ageflow/learning",
+  "version": "0.3.0",
+  "description": "Self-evolving skill layer for ageflow — trace collection, skill injection, LLM reflection with DAG-aware credit assignment",
+  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/learning",
+  "type": "module",
+  "private": false,
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "biome check src/"
+  },
+  "dependencies": {
+    "@ageflow/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@ageflow/executor": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@ageflow/executor": { "optional": true }
+  },
+  "devDependencies": {
+    "@ageflow/executor": "workspace:*",
+    "@types/node": "^22.0.0",
+    "vitest": "^2.1.0",
+    "zod": "^3.23.0"
+  },
+  "license": "MIT"
+}
