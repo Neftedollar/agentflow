@@ -88,7 +88,7 @@ const summarizeAgent = defineAgent({
   prompt: ({ text }) => `Summarize in one sentence:\n\n${text}`,
 });
 
-const workflow = defineWorkflow({
+export default defineWorkflow({
   name: "hello-world",
   tasks: {
     summarize: {
