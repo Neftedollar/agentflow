@@ -11,5 +11,12 @@
   },
   "references": [{ "path": "../core" }, { "path": "../executor" }],
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test-d.ts", "dist"]
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test-d.ts",
+    "src/**/* [0-9]*",
+    "src/**/* [0-9]/**",
+    "dist",
+    "node_modules"
+  ]
 }

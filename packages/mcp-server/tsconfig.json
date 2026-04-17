@@ -16,5 +16,12 @@
     { "path": "../server" }
   ],
   "include": ["src/**/*"],
-  "exclude": ["src/**/__tests__/**", "src/**/*.test.ts", "dist"]
+  "exclude": [
+    "src/**/__tests__/**",
+    "src/**/*.test.ts",
+    "src/**/* [0-9]*",
+    "src/**/* [0-9]/**",
+    "dist",
+    "node_modules"
+  ]
 }

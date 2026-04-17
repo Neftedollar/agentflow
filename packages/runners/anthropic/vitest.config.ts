@@ -11,6 +11,12 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    exclude: [
+      "**/* [0-9]*",
+      "**/* [0-9]/**",
+      "**/node_modules/**",
+      "**/dist/**",
+    ],
     passWithNoTests: true,
   },
 });
