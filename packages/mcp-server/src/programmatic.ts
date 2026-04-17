@@ -380,7 +380,14 @@ export function createMcpServer(config: McpServerConfig): McpHandle {
     const handle = createSingleWorkflowServer({
       workflow: patchedWorkflow,
       cliCeilings: config.ceilings ?? {},
-      hitlStrategy: config.onHitl !== undefined ? "auto" : hitlStrategy,
+      // When onHitl is set it is baked into patchedWorkflow.hooks.onCheckpoint.
+      // buildMcpHooks in hitl-bridge.ts calls that hook first: if it returns true
+      // the checkpoint is approved; if it returns false the bridge falls through
+      // to the hitlStrategy. Using "fail" here ensures that a false return from
+      // onHitl is honoured as a rejection rather than silently auto-approved.
+      // When onHitl is NOT set, fall back to the caller-supplied hitlStrategy
+      // (default: "elicit").
+      hitlStrategy: config.onHitl !== undefined ? "fail" : hitlStrategy,
       stderr,
     });
 

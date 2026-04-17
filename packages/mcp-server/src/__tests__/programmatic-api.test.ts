@@ -11,6 +11,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import type { McpConnectionLike } from "../hitl-bridge.js";
 import type { McpMiddleware, McpMiddlewareRequest } from "../programmatic.js";
 import { createMcpServer } from "../programmatic.js";
 
@@ -59,6 +60,58 @@ function makeMockExecutor(
   effective: unknown,
 ) => Promise<unknown> {
   return async () => output;
+}
+
+/**
+ * A minimal McpConnectionLike that does not support elicitation.
+ * Used when we need to trigger buildMcpHooks without exercising elicit transport.
+ */
+const noElicitConn: McpConnectionLike = {
+  supports: () => false,
+  elicit: async () => ({ action: "decline" }),
+};
+
+/**
+ * Build a _testRunExecutor that, before returning, fires the onCheckpoint hook
+ * received via mcpHooks. Returns { checkpointResult, output } so callers can
+ * assert both the hook decision and the final workflow output.
+ *
+ * @param output - fixed workflow output to return
+ * @param checkpointTask - task name passed to onCheckpoint
+ * @param checkpointMsg  - message passed to onCheckpoint
+ */
+function makeCheckpointExecutor(
+  output: Record<string, unknown>,
+  checkpointTask = "verify",
+  checkpointMsg = "approve?",
+): {
+  executor: (
+    args: unknown,
+    hooks: unknown,
+    signal: AbortSignal,
+    effective: unknown,
+  ) => Promise<unknown>;
+  checkpointResults: Array<boolean | undefined>;
+} {
+  const checkpointResults: Array<boolean | undefined> = [];
+
+  const executor = async (
+    _args: unknown,
+    hooks: unknown,
+    _signal: AbortSignal,
+    _effective: unknown,
+  ): Promise<unknown> => {
+    const h = hooks as
+      | { onCheckpoint?: (t: string, m: string) => Promise<unknown> }
+      | undefined;
+    if (h?.onCheckpoint !== undefined) {
+      const r = await h.onCheckpoint(checkpointTask, checkpointMsg);
+      checkpointResults.push(r as boolean | undefined);
+    }
+    return output;
+  };
+
+  return { executor, checkpointResults };
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -283,43 +336,131 @@ describe("createMcpServer() — middleware", () => {
 });
 
 describe("createMcpServer() — onHitl", () => {
-  it("onHitl is wired: approval resolves checkpoint", async () => {
-    // We can't easily trigger a real HITL checkpoint without the executor.
-    // Instead, verify that when onHitl is provided, the workflow gets patched
-    // with a hooks.onCheckpoint (observable via _testOnComposedWorkflow).
+  // ── #162 regression tests ──────────────────────────────────────────────────
+  // Before the fix, onHitl=provided forced hitlStrategy="auto" internally,
+  // which meant onHitl returning false was silently treated as approve.
+  // Now onHitl is wired as onCheckpoint on the patched workflow and the
+  // internal hitlStrategy is set to "fail" so that a false return rejects.
+
+  it("onHitl returns true → checkpoint approved (proceed)", async () => {
     const onHitl = vi.fn(async (_task: string, _msg: string) => true);
+    const { executor, checkpointResults } = makeCheckpointExecutor({
+      greeting: "approved!",
+    });
 
     const handle = createMcpServer({
       workflows: greetWorkflow,
       onHitl,
     });
+    handle._routerHandle._testRunExecutor = executor;
 
-    // The workflow was patched with hooks — observable by constructing a
-    // fresh run that invokes the checkpoint directly via the patched hook.
-    // Since we can't run the real executor without a runner, we test the
-    // hook was set by checking the handle was created without error.
-    expect(handle).toBeDefined();
-    expect(handle._routerHandle).toBeDefined();
+    await handle._routerHandle.callTool(
+      "greet",
+      { name: "Alice" },
+      { connection: noElicitConn },
+    );
+
+    expect(onHitl).toHaveBeenCalledWith("verify", "approve?");
+    // onHitl returned true → checkpoint approved → buildMcpHooks short-circuits to true
+    expect(checkpointResults).toEqual([true]);
   });
 
-  it("onHitl not provided → hitlStrategy applied (default: elicit)", () => {
-    const handle = createMcpServer({
-      workflows: greetWorkflow,
-      // No onHitl → hitlStrategy: "elicit" is default
+  it("onHitl returns false → checkpoint rejected (does not proceed)", async () => {
+    const onHitl = vi.fn(async (_task: string, _msg: string) => false);
+    const { executor, checkpointResults } = makeCheckpointExecutor({
+      greeting: "should not reach",
     });
-    expect(handle).toBeDefined();
-  });
 
-  it("onHitl with custom hitlStrategy is respected", () => {
-    const onHitl = vi.fn(async () => false);
-    // When onHitl is set, hitlStrategy is internally overridden to "auto"
-    // (since onHitl is a hook-level override). No error expected.
     const handle = createMcpServer({
       workflows: greetWorkflow,
       onHitl,
-      hitlStrategy: "fail", // ignored when onHitl is set
     });
-    expect(handle).toBeDefined();
+    handle._routerHandle._testRunExecutor = executor;
+
+    await handle._routerHandle.callTool(
+      "greet",
+      { name: "Alice" },
+      { connection: noElicitConn },
+    );
+
+    expect(onHitl).toHaveBeenCalledWith("verify", "approve?");
+    // onHitl returned false → falls through to hitlStrategy="fail" → rejects
+    expect(checkpointResults).toEqual([false]);
+  });
+
+  it("onHitl undefined + hitlStrategy='auto' → auto-approved", async () => {
+    const { executor, checkpointResults } = makeCheckpointExecutor({
+      greeting: "auto-approved",
+    });
+
+    const handle = createMcpServer({
+      workflows: greetWorkflow,
+      hitlStrategy: "auto",
+    });
+    handle._routerHandle._testRunExecutor = executor;
+
+    await handle._routerHandle.callTool(
+      "greet",
+      { name: "Bob" },
+      { connection: noElicitConn },
+    );
+
+    // hitlStrategy="auto" → buildMcpHooks always returns true
+    expect(checkpointResults).toEqual([true]);
+  });
+
+  it("onHitl undefined + hitlStrategy='fail' → rejected", async () => {
+    const { executor, checkpointResults } = makeCheckpointExecutor({
+      greeting: "should not reach",
+    });
+
+    const handle = createMcpServer({
+      workflows: greetWorkflow,
+      hitlStrategy: "fail",
+    });
+    handle._routerHandle._testRunExecutor = executor;
+
+    await handle._routerHandle.callTool(
+      "greet",
+      { name: "Bob" },
+      { connection: noElicitConn },
+    );
+
+    // hitlStrategy="fail" → buildMcpHooks always returns false
+    expect(checkpointResults).toEqual([false]);
+  });
+
+  it("onHitl set + hitlStrategy='elicit' → onHitl wins, elicit not used", async () => {
+    const onHitl = vi.fn(async () => true);
+    const elicitSpy = vi.fn().mockResolvedValue({
+      action: "accept",
+      content: { approved: true },
+    });
+    const elicitConn: McpConnectionLike = {
+      supports: (cap) => cap === "elicitation",
+      elicit: elicitSpy,
+    };
+    const { executor, checkpointResults } = makeCheckpointExecutor({
+      greeting: "ok",
+    });
+
+    const handle = createMcpServer({
+      workflows: greetWorkflow,
+      onHitl,
+      hitlStrategy: "elicit", // should be overridden to "fail" internally
+    });
+    handle._routerHandle._testRunExecutor = executor;
+
+    await handle._routerHandle.callTool(
+      "greet",
+      { name: "Carol" },
+      { connection: elicitConn },
+    );
+
+    // onHitl wins: callback was called and approved; elicitation transport NOT used
+    expect(onHitl).toHaveBeenCalledWith("verify", "approve?");
+    expect(elicitSpy).not.toHaveBeenCalled();
+    expect(checkpointResults).toEqual([true]);
   });
 });
 
