@@ -2,6 +2,7 @@ import { defineAgent, defineWorkflow } from "@ageflow/core";
 import type { BoundCtx } from "@ageflow/core";
 import { WorkflowExecutor } from "@ageflow/executor";
 import { z } from "zod";
+import { computeDownstream } from "../dag-utils.js";
 import type { SkillStore, TraceStore } from "../interfaces.js";
 import type { ExecutionTrace, SkillRecord, TraceFilter } from "../types.js";
 import { DEFAULT_THRESHOLDS } from "../types.js";
@@ -165,6 +166,15 @@ export interface EvaluationResult {
 export interface EvaluationInput {
   skillStore: SkillStore;
   traceStore: TraceStore;
+  /**
+   * DAG structure for the workflow being evaluated.
+   * Maps taskName → direct dependsOn list.
+   *
+   * When provided, downstream task detection uses proper transitive-closure
+   * over the dependency graph (fix for #174).  When omitted, downstream
+   * defaults to an empty set (safe: no incorrect cross-branch pollution).
+   */
+  dagStructure?: Record<string, readonly string[]>;
   /** Only evaluate skills with these statuses. Default: ["active", "retired"] */
   statuses?: Array<"active" | "retired">;
   /** Number of recent traces to sample per skill. Default: 10 */
@@ -238,9 +248,14 @@ export async function runEvaluation(
       );
       if (!taskTrace) continue;
 
-      // Build downstream results: task traces that depended on this task
-      const taskIndex = trace.taskTraces.indexOf(taskTrace);
-      const downstreamTraces = trace.taskTraces.slice(taskIndex + 1);
+      // Build downstream results: task traces that transitively depend on this
+      // task, computed via DAG closure rather than array index (#174).
+      const downstreamNames = input.dagStructure
+        ? computeDownstream(input.dagStructure, skill.targetAgent)
+        : new Set<string>();
+      const downstreamTraces = trace.taskTraces.filter((tt) =>
+        downstreamNames.has(tt.taskName),
+      );
 
       const dynamicWorkflow = defineWorkflow({
         name: "__ageflow_evaluation",

@@ -26,6 +26,9 @@ export type { SkillStore, TraceStore } from "./interfaces.js";
 // Scoring
 export { shouldRollback, updateScore } from "./scoring.js";
 
+// DAG utilities
+export { computeDownstream } from "./dag-utils.js";
+
 // Hooks
 export { createLearningHooks } from "./hooks.js";
 export type { CreateLearningHooksOptions } from "./hooks.js";
