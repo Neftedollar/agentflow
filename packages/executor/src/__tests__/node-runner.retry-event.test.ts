@@ -28,6 +28,7 @@ describe("runNode onRetry callback", () => {
         undefined,
         undefined,
         undefined,
+        undefined, // hitlEnforcing
         onRetry,
       ),
     ).rejects.toThrow();
@@ -67,6 +68,7 @@ describe("runNode onRetry callback", () => {
       undefined,
       undefined,
       undefined,
+      undefined, // hitlEnforcing
       onRetry,
     );
     expect(onRetry).toHaveBeenCalledTimes(2); // two failures before success

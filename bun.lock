@@ -138,7 +138,7 @@
     },
     "packages/executor": {
       "name": "@ageflow/executor",
-      "version": "0.6.1",
+      "version": "0.6.2",
       "dependencies": {
         "@ageflow/core": "^0.6.0",
         "zod-to-json-schema": "^3.23.0",

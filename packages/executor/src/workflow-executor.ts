@@ -564,8 +564,14 @@ export class WorkflowExecutor<T extends TasksMap> {
             );
 
             // Apply permissions if mode is "permissions"
-            const { tools: filteredTools, permissions } =
-              this.hitlManager.applyPermissions(resolvedDef.tools, hitlConfig);
+            const {
+              tools: filteredTools,
+              permissions,
+              enforcing: hitlEnforcing,
+            } = this.hitlManager.applyPermissions(
+              resolvedDef.tools,
+              hitlConfig,
+            );
 
             // Run HITL checkpoint if mode is "checkpoint"
             if (hitlConfig.mode === "checkpoint") {
@@ -596,6 +602,7 @@ export class WorkflowExecutor<T extends TasksMap> {
                 sessionHandle,
                 permissions ?? undefined,
                 filteredTools,
+                hitlEnforcing,
                 undefined,
                 this.workflow.mcpServers,
                 hooks,
@@ -983,8 +990,14 @@ export class WorkflowExecutor<T extends TasksMap> {
             );
 
             // Apply permissions if mode is "permissions"
-            const { tools: filteredTools, permissions } =
-              this.hitlManager.applyPermissions(resolvedDef.tools, hitlConfig);
+            const {
+              tools: filteredTools,
+              permissions,
+              enforcing: hitlEnforcing,
+            } = this.hitlManager.applyPermissions(
+              resolvedDef.tools,
+              hitlConfig,
+            );
 
             // Run HITL checkpoint if mode is "checkpoint"
             if (hitlConfig.mode === "checkpoint") {
@@ -1050,6 +1063,7 @@ export class WorkflowExecutor<T extends TasksMap> {
                 sessionHandle,
                 permissions ?? undefined,
                 filteredTools,
+                hitlEnforcing,
                 (attempt, reason) => {
                   push({
                     type: "task:retry",

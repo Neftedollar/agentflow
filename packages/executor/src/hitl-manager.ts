@@ -29,6 +29,8 @@ export class HITLManager {
   ): {
     tools: readonly string[] | undefined;
     permissions: Record<string, boolean> | undefined;
+    /** true only when mode === "permissions" and the filter is actively enforced */
+    enforcing: boolean;
   } {
     // Normalise tools to string[] for HITL filtering
     const toolNames: readonly string[] | undefined =
@@ -39,13 +41,14 @@ export class HITLManager {
           : Object.keys(tools as Record<string, InlineToolDef>);
 
     if (config.mode !== "permissions") {
-      return { tools: toolNames, permissions: undefined };
+      return { tools: toolNames, permissions: undefined, enforcing: false };
     }
     const perms = config.permissions;
     const allowed = (toolNames ?? []).filter((t) => perms[t] === true);
     return {
       tools: allowed,
       permissions: Object.fromEntries(Object.entries(perms)),
+      enforcing: true,
     };
   }
 

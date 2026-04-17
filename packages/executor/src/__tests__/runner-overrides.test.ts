@@ -192,6 +192,7 @@ describe("runNode — runnerOverrides (per-call tools)", () => {
       undefined, // sessionHandle
       undefined, // permissions
       undefined, // filteredTools
+      undefined, // hitlEnforcing
       undefined, // onRetry
       undefined, // workflowMcpServers
       undefined, // hooks
@@ -239,6 +240,7 @@ describe("runNode — runnerOverrides (per-call tools)", () => {
       undefined,
       undefined,
       undefined,
+      undefined, // hitlEnforcing
       undefined,
       undefined,
       undefined,
@@ -275,6 +277,7 @@ describe("runNode — runnerOverrides (per-call tools)", () => {
       undefined,
       undefined,
       undefined,
+      undefined, // hitlEnforcing
       undefined,
       undefined,
       undefined,
@@ -316,6 +319,7 @@ describe("runNode — runnerOverrides (per-call tools)", () => {
       "old-handle", // default session handle
       undefined,
       undefined,
+      undefined, // hitlEnforcing
       undefined,
       undefined,
       undefined,
@@ -457,6 +461,7 @@ describe("HITL security — Issue A: deny-all propagates empty allowlist", () =>
       undefined, // sessionHandle
       undefined, // permissions
       [], // filteredTools — deny-all
+      true, // hitlEnforcing
     );
 
     const call = spawnCalls[0];
@@ -487,6 +492,7 @@ describe("HITL security — Issue A: deny-all propagates empty allowlist", () =>
       undefined, // sessionHandle
       undefined, // permissions
       [], // filteredTools — deny-all
+      true, // hitlEnforcing
     );
 
     const call = spawnCalls[0];
@@ -524,6 +530,7 @@ describe("HITL security — Issue B: runnerOverrides.tools filtered through HITL
       undefined, // sessionHandle
       undefined, // permissions
       ["tool_y"], // filteredTools — HITL allows only tool_y
+      true, // hitlEnforcing
       undefined, // onRetry
       undefined, // workflowMcpServers
       undefined, // hooks
@@ -569,6 +576,7 @@ describe("HITL security — Issue B: runnerOverrides.tools filtered through HITL
       undefined,
       undefined,
       [], // filteredTools — deny-all
+      true, // hitlEnforcing
       undefined,
       undefined,
       undefined,
@@ -612,6 +620,7 @@ describe("HITL security — Issue B (inline): agent inline tools filtered throug
       undefined,
       undefined,
       ["tool_y"], // filteredTools — only tool_y passes
+      true, // hitlEnforcing
     );
 
     const call = spawnCalls[0];
@@ -621,6 +630,107 @@ describe("HITL security — Issue B (inline): agent inline tools filtered throug
     expect(Object.keys(call?.inlineTools ?? {})).not.toContain("tool_x");
     // tools allowlist should only have tool_y
     expect(call?.tools).toEqual(["tool_y"]);
+  });
+});
+
+// ─── Issue #164 regression: HITL OFF must not filter per-call tools ──────────
+
+describe("HITL OFF — Issue #164: per-call runnerOverrides tools pass through unchanged", () => {
+  it("HITL OFF + per-call tools → all per-call tools survive (regression case)", async () => {
+    const perCallTool = makeInlineTool(
+      "per-call only",
+      z.object({ q: z.string() }),
+      async ({ q }) => q,
+    );
+
+    const agent = defineAgent({
+      runner: "mock-ro",
+      input: z.object({ v: z.string() }),
+      output: z.object({ r: z.string() }),
+      prompt: ({ v }) => `do: ${v}`,
+      retry: { max: 1, on: [], backoff: "fixed" },
+    });
+
+    const { runner, spawnCalls } = makeCapturingRunner({ r: "ok" });
+
+    // hitlEnforcing is undefined (HITL OFF) — per-call tools must survive
+    await runNode(
+      { agent, input: { v: "hi" } },
+      { v: "hi" },
+      runner,
+      "test-task",
+      undefined, // sessionHandle
+      undefined, // permissions
+      undefined, // filteredTools
+      undefined, // hitlEnforcing — HITL OFF
+      undefined, // onRetry
+      undefined, // workflowMcpServers
+      undefined, // hooks
+      {
+        "mock-ro": {
+          tools: { per_call_tool: perCallTool },
+        },
+      },
+    );
+
+    const call = spawnCalls[0];
+    // per_call_tool must NOT be dropped — HITL is off
+    expect(call?.tools).toContain("per_call_tool");
+    expect(call?.inlineTools).toBeDefined();
+    expect(Object.keys(call?.inlineTools ?? {})).toContain("per_call_tool");
+  });
+
+  it("HITL OFF + agent inline tools + per-call tools → all merged, none filtered", async () => {
+    const agentTool = makeInlineTool(
+      "agent tool",
+      z.object({}),
+      async () => "a",
+    );
+    const perCallTool = makeInlineTool(
+      "per-call tool",
+      z.object({}),
+      async () => "p",
+    );
+
+    const agent = defineAgent({
+      runner: "mock-ro",
+      input: z.object({ v: z.string() }),
+      output: z.object({ r: z.string() }),
+      prompt: ({ v }) => `do: ${v}`,
+      tools: { agent_tool: agentTool },
+      retry: { max: 1, on: [], backoff: "fixed" },
+    });
+
+    const { runner, spawnCalls } = makeCapturingRunner({ r: "ok" });
+
+    // hitlEnforcing is false (HITL OFF) — both tools must survive
+    await runNode(
+      { agent, input: { v: "hi" } },
+      { v: "hi" },
+      runner,
+      "test-task",
+      undefined, // sessionHandle
+      undefined, // permissions
+      undefined, // filteredTools
+      false, // hitlEnforcing — explicitly false (HITL OFF)
+      undefined, // onRetry
+      undefined, // workflowMcpServers
+      undefined, // hooks
+      {
+        "mock-ro": {
+          tools: { per_call_tool: perCallTool },
+        },
+      },
+    );
+
+    const call = spawnCalls[0];
+    // Both tools must appear — no intersection when HITL is off
+    expect(call?.tools).toContain("agent_tool");
+    expect(call?.tools).toContain("per_call_tool");
+    expect(Object.keys(call?.inlineTools ?? {}).sort()).toEqual([
+      "agent_tool",
+      "per_call_tool",
+    ]);
   });
 });
 

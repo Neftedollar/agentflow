@@ -111,6 +111,7 @@ export async function runNode<
   sessionHandle?: string,
   permissions?: Record<string, boolean>,
   filteredTools?: readonly string[],
+  hitlEnforcing?: boolean,
   onRetry?: (attempt: number, reason: string) => void,
   workflowMcpServers?: readonly McpServerConfig[],
   // biome-ignore lint/suspicious/noExplicitAny: hooks generic T not available here
@@ -197,13 +198,14 @@ export async function runNode<
       }
 
       // Step 3: Apply HITL filter.
-      // - If filteredTools is defined (HITL mode = permissions), it is the
-      //   authoritative set.  Any candidate not in filteredTools is dropped —
+      // - If hitlEnforcing is true (mode === "permissions"), filteredTools is
+      //   the authoritative set.  Any candidate not in filteredTools is dropped —
       //   including per-call overrides.  An empty filteredTools means deny-all.
-      // - If filteredTools is undefined (no HITL), all candidates pass.
+      // - If hitlEnforcing is false/undefined (HITL off or checkpoint-only),
+      //   all candidates pass through unchanged.
       let effectiveToolNames: readonly string[] | undefined;
-      if (filteredTools !== undefined) {
-        // HITL is active: intersect candidates with the HITL-approved set.
+      if (hitlEnforcing === true && filteredTools !== undefined) {
+        // HITL is actively enforcing: intersect candidates with the HITL-approved set.
         // candidateToolNames may be undefined when the agent has no tools; in
         // that case effectiveToolNames takes the HITL value directly (which may
         // be [] — deny-all).

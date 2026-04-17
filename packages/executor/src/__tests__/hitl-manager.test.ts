@@ -42,41 +42,46 @@ describe("HITLManager", () => {
   describe("applyPermissions", () => {
     const hm = new HITLManager();
 
-    it("mode 'off' → returns tools unchanged, no permissions", () => {
+    it("mode 'off' → returns tools unchanged, no permissions, enforcing false", () => {
       const result = hm.applyPermissions(["bash", "read"], { mode: "off" });
       expect(result.tools).toEqual(["bash", "read"]);
       expect(result.permissions).toBeUndefined();
+      expect(result.enforcing).toBe(false);
     });
 
-    it("mode 'checkpoint' → returns tools unchanged, no permissions", () => {
+    it("mode 'checkpoint' → returns tools unchanged, no permissions, enforcing false", () => {
       const result = hm.applyPermissions(["bash"], { mode: "checkpoint" });
       expect(result.tools).toEqual(["bash"]);
       expect(result.permissions).toBeUndefined();
+      expect(result.enforcing).toBe(false);
     });
 
-    it("mode 'permissions' with all allowed → returns all tools", () => {
+    it("mode 'permissions' with all allowed → returns all tools, enforcing true", () => {
       const result = hm.applyPermissions(["bash", "read", "write"], {
         mode: "permissions",
         permissions: { bash: true, read: true, write: true },
       });
       expect(result.tools).toEqual(["bash", "read", "write"]);
+      expect(result.enforcing).toBe(true);
     });
 
-    it("mode 'permissions' with deny → filters out denied tools", () => {
+    it("mode 'permissions' with deny → filters out denied tools, enforcing true", () => {
       const result = hm.applyPermissions(["bash", "read", "write"], {
         mode: "permissions",
         permissions: { bash: true, read: false, write: true },
       });
       expect(result.tools).toEqual(["bash", "write"]);
       expect(result.tools).not.toContain("read");
+      expect(result.enforcing).toBe(true);
     });
 
-    it("mode 'permissions' with empty tools → returns empty array", () => {
+    it("mode 'permissions' with empty tools → returns empty array, enforcing true", () => {
       const result = hm.applyPermissions(undefined, {
         mode: "permissions",
         permissions: { bash: true },
       });
       expect(result.tools).toEqual([]);
+      expect(result.enforcing).toBe(true);
     });
 
     it("mode 'permissions' → returns permissions map", () => {

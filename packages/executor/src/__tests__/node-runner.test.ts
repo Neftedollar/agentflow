@@ -436,6 +436,7 @@ describe("runNode", () => {
           undefined,
           undefined,
           undefined,
+          undefined, // hitlEnforcing
           undefined,
           undefined,
           hooks,
@@ -484,6 +485,7 @@ describe("runNode", () => {
           undefined,
           undefined,
           undefined,
+          undefined, // hitlEnforcing
           undefined,
           undefined,
           hooks,
@@ -544,6 +546,7 @@ describe("runNode", () => {
           undefined,
           undefined,
           undefined,
+          undefined, // hitlEnforcing
           undefined,
           undefined,
           hooks,
