@@ -72,17 +72,50 @@ export function registerLearnCommand(program: Command): void {
   learn
     .command("evaluate")
     .description("Run hypothetical evaluation of draft skills")
-    .action(async () => {
+    .option(
+      "-w, --workflow <file>",
+      "Workflow file to derive DAG structure for downstream task detection",
+    )
+    .action(async (opts: { workflow?: string }) => {
       try {
         const [store, { runEvaluation }] = await Promise.all([
           loadStore(),
           import("@ageflow/learning"),
         ]);
 
+        // Build dagStructure from workflow file when provided so that
+        // runEvaluation can perform accurate transitive downstream detection.
+        let dagStructure: Record<string, readonly string[]> | undefined;
+        if (opts.workflow) {
+          const resolvedWorkflowPath = path.resolve(opts.workflow);
+          let mod: Record<string, unknown>;
+          try {
+            mod = (await import(resolvedWorkflowPath)) as Record<
+              string,
+              unknown
+            >;
+          } catch (importErr) {
+            process.stderr.write(
+              `Error: Cannot import workflow file "${opts.workflow}": ${importErr instanceof Error ? importErr.message : String(importErr)}\n`,
+            );
+            process.exit(1);
+          }
+          const workflow = (mod.default ?? mod.workflow) as
+            | { tasks: Record<string, { dependsOn?: readonly string[] }> }
+            | undefined;
+          if (workflow?.tasks) {
+            dagStructure = {};
+            for (const [taskName, task] of Object.entries(workflow.tasks)) {
+              dagStructure[taskName] = task.dependsOn ?? [];
+            }
+          }
+        }
+
         process.stdout.write("Running evaluation workflow...\n");
         const summary = await runEvaluation({
           skillStore: store,
           traceStore: store,
+          ...(dagStructure !== undefined ? { dagStructure } : {}),
         });
 
         process.stdout.write(

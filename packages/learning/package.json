@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/learning",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "Self-evolving skill layer for ageflow \u2014 trace collection, skill injection, LLM reflection with DAG-aware credit assignment",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/learning",
   "type": "module",
