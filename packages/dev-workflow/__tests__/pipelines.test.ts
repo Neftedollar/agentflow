@@ -43,13 +43,51 @@ describe("feature pipeline", () => {
     expect(verify.agent).toBeDefined();
   });
 
-  it("build/test/ship remain defineFunction stubs (mixed-node pattern)", () => {
+  it("build task is an agent (senior-developer role-backed)", () => {
     const wf = createFeaturePipeline(FAKE_INPUT);
-    for (const key of ["build", "test", "ship"] as const) {
-      const task = wf.tasks[key] as { agent?: unknown; fn?: unknown };
-      expect(task.fn).toBeDefined();
-      expect(task.agent).toBeUndefined();
-    }
+    const build = wf.tasks.build as { agent?: unknown; fn?: unknown };
+    expect(build.agent).toBeDefined();
+    expect(build.fn).toBeUndefined();
+  });
+
+  it("test task is a defineFunction (deterministic bun test runner)", () => {
+    const wf = createFeaturePipeline(FAKE_INPUT);
+    const test = wf.tasks.test as { agent?: unknown; fn?: unknown };
+    expect(test.fn).toBeDefined();
+    expect(test.agent).toBeUndefined();
+  });
+
+  it("ship task is a defineFunction (deterministic git+gh)", () => {
+    const wf = createFeaturePipeline(FAKE_INPUT);
+    const ship = wf.tasks.ship as { agent?: unknown; fn?: unknown };
+    expect(ship.fn).toBeDefined();
+    expect(ship.agent).toBeUndefined();
+  });
+
+  it("build dependsOn plan", () => {
+    const wf = createFeaturePipeline(FAKE_INPUT);
+    const build = wf.tasks.build as { dependsOn?: readonly string[] };
+    expect(build.dependsOn).toContain("plan");
+  });
+
+  it("test dependsOn build", () => {
+    const wf = createFeaturePipeline(FAKE_INPUT);
+    const test = wf.tasks.test as { dependsOn?: readonly string[] };
+    expect(test.dependsOn).toContain("build");
+  });
+
+  it("verify dependsOn test and plan", () => {
+    const wf = createFeaturePipeline(FAKE_INPUT);
+    const verify = wf.tasks.verify as { dependsOn?: readonly string[] };
+    expect(verify.dependsOn).toContain("test");
+    expect(verify.dependsOn).toContain("plan");
+  });
+
+  it("ship dependsOn verify and build", () => {
+    const wf = createFeaturePipeline(FAKE_INPUT);
+    const ship = wf.tasks.ship as { dependsOn?: readonly string[] };
+    expect(ship.dependsOn).toContain("verify");
+    expect(ship.dependsOn).toContain("build");
   });
 });
 
