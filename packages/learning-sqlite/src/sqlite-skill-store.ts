@@ -226,6 +226,21 @@ export class SqliteSkillStore implements SkillStore {
 
   // ─── Vec0 KNN search ──────────────────────────────────────────────────────
 
+  /**
+   * KNN search using vec0 cosine distance.
+   *
+   * The skills_vec table is created with `distance_metric=cosine`, so sqlite-vec
+   * returns cosine distance values in [0, 2]:
+   *   - 0 = identical direction (maximum similarity)
+   *   - 1 = orthogonal vectors
+   *   - 2 = opposite directions (minimum similarity)
+   *
+   * Relevance is derived as: `relevance = 1 - distance / 2`
+   * which maps the distance range [0, 2] to a relevance range [0, 1]:
+   *   - relevance 1.0 = perfect match
+   *   - relevance 0.5 = orthogonal (unrelated)
+   *   - relevance 0.0 = maximally dissimilar
+   */
   private _searchVec(
     queryEmbedding: Float32Array,
     limit: number,
@@ -251,7 +266,7 @@ export class SqliteSkillStore implements SkillStore {
         .query<SkillRow, { $id: string }>("SELECT * FROM skills WHERE id = $id")
         .get({ $id: vecRow.skill_id });
       if (skillRow) {
-        // sqlite-vec cosine distance is in [0,2] — convert to similarity [0,1]
+        // Cosine distance ∈ [0, 2] → relevance ∈ [0, 1]: relevance = 1 - distance/2
         const relevance = Math.max(0, Math.min(1, 1 - vecRow.distance / 2));
         results.push({ skill: rowToRecord(skillRow), relevance });
       }

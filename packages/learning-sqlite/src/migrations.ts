@@ -53,6 +53,6 @@ export const MIGRATIONS = [
 export function makeVecTableSql(dimensions: number): string {
   return `CREATE VIRTUAL TABLE IF NOT EXISTS skills_vec USING vec0(
     skill_id TEXT PRIMARY KEY,
-    embedding float[${dimensions}]
+    embedding float[${dimensions}] distance_metric=cosine
   )`;
 }
