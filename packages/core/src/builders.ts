@@ -205,25 +205,47 @@ export function defineWorkflow<const T extends TasksMap>(
  * carries the exact `T` inferred from `fn`'s return shape, so `CtxFor<>` and
  * other per-key utilities narrow correctly without a second generic argument.
  *
- * @example
- * // Before (manual factory):
- * export function createPipeline(input: PipelineInput): WorkflowDef<...> {
- *   return defineWorkflow({ name: "pipeline", tasks: { ... } });
- * }
+ * ## Call shapes
  *
- * // After (using helper):
+ * **Preferred — lambda annotation (narrow inference):**
+ * ```ts
+ * export const createPipeline = defineWorkflowFactory(
+ *   (input: PipelineInput) => ({ name: "pipeline", tasks: { ... } }),
+ * );
+ * ```
+ * TypeScript infers both `I` and `T` from the lambda, giving you the exact
+ * task-key union on the returned `WorkflowDef`.
+ *
+ * **Back-compat — explicit `<I>` (wide type, T = TasksMap):**
+ * ```ts
  * export const createPipeline = defineWorkflowFactory<PipelineInput>(
  *   (input) => ({ name: "pipeline", tasks: { ... } }),
  * );
+ * ```
+ * Equivalent to pre-v0.6.5 behaviour. Task keys are typed as `string` (wide),
+ * but the factory compiles and runs correctly. Migrate to the lambda-annotation
+ * form when you need narrow `CtxFor<>` / task-key inference.
  *
  * @remarks
  * v2: optional second argument for Zod input validation schema (deferred).
  * When added, the factory will parse+validate `input` before calling `fn`.
  */
+// Overload 1: lambda annotation — T inferred from fn return shape (preferred, narrow)
 export function defineWorkflowFactory<I, const T extends TasksMap>(
   fn: (input: I) => WorkflowDef<T>,
-): (input: I) => WorkflowDef<T> {
-  return (input: I) => defineWorkflow(fn(input));
+): (input: I) => WorkflowDef<T>;
+// Overload 2: explicit <I> only — T defaults to TasksMap (back-compat, wide)
+export function defineWorkflowFactory<I>(
+  fn: (input: I) => WorkflowDef<TasksMap>,
+): (input: I) => WorkflowDef<TasksMap>;
+// Implementation
+export function defineWorkflowFactory(
+  // biome-ignore lint/suspicious/noExplicitAny: overload implementation signature
+  fn: (input: any) => WorkflowDef<any>,
+  // biome-ignore lint/suspicious/noExplicitAny: overload implementation signature
+): (input: any) => WorkflowDef<any> {
+  // biome-ignore lint/suspicious/noExplicitAny: overload implementation signature
+  return (input: any) => defineWorkflow(fn(input));
 }
 
 /**
