@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/cli",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "CLI for ageflow \u2014 agentwf run / validate / dry-run / init",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/cli",
   "type": "module",
