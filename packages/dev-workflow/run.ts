@@ -6,27 +6,23 @@
  *   bun run run.ts <issue-number>
  *   bun run run.ts --dry-run <issue-number>
  *
- * What this does (sub-PR 4a — executor wiring):
+ * What this does (sub-PR 4b — real CodexRunner):
  *   1. Parses <issue-number> from argv.
  *   2. Loads the GitHub issue via `gh` CLI (real call, no LLM).
  *   3. Determines pipeline type from issue labels.
  *   4. In --dry-run mode: logs the plan and exits without invoking executor.
  *   5. In live mode: walks the DAG via WorkflowExecutor, fires learning
  *      hooks, persists traces to .ageflow/learning.sqlite. Agent tasks use
- *      registered stub runners (no LLM calls) — real runners land in sub-PR 4b.
+ *      CodexRunner which spawns real codex CLI subprocesses (incurs LLM cost).
  */
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { registerRunner } from "@ageflow/core";
-import type {
-  Runner,
-  RunnerSpawnArgs,
-  RunnerSpawnResult,
-  WorkflowHooks,
-} from "@ageflow/core";
+import type { WorkflowHooks } from "@ageflow/core";
 import { BudgetTracker, WorkflowExecutor } from "@ageflow/executor";
+import { CodexRunner } from "@ageflow/runner-codex";
 import { determinePipeline, loadIssue } from "./shared/issue-loader.js";
 import { initLearning } from "./shared/learning.js";
 import type { PipelineType, WorkflowInput } from "./shared/types.js";
@@ -46,41 +42,6 @@ const pipelineFactories = {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../..");
-
-/**
- * Stub runner — returns a valid empty-ish JSON object for any agent output
- * schema. Used in sub-PR 4a so the executor can walk agent nodes without
- * invoking real LLMs. Replaced by real runners in sub-PR 4b.
- */
-function makeStubRunner(brand: string): Runner {
-  return {
-    async validate() {
-      return { ok: true, version: `stub-${brand}` };
-    },
-    async spawn(_args: RunnerSpawnArgs): Promise<RunnerSpawnResult> {
-      // Return an empty JSON object — executor will zod-parse it against the
-      // agent's output schema. All agent output schemas use .passthrough() or
-      // have optional fields where possible; noop tasks return {}.
-      // For agent nodes (architectAgent, codeReviewerAgent, realityCheckerAgent)
-      // the schemas require specific fields — return minimal valid payloads.
-      const stdout = JSON.stringify({
-        plan: "",
-        affectedPackages: [],
-        versionBumps: [],
-        gate: "APPROVED",
-        findings: [],
-        commandsRun: [],
-        regressionProof: "",
-      });
-      return {
-        stdout,
-        sessionHandle: `stub-${brand}-${Date.now()}`,
-        tokensIn: 0,
-        tokensOut: 0,
-      };
-    },
-  };
-}
 
 async function main(): Promise<void> {
   // Parse argv: --dry-run flag + issue number.
@@ -134,8 +95,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Live mode (sub-PR 4a): walks the DAG, fires learning hooks, persists
-  // traces. Agent nodes use stub runners (no LLM cost). Real runners in 4b.
+  // Live mode (sub-PR 4b): walks the DAG, fires learning hooks, persists
+  // traces. Agent nodes use CodexRunner — real LLM cost incurred.
   const { hooks, store, dbPath } = initLearning({
     repoRoot: REPO_ROOT,
     workflowName: `dev-workflow:${pipelineType}`,
@@ -143,10 +104,10 @@ async function main(): Promise<void> {
   });
   console.log(`[dev-workflow] learning store: ${dbPath}`);
 
-  // Register stub runners for all runner brands used by the pipelines.
-  // Sub-PR 4b replaces these with real ClaudeRunner / CodexRunner instances.
-  registerRunner("codex", makeStubRunner("codex"));
-  registerRunner("claude", makeStubRunner("claude"));
+  // Register real CodexRunner for the "codex" brand used by all pipelines.
+  // No "claude" registration — no pipeline uses it; a missing registration
+  // yields a clear RunnerNotRegisteredError rather than a silent stub.
+  registerRunner("codex", new CodexRunner());
 
   const factory = pipelineFactories[pipelineType];
   const pipeline = factory(input);
