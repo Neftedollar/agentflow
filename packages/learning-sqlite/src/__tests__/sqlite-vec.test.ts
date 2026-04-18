@@ -210,6 +210,48 @@ describe.skipIf(!VEC_AVAILABLE)(
       expect(results[0]?.skill.id).toBe(near.id);
     });
 
+    it("cosine distance ordering: identical > similar > orthogonal", async () => {
+      // Three skills with 3-dimensional embeddings:
+      //   exact  = [1, 0, 0] — same direction as query (cosine distance 0)
+      //   similar = [0.9, 0.1, 0] — slightly off-axis (small cosine distance)
+      //   ortho  = [0, 1, 0] — orthogonal to query (cosine distance 1)
+      const exact = makeSkill({
+        embedding: new Float32Array([1, 0, 0]),
+        targetAgent: "cosine-test",
+      });
+      const similar = makeSkill({
+        embedding: new Float32Array([0.9, 0.1, 0]),
+        targetAgent: "cosine-test",
+      });
+      const ortho = makeSkill({
+        embedding: new Float32Array([0, 1, 0]),
+        targetAgent: "cosine-test",
+      });
+
+      // Use a fresh store with 3-dimensional embeddings
+      const store3d = new SqliteLearningStore(new Database(":memory:"), {
+        embeddingDimensions: 3,
+      });
+      await store3d.save(exact);
+      await store3d.save(similar);
+      await store3d.save(ortho);
+
+      const query = new Float32Array([1, 0, 0]);
+      const results = await store3d.search("", 3, query);
+
+      expect(results.length).toBe(3);
+
+      // Order must be: exact first, similar second, ortho last
+      expect(results[0]?.skill.id).toBe(exact.id);
+      expect(results[1]?.skill.id).toBe(similar.id);
+      expect(results[2]?.skill.id).toBe(ortho.id);
+
+      // Relevance must be strictly decreasing
+      const [r0, r1, r2] = results.map((r) => r.relevance);
+      expect(r0).toBeGreaterThan(r1 ?? -1);
+      expect(r1).toBeGreaterThan(r2 ?? -1);
+    });
+
     it("relevance score is in [0,1]", async () => {
       const skill = makeSkill({
         embedding: new Float32Array([0.5, 0.5, 0.5, 0.5]),
