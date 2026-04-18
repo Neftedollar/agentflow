@@ -377,22 +377,23 @@ Each PR is independently shippable, tested, and reviewable.
   and a `runner-anthropic` agent sharing the same unified store, with the
   second agent reading history written by the first.
   *This is the acceptance bar from #98.*
+- **Prerequisite (CEO):** SessionRef brand decision (open question #1) must be
+  resolved. Either widen the existing `SessionRef<R>` brand or add a parallel
+  `CrossRunnerSessionRef`. PR 3 wiring depends on this decision.
 - **Depends on:** PR 2.
 
 ### PR 4 — Executor-level wiring + `ExecuteOptions.sessionStore`
 
 - Add optional `sessionStore?: SessionStore` to `ExecuteOptions` /
   `StreamOptions`.
-- Thread it to each HTTP runner at spawn time — either via a runner instance
-  method `runner.useSessionStore(store)` (setter pattern) or as a spawn-time
-  arg. Recommendation: instance-level setter called once by the executor at
-  workflow start; avoids bloating `RunnerSpawnArgs` for a lifecycle concern.
+- Pass `sessionStore` via `RunnerSpawnArgs.sessionStore` per-call. Aligns with
+  the `runnerOverrides` pattern from #99. Allows different tasks in the same
+  workflow to use different stores (shared default + per-tenant override).
 - Update `packages/executor/src/workflow-executor.ts:238-248` to wire the
-  option through.
-- Subprocess runners: add a no-op `useSessionStore` that records a
-  sentinel entry `{ role: "system", content: "", meta: { cliSessionId: handle }}`
-  on `save()` so auditors at least see "token X was active at time T under
-  runner claude".
+  option through and pass `sessionStore` to each `RunnerSpawnArgs`.
+- Subprocess runners: record a sentinel entry `{ role: "system", content: "",
+  meta: { cliSessionId: handle } }` on `save()` so auditors at least see "token
+  X was active at time T under runner claude".
 - **Success metric:** `execute(workflow, { sessionStore })` works end-to-end;
   sAIler example migrates to a single store.
 - **Depends on:** PR 2, PR 3.
