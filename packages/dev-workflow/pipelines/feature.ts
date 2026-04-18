@@ -215,11 +215,12 @@ const shipFn = defineFunction({
 
     // Stage changed files. Guard against hallucinated paths: skip files that fail.
     for (const file of input.filesChanged) {
-      await execa("git", ["add", "--", file], { cwd: input.worktreePath }).catch(
-        (err) =>
-          console.warn(
-            `[ship] git add ${file} failed: ${(err as Error).message}`,
-          ),
+      await execa("git", ["add", "--", file], {
+        cwd: input.worktreePath,
+      }).catch((err) =>
+        console.warn(
+          `[ship] git add ${file} failed: ${(err as Error).message}`,
+        ),
       );
     }
 
