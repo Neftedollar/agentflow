@@ -753,23 +753,25 @@ export interface WorkflowHooks<T extends TasksMap = TasksMap> {
    * resolved spawn args (prompt, tools, MCP servers, session handle, etc.).
    *
    * Best-effort: errors thrown from this hook are caught, logged via
-   * console.warn, and do NOT interrupt the task.
+   * console.warn, and do NOT interrupt the task. Async hooks are supported —
+   * the executor awaits the returned promise before proceeding.
    */
   readonly onTaskSpawnArgs?: (
     taskName: keyof T & string,
     args: RunnerSpawnArgs,
-  ) => void;
+  ) => void | Promise<void>;
   /**
    * Called just after a task's runner.spawn() returns. Receives the result
    * (stdout, sessionHandle, token counts, tool-call trail).
    *
    * Best-effort: errors thrown from this hook are caught, logged via
-   * console.warn, and do NOT interrupt the task.
+   * console.warn, and do NOT interrupt the task. Async hooks are supported —
+   * the executor awaits the returned promise before proceeding.
    */
   readonly onTaskSpawnResult?: (
     taskName: keyof T & string,
     result: RunnerSpawnResult,
-  ) => void;
+  ) => void | Promise<void>;
 }
 
 // ─── MCP exposure config ─────────────────────────────────────────────────────

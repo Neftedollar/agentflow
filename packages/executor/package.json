@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/executor",
-  "version": "0.6.5",
+  "version": "0.6.6",
   "description": "DAG executor, loop runner, session manager, HITL, budget tracker, and preflight checks for ageflow",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/executor",
   "type": "module",

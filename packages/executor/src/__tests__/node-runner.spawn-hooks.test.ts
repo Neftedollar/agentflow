@@ -271,4 +271,112 @@ describe("runNode — onTaskSpawnArgs / onTaskSpawnResult hooks", () => {
     // onTaskSpawnResult fires only on the successful attempt
     expect(spawnResultCalls).toHaveLength(1);
   });
+
+  it("async onTaskSpawnArgs that rejects after a tick is caught — workflow does not crash", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const runner = {
+      validate: vi.fn().mockResolvedValue({ ok: true }),
+      spawn: vi.fn().mockResolvedValue(makeSuccessResult({ result: "ok" })),
+    };
+
+    const hooks: WorkflowHooks = {
+      onTaskSpawnArgs: async (_taskName, _args) => {
+        // Simulate async work before throwing
+        await Promise.resolve();
+        throw new Error("async hook exploded");
+      },
+    };
+
+    const [nodeResult] = await Promise.all([
+      runNode(
+        { agent: simpleAgent },
+        { text: "hello" },
+        runner,
+        "async-args-throw-task",
+        undefined,
+        { hooks },
+      ),
+      vi.runAllTimersAsync(),
+    ]);
+
+    // Task still succeeded despite async hook rejection
+    expect(nodeResult.output).toEqual({ result: "ok" });
+    // Warning was logged
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy.mock.calls[0]?.[0]).toContain("onTaskSpawnArgs");
+  });
+
+  it("async onTaskSpawnResult that rejects after a tick is caught — workflow does not crash", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const runner = {
+      validate: vi.fn().mockResolvedValue({ ok: true }),
+      spawn: vi.fn().mockResolvedValue(makeSuccessResult({ result: "ok" })),
+    };
+
+    const hooks: WorkflowHooks = {
+      onTaskSpawnResult: async (_taskName, _result) => {
+        await Promise.resolve();
+        throw new Error("async result hook exploded");
+      },
+    };
+
+    const [nodeResult] = await Promise.all([
+      runNode(
+        { agent: simpleAgent },
+        { text: "hello" },
+        runner,
+        "async-result-throw-task",
+        undefined,
+        { hooks },
+      ),
+      vi.runAllTimersAsync(),
+    ]);
+
+    expect(nodeResult.output).toEqual({ result: "ok" });
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy.mock.calls[0]?.[0]).toContain("onTaskSpawnResult");
+  });
+
+  it("async onTaskSpawnArgs that resolves — spawn proceeds normally, result observed", async () => {
+    const resolved: string[] = [];
+
+    const runner = {
+      validate: vi.fn().mockResolvedValue({ ok: true }),
+      spawn: vi
+        .fn()
+        .mockResolvedValue(makeSuccessResult({ result: "async-ok" })),
+    };
+
+    const hooks: WorkflowHooks = {
+      onTaskSpawnArgs: async (taskName, _args) => {
+        await Promise.resolve();
+        resolved.push(`args:${taskName}`);
+      },
+      onTaskSpawnResult: async (taskName, _result) => {
+        await Promise.resolve();
+        resolved.push(`result:${taskName}`);
+      },
+    };
+
+    const [nodeResult] = await Promise.all([
+      runNode(
+        { agent: simpleAgent },
+        { text: "hello" },
+        runner,
+        "async-resolve-task",
+        undefined,
+        { hooks },
+      ),
+      vi.runAllTimersAsync(),
+    ]);
+
+    expect(nodeResult.output).toEqual({ result: "async-ok" });
+    // Both async hooks resolved and were awaited before proceeding
+    expect(resolved).toEqual([
+      "args:async-resolve-task",
+      "result:async-resolve-task",
+    ]);
+  });
 });

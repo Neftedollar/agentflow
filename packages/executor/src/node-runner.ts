@@ -341,27 +341,35 @@ export async function runNode<
       }
 
       // Fire onTaskSpawnArgs hook (best-effort — errors must not crash the task)
-      try {
-        hooks?.onTaskSpawnArgs?.(taskName, spawnArgs);
-      } catch (hookErr) {
-        console.warn(
-          "[agentflow] onTaskSpawnArgs hook error for task %s:",
-          taskName,
-          hookErr,
-        );
+      // Only await if a hook is actually defined to avoid extra microtasks that
+      // could shift external timing-sensitive flows (e.g. mcp-server async-mode
+      // inflight-lock test #18).
+      if (hooks?.onTaskSpawnArgs !== undefined) {
+        try {
+          await hooks.onTaskSpawnArgs(taskName, spawnArgs);
+        } catch (hookErr) {
+          console.warn(
+            "[agentflow] onTaskSpawnArgs hook error for task %s:",
+            taskName,
+            hookErr,
+          );
+        }
       }
 
       const spawnResult = await runner.spawn(spawnArgs);
 
       // Fire onTaskSpawnResult hook (best-effort — errors must not crash the task)
-      try {
-        hooks?.onTaskSpawnResult?.(taskName, spawnResult);
-      } catch (hookErr) {
-        console.warn(
-          "[agentflow] onTaskSpawnResult hook error for task %s:",
-          taskName,
-          hookErr,
-        );
+      // Same gating as onTaskSpawnArgs above.
+      if (hooks?.onTaskSpawnResult !== undefined) {
+        try {
+          await hooks.onTaskSpawnResult(taskName, spawnResult);
+        } catch (hookErr) {
+          console.warn(
+            "[agentflow] onTaskSpawnResult hook error for task %s:",
+            taskName,
+            hookErr,
+          );
+        }
       }
 
       // Parse and validate output through Zod security boundary
