@@ -192,8 +192,13 @@ The ship role:
 - Stages explicitly (`git add <path>` per file — never `-A`).
 - Commits via heredoc, Conventional Commits shape, **no
   Co-Authored-By trailers**.
-- Pushes to `origin <branch>`.
+- Pushes to `origin <branch>` — **never to `origin master`**.
 - Opens PR via `gh pr create --base master`.
+- **Never runs `gh pr merge` or `git push origin master`.** Merge is
+  CEO-gated (see step 6). Direct pushes to master skip Codex review + CI
+  pre-merge and have caused incidents (#217 post-mortem). If the agent
+  returns without a PR number, that's a NEEDS_WORK gate — re-dispatch
+  with an explicit "open PR, do NOT merge" reminder in the prompt.
 
 **Gate:** ship returns commit SHA + PR number + URL, or NEEDS_WORK with a
 failing-command reason.
