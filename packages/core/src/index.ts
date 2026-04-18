@@ -64,6 +64,7 @@ export {
   defineAgent,
   defineFunction,
   defineWorkflow,
+  defineWorkflowFactory,
   getRunner,
   getRunners,
   loop,

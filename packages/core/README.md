@@ -216,7 +216,40 @@ const executor = new WorkflowExecutor(workflow);
 await executor.run();
 ```
 
+See also [`defineWorkflowFactory`](#defineworkflowfactoryi) — a helper that codifies this closure pattern.
+
 - **Special keys like `$input`, `$parent`, or `$prev`** — these do not exist. See below for loop-specific context access.
+
+## `defineWorkflowFactory<I>`
+
+A typed helper that codifies the [closure pattern](#ctx-in-task-input-callbacks) shown above. Instead of manually writing a factory function, pass the config-builder callback to `defineWorkflowFactory` and get back a typed factory function.
+
+```ts
+// Before (manual factory):
+export function createPipeline(input: PipelineInput): WorkflowDef {
+  return defineWorkflow({
+    name: "pipeline",
+    tasks: {
+      analyze: { agent: analyzeAgent, input: { repoPath: input.repoPath } },
+    },
+  });
+}
+
+// After (using helper):
+export const createPipeline = defineWorkflowFactory<PipelineInput>(
+  (input) => ({
+    name: "pipeline",
+    tasks: {
+      analyze: { agent: analyzeAgent, input: { repoPath: input.repoPath } },
+    },
+  }),
+);
+```
+
+Both produce an identical `WorkflowDef`. The helper version:
+- enforces the return type automatically (no manual `: WorkflowDef<...>` annotation needed)
+- makes the factory-closure pattern visible at a glance
+- is compatible with any consumer that calls `createPipeline(input)`
 
 ## Accessing outer ctx and previous iteration inside loop
 

@@ -1,9 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  expectTypeOf,
+  it,
+  vi,
+} from "vitest";
 import { z } from "zod";
 import {
   defineAgent,
   defineFunction,
   defineWorkflow,
+  defineWorkflowFactory,
   loop,
   registerRunner,
   resolveAgentDef,
@@ -12,6 +21,7 @@ import {
   shutdownAllRunners,
   unregisterRunner,
 } from "../builders.js";
+import type { WorkflowDef } from "../types.js";
 
 describe("defineAgent", () => {
   it("returns correct structure with runner brand", () => {
@@ -556,5 +566,120 @@ describe("defineFunction", () => {
     });
     const result = await fn.execute({ value: "hello" });
     expect(result.upper).toBe("HELLO");
+  });
+});
+
+describe("defineWorkflowFactory", () => {
+  interface PipelineInput {
+    repoPath: string;
+    maxIssues: number;
+  }
+
+  const analyzeAgent = defineAgent({
+    runner: "claude",
+    input: z.object({ repoPath: z.string(), limit: z.number() }),
+    output: z.object({ issues: z.array(z.string()) }),
+    prompt: ({ repoPath, limit }) => `Analyze ${repoPath}, max ${limit} issues`,
+  });
+
+  it("factory called with input returns a valid WorkflowDef", () => {
+    const createPipeline = defineWorkflowFactory<PipelineInput>((input) => ({
+      name: "test-pipeline",
+      tasks: {
+        analyze: {
+          agent: analyzeAgent,
+          input: { repoPath: input.repoPath, limit: input.maxIssues },
+        },
+      },
+    }));
+
+    const wf = createPipeline({ repoPath: "./src", maxIssues: 10 });
+
+    expect(wf.name).toBe("test-pipeline");
+    expect(wf.tasks.analyze).toBeDefined();
+    // Input values are closed over correctly
+    expect((wf.tasks.analyze as { input: unknown }).input).toEqual({
+      repoPath: "./src",
+      limit: 10,
+    });
+  });
+
+  it("input typing flows through — return type is WorkflowDef", () => {
+    const createPipeline = defineWorkflowFactory<PipelineInput>((input) => ({
+      name: "type-check-pipeline",
+      tasks: {
+        analyze: {
+          agent: analyzeAgent,
+          input: { repoPath: input.repoPath, limit: input.maxIssues },
+        },
+      },
+    }));
+
+    const wf = createPipeline({ repoPath: "./src", maxIssues: 5 });
+
+    // Runtime: object is plain WorkflowDef (name + tasks)
+    expect(typeof wf.name).toBe("string");
+    expect(typeof wf.tasks).toBe("object");
+
+    // Compile-time: the factory is typed as (input: PipelineInput) => WorkflowDef<T>
+    expectTypeOf(createPipeline).parameter(0).toMatchTypeOf<PipelineInput>();
+    expectTypeOf(wf).toMatchTypeOf<WorkflowDef>();
+  });
+
+  it("two different inputs produce two different WorkflowDefs", () => {
+    const analyzeAgent2 = defineAgent({
+      runner: "claude",
+      input: z.object({ path: z.string() }),
+      output: z.object({ findings: z.array(z.string()) }),
+      prompt: ({ path }) => `Scan ${path}`,
+    });
+    const summarizeAgent = defineAgent({
+      runner: "claude",
+      input: z.object({ findings: z.array(z.string()) }),
+      output: z.object({ summary: z.string() }),
+      prompt: ({ findings }) => `Summarize: ${findings.join(", ")}`,
+    });
+
+    const createRepoPipeline = defineWorkflowFactory<{
+      repo: string;
+      summarize: boolean;
+    }>((input) => ({
+      name: `repo-pipeline-${input.repo}`,
+      tasks: input.summarize
+        ? {
+            scan: { agent: analyzeAgent2, input: { path: input.repo } },
+            summarize: {
+              agent: summarizeAgent,
+              dependsOn: ["scan"],
+              input: (
+                ctx: Record<string, { output: { findings: string[] } }>,
+              ) => ({
+                findings: ctx.scan?.output.findings ?? [],
+              }),
+            },
+          }
+        : {
+            scan: { agent: analyzeAgent2, input: { path: input.repo } },
+          },
+    }));
+
+    const wfWithSummary = createRepoPipeline({
+      repo: "./packages",
+      summarize: true,
+    });
+    const wfWithoutSummary = createRepoPipeline({
+      repo: "./src",
+      summarize: false,
+    });
+
+    // Different workflow names
+    expect(wfWithSummary.name).toBe("repo-pipeline-./packages");
+    expect(wfWithoutSummary.name).toBe("repo-pipeline-./src");
+
+    // Different task counts — summarize variant has 2 tasks, scan-only has 1
+    expect(Object.keys(wfWithSummary.tasks)).toHaveLength(2);
+    expect(Object.keys(wfWithoutSummary.tasks)).toHaveLength(1);
+    expect(wfWithSummary.tasks).toHaveProperty("summarize");
+    expect(wfWithoutSummary.tasks).not.toHaveProperty("summarize");
   });
 });
