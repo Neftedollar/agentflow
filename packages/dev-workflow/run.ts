@@ -173,10 +173,7 @@ async function main(): Promise<void> {
       ),
     );
   } finally {
-    // SqliteLearningStore has no explicit close() — Bun closes the DB on GC.
-    // The optional-chain guard is defensive in case a future version adds it.
-    // biome-ignore lint/suspicious/noExplicitAny: store.close not in public API yet
-    await (store as any).close?.();
+    store.close();
   }
 }
 

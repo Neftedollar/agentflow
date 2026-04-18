@@ -102,6 +102,7 @@ export interface SqliteLearningStoreOptions {
  * reflection workflow) and pass them in via SkillRecord.embedding.
  */
 export class SqliteLearningStore implements SkillStore, TraceStore {
+  private readonly db: Database;
   private readonly skillStore: SqliteSkillStore;
   private readonly traceStore: SqliteTraceStore;
   /** Whether the sqlite-vec extension loaded successfully at init. */
@@ -111,18 +112,18 @@ export class SqliteLearningStore implements SkillStore, TraceStore {
     pathOrDb: string | Database,
     options: SqliteLearningStoreOptions = {},
   ) {
-    const db = typeof pathOrDb === "string" ? new Database(pathOrDb) : pathOrDb;
+    this.db = typeof pathOrDb === "string" ? new Database(pathOrDb) : pathOrDb;
     const dimensions =
       options.embeddingDimensions ?? DEFAULT_EMBEDDING_DIMENSIONS;
 
     // Run base schema migrations first (skills, fts5, traces)
-    for (const sql of MIGRATIONS) db.run(sql);
+    for (const sql of MIGRATIONS) this.db.run(sql);
 
     // Attempt sqlite-vec extension load (permanent warning on failure)
-    this.vecAvailable = tryLoadVec(db, dimensions);
+    this.vecAvailable = tryLoadVec(this.db, dimensions);
 
-    this.skillStore = new SqliteSkillStore(db, this.vecAvailable);
-    this.traceStore = new SqliteTraceStore(db);
+    this.skillStore = new SqliteSkillStore(this.db, this.vecAvailable);
+    this.traceStore = new SqliteTraceStore(this.db);
   }
 
   // ─── SkillStore delegation ─────────────────────────────────────────────────
@@ -189,5 +190,22 @@ export class SqliteLearningStore implements SkillStore, TraceStore {
 
   addFeedback(traceId: string, feedback: Feedback): Promise<void> {
     return this.traceStore.addFeedback(traceId, feedback);
+  }
+
+  // ─── Resource lifecycle ────────────────────────────────────────────────────
+
+  /**
+   * Release the underlying SQLite database handle.
+   * After calling close(), all subsequent store operations will throw.
+   */
+  close(): void {
+    this.db.close();
+  }
+
+  /**
+   * Support for explicit resource management via `await using`.
+   */
+  async [Symbol.asyncDispose](): Promise<void> {
+    this.close();
   }
 }

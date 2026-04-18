@@ -334,4 +334,18 @@ describe("SqliteLearningStore", () => {
     // SqliteLearningStore should construct itself without throwing
     expect(() => new SqliteLearningStore(":memory:")).not.toThrow();
   });
+
+  it("close() releases the sqlite handle and prevents further queries", async () => {
+    const store = new SqliteLearningStore(":memory:");
+    const skill = makeSkill();
+    await store.save(skill);
+
+    // Before close, queries work
+    const loaded = await store.get(skill.id);
+    expect(loaded).not.toBeNull();
+
+    // After close, queries should fail
+    store.close();
+    await expect(store.get(skill.id)).rejects.toThrow();
+  });
 });

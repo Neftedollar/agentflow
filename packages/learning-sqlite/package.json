@@ -1,6 +1,6 @@
 {
   "name": "@ageflow/learning-sqlite",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "SQLite + sqlite-vec storage for @ageflow/learning",
   "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/learning-sqlite",
   "type": "module",
