@@ -301,8 +301,7 @@ export const createReleasePipeline = defineWorkflowFactory(
           // Parse affected packages from the issue body.
           // Convention: the release issue body mentions @ageflow/<pkg> names
           // (e.g. in a fenced list or inline). De-duplicate with Set.
-          const pkgMatches =
-            input.issue.body.match(/@ageflow\/[a-z-]+/g) ?? [];
+          const pkgMatches = input.issue.body.match(/@ageflow\/[a-z-]+/g) ?? [];
           const affectedPackages = [...new Set(pkgMatches)];
           return {
             issueNumber: input.issue.number,
