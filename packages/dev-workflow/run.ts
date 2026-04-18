@@ -6,33 +6,81 @@
  *   bun run run.ts <issue-number>
  *   bun run run.ts --dry-run <issue-number>
  *
- * What this does (sub-PR 1 — scaffold only):
+ * What this does (sub-PR 4a — executor wiring):
  *   1. Parses <issue-number> from argv.
  *   2. Loads the GitHub issue via `gh` CLI (real call, no LLM).
  *   3. Determines pipeline type from issue labels.
- *   4. Logs the determination and would-be plan.
- *   5. Does NOT invoke the executor (deferred to sub-PR 4).
- *
- * Planned API surface (sub-PR 4):
- *   - initRunners()           — register codex + claude runners
- *   - createWorktree()        — isolate pipeline in sibling directory
- *   - pipelineFactory(input)  — build WorkflowDef from chosen pipeline
- *   - new WorkflowExecutor(pipeline, { budgetTracker })
- *   - executor.stream(input)  — AsyncGenerator<WorkflowEvent, WorkflowResult>
- *   - commentIssue()          — gate-progress markers on the GitHub issue
+ *   4. In --dry-run mode: logs the plan and exits without invoking executor.
+ *   5. In live mode: walks the DAG via WorkflowExecutor, fires learning
+ *      hooks, persists traces to .ageflow/learning.sqlite. Agent tasks use
+ *      registered stub runners (no LLM calls) — real runners land in sub-PR 4b.
  */
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { registerRunner } from "@ageflow/core";
+import type {
+  Runner,
+  RunnerSpawnArgs,
+  RunnerSpawnResult,
+  WorkflowHooks,
+} from "@ageflow/core";
+import { BudgetTracker, WorkflowExecutor } from "@ageflow/executor";
 import { determinePipeline, loadIssue } from "./shared/issue-loader.js";
-// wired in sub-PR 4 — import kept live so TypeScript validates the signature
 import { initLearning } from "./shared/learning.js";
 import type { PipelineType, WorkflowInput } from "./shared/types.js";
 import { worktreePath } from "./shared/worktree.js";
 
+import { createBugfixPipeline } from "./pipelines/bugfix.js";
+import { createDocsPipeline } from "./pipelines/docs.js";
+import { createFeaturePipeline } from "./pipelines/feature.js";
+import { createReleasePipeline } from "./pipelines/release.js";
+
+const pipelineFactories = {
+  docs: createDocsPipeline,
+  feature: createFeaturePipeline,
+  bugfix: createBugfixPipeline,
+  release: createReleasePipeline,
+} as const;
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../..");
+
+/**
+ * Stub runner — returns a valid empty-ish JSON object for any agent output
+ * schema. Used in sub-PR 4a so the executor can walk agent nodes without
+ * invoking real LLMs. Replaced by real runners in sub-PR 4b.
+ */
+function makeStubRunner(brand: string): Runner {
+  return {
+    async validate() {
+      return { ok: true, version: `stub-${brand}` };
+    },
+    async spawn(_args: RunnerSpawnArgs): Promise<RunnerSpawnResult> {
+      // Return an empty JSON object — executor will zod-parse it against the
+      // agent's output schema. All agent output schemas use .passthrough() or
+      // have optional fields where possible; noop tasks return {}.
+      // For agent nodes (architectAgent, codeReviewerAgent, realityCheckerAgent)
+      // the schemas require specific fields — return minimal valid payloads.
+      const stdout = JSON.stringify({
+        plan: "",
+        affectedPackages: [],
+        versionBumps: [],
+        gate: "APPROVED",
+        findings: [],
+        commandsRun: [],
+        regressionProof: "",
+      });
+      return {
+        stdout,
+        sessionHandle: `stub-${brand}-${Date.now()}`,
+        tokensIn: 0,
+        tokensOut: 0,
+      };
+    },
+  };
+}
 
 async function main(): Promise<void> {
   // Parse argv: --dry-run flag + issue number.
@@ -54,7 +102,7 @@ async function main(): Promise<void> {
   console.log(`[dev-workflow] labels: [${issue.labels.join(", ")}]`);
   console.log(`[dev-workflow] pipeline: ${pipelineType}`);
 
-  // Build the would-be input (worktree not created yet — stub path).
+  // Build the workflow input (worktree not created yet — stub path).
   const input: WorkflowInput = {
     issue,
     worktreePath: worktreePath(REPO_ROOT, issue.number),
@@ -65,8 +113,7 @@ async function main(): Promise<void> {
     dryRun,
   };
 
-  // Log the plan without invoking the executor.
-  // Sub-PR 4 replaces this block with real executor.stream() invocation.
+  // Log the plan.
   console.log("[dev-workflow] would-be plan:");
   console.log(
     JSON.stringify(
@@ -83,35 +130,54 @@ async function main(): Promise<void> {
   );
 
   if (dryRun) {
-    console.log("[dev-workflow] DRY-RUN complete — no LLM calls made.");
+    console.log("[dev-workflow] DRY-RUN — plan above; executor not invoked.");
     return;
   }
 
-  // Sub-PR 4: uncomment and implement the executor block below.
-  //
-  // initRunners();
-  // const worktree = await createWorktree(REPO_ROOT, issue);
-  // const pipelineFactory = { feature: createFeaturePipeline, ... }[pipelineType];
-  // const pipeline = pipelineFactory({ ...input, worktreePath: worktree });
-  // const budgetTracker = new BudgetTracker();
-  //   const { hooks, store, dbPath } = initLearning({
-  //     repoRoot: REPO_ROOT,
-  //     workflowName: `dev-workflow:${pipelineType}`,
-  //     reflectEvery: 3,
-  //     // dagStructure: <populated by pipelineFactory>,
-  //   });
-  //   console.log(`[dev-workflow] learning store: ${dbPath}`);
-  //   const executor = new WorkflowExecutor(pipeline, { budgetTracker, hooks });
-  //   ...
-  //   await store.close();
-  // const gen = executor.stream(input);
-  // let result = await gen.next();
-  // while (!result.done) { ... result = await gen.next(); }
-  // console.log("[dev-workflow] workflow complete:", result.value.metrics);
+  // Live mode (sub-PR 4a): walks the DAG, fires learning hooks, persists
+  // traces. Agent nodes use stub runners (no LLM cost). Real runners in 4b.
+  const { hooks, store, dbPath } = initLearning({
+    repoRoot: REPO_ROOT,
+    workflowName: `dev-workflow:${pipelineType}`,
+    reflectEvery: 3,
+  });
+  console.log(`[dev-workflow] learning store: ${dbPath}`);
 
-  console.log(
-    "[dev-workflow] scaffold ready — executor dispatch deferred to sub-PR 4 (see #194).",
-  );
+  // Register stub runners for all runner brands used by the pipelines.
+  // Sub-PR 4b replaces these with real ClaudeRunner / CodexRunner instances.
+  registerRunner("codex", makeStubRunner("codex"));
+  registerRunner("claude", makeStubRunner("claude"));
+
+  const factory = pipelineFactories[pipelineType];
+  const pipeline = factory(input);
+  // Attach hooks via WorkflowDef.hooks field (executor reads from there).
+  // Cast hooks to match the specific task-map type of this pipeline.
+  // biome-ignore lint/suspicious/noExplicitAny: cross-pipeline hooks cast
+  const pipelineWithHooks = { ...pipeline, hooks: hooks as WorkflowHooks<any> };
+
+  const budgetTracker = new BudgetTracker();
+  const executor = new WorkflowExecutor(pipelineWithHooks, { budgetTracker });
+
+  try {
+    const result = await executor.run(input);
+    console.log("[dev-workflow] workflow complete:");
+    console.log(
+      JSON.stringify(
+        {
+          workflow: pipelineType,
+          outputKeys: Object.keys(result.outputs ?? {}),
+          metrics: result.metrics,
+        },
+        null,
+        2,
+      ),
+    );
+  } finally {
+    // SqliteLearningStore has no explicit close() — Bun closes the DB on GC.
+    // The optional-chain guard is defensive in case a future version adds it.
+    // biome-ignore lint/suspicious/noExplicitAny: store.close not in public API yet
+    await (store as any).close?.();
+  }
 }
 
 main().catch((err) => {
