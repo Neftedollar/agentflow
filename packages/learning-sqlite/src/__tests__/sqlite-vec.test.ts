@@ -287,6 +287,72 @@ describe.skipIf(!VEC_AVAILABLE)(
   },
 );
 
+// ─── Atomic migration rollback — always runs (no sqlite-vec required) ─────────
+
+describe("skills_vec migration — atomic rollback on error", () => {
+  it("transaction semantics: rollback preserves state on mid-flight throw", () => {
+    // This test does NOT require sqlite-vec. It validates that bun:sqlite
+    // db.transaction() rolls back on throw — which is the contract the
+    // migration fix (#206) relies on.
+    //
+    // We simulate the migration pattern (snapshot → DROP → CREATE → INSERT)
+    // using regular SQLite tables, inject a failure during the CREATE step,
+    // and assert: (a) the error propagates, (b) the original table is intact.
+
+    const db = new Database(":memory:");
+
+    // Create an "old" table with a couple of rows.
+    db.run("CREATE TABLE skills_vec (skill_id TEXT PRIMARY KEY, val INTEGER)");
+    db.run("INSERT INTO skills_vec VALUES ('skill-1', 10)");
+    db.run("INSERT INTO skills_vec VALUES ('skill-2', 20)");
+
+    // Attempt the migration inside a transaction, but throw mid-way.
+    let threw = false;
+    try {
+      db.transaction(() => {
+        // Snapshot
+        const rows = db
+          .query<{ skill_id: string; val: number }, []>(
+            "SELECT skill_id, val FROM skills_vec",
+          )
+          .all();
+        // Drop old
+        db.exec("DROP TABLE skills_vec");
+        // Simulate a failure during recreation (e.g. bad SQL / extension error)
+        if (rows.length >= 0) {
+          throw new Error("simulated mid-migration failure");
+        }
+        // The INSERT block below is never reached.
+        for (const row of rows) {
+          db.run("INSERT INTO skills_vec VALUES (?, ?)", [
+            row.skill_id,
+            row.val,
+          ]);
+        }
+      })();
+    } catch {
+      threw = true;
+    }
+
+    // Error must have propagated.
+    expect(threw).toBe(true);
+
+    // The original table must be intact — transaction rolled back the DROP.
+    const rows = db
+      .query<{ skill_id: string; val: number }, []>(
+        "SELECT skill_id, val FROM skills_vec ORDER BY skill_id",
+      )
+      .all();
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.skill_id).toBe("skill-1");
+    expect(rows[0]?.val).toBe(10);
+    expect(rows[1]?.skill_id).toBe("skill-2");
+    expect(rows[1]?.val).toBe(20);
+
+    db.close();
+  });
+});
+
 // ─── detectVecDistanceMetric unit tests — always runs ────────────────────────
 
 describe("detectVecDistanceMetric", () => {

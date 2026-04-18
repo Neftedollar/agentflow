@@ -44,19 +44,22 @@ function tryLoadVec(db: Database, dimensions: number): boolean {
       console.warn(
         `[learning-sqlite] migrating skills_vec from ${existing} → cosine distance. Existing embeddings will be repopulated.`,
       );
-      // Read existing rows from the old table before dropping it.
-      // Embeddings are stored only in skills_vec (not in the skills table).
-      const oldRows = db
-        .query<{ skill_id: string; embedding: Buffer }, []>(
-          "SELECT skill_id, embedding FROM skills_vec",
-        )
-        .all();
-      db.exec("DROP TABLE skills_vec");
-      db.exec(makeVecTableSql(dimensions));
-      const insert = db.prepare(
-        "INSERT INTO skills_vec (skill_id, embedding) VALUES (?, ?)",
-      );
-      for (const r of oldRows) insert.run(r.skill_id, r.embedding);
+      // Wrap the destructive migration in a transaction so that a failure
+      // during DROP/CREATE/INSERT rolls back atomically — the original table
+      // is preserved rather than left in a corrupt/absent state.
+      db.transaction(() => {
+        const oldRows = db
+          .query<{ skill_id: string; embedding: Buffer }, []>(
+            "SELECT skill_id, embedding FROM skills_vec",
+          )
+          .all();
+        db.exec("DROP TABLE skills_vec");
+        db.exec(makeVecTableSql(dimensions));
+        const insert = db.prepare(
+          "INSERT INTO skills_vec (skill_id, embedding) VALUES (?, ?)",
+        );
+        for (const row of oldRows) insert.run(row.skill_id, row.embedding);
+      })();
     } else {
       // No existing table or already cosine — create if absent (IF NOT EXISTS).
       db.run(makeVecTableSql(dimensions));
