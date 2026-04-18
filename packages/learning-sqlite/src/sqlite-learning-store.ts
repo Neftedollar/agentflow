@@ -8,22 +8,87 @@ import type {
   TraceFilter,
   TraceStore,
 } from "@ageflow/learning";
-import { MIGRATIONS } from "./migrations.js";
+import { MIGRATIONS, makeVecTableSql } from "./migrations.js";
 import { SqliteSkillStore } from "./sqlite-skill-store.js";
 import { SqliteTraceStore } from "./sqlite-trace-store.js";
+
+// ─── sqlite-vec extension loading ─────────────────────────────────────────────
+
+/**
+ * Default embedding dimension for vec0 virtual table.
+ * Must match the dimension of embeddings stored in SkillRecord.embedding.
+ * Override via SqliteLearningStoreOptions.embeddingDimensions.
+ */
+const DEFAULT_EMBEDDING_DIMENSIONS = 1536;
+
+/**
+ * Attempt to load the sqlite-vec extension.
+ * Returns true if loaded successfully, false otherwise.
+ * Emits a PERMANENT warning on every failed load — callers should not suppress
+ * this (per spec §2.4: consumers must not be silently degraded).
+ */
+function tryLoadVec(db: Database, dimensions: number): boolean {
+  try {
+    // sqlite-vec ships the extension as "vec0" (the module entrypoint)
+    db.loadExtension("vec0");
+    db.run(makeVecTableSql(dimensions));
+    return true;
+  } catch (err) {
+    // PERMANENT warning — fires every init when extension is missing.
+    // This is intentional: silent fallback would hide a misconfiguration.
+    console.warn(
+      `[learning-sqlite] sqlite-vec extension failed to load — semantic search will fall back to FTS5 keyword matching. Install sqlite-vec (https://github.com/asg017/sqlite-vec) and ensure the vec0 shared library is on the extension search path to enable embedding-based skill retrieval. Error: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return false;
+  }
+}
+
+// ─── SqliteLearningStore options ──────────────────────────────────────────────
+
+export interface SqliteLearningStoreOptions {
+  /**
+   * Number of dimensions in the embedding vectors stored in SkillRecord.
+   * Must match the model used to produce embeddings.
+   * @default 1536
+   */
+  embeddingDimensions?: number;
+}
+
+// ─── SqliteLearningStore ──────────────────────────────────────────────────────
 
 /**
  * Convenience wrapper — single SQLite database backing both stores.
  * Implements SkillStore & TraceStore.
+ *
+ * At construction time, attempts to load the sqlite-vec extension for
+ * embedding-based KNN search. If the extension is unavailable, a PERMANENT
+ * warning is emitted and the store falls back to FTS5 keyword search.
+ *
+ * Embeddings are an external concern — this package stores and searches them
+ * but does not generate them. Produce embeddings upstream (e.g. via the
+ * reflection workflow) and pass them in via SkillRecord.embedding.
  */
 export class SqliteLearningStore implements SkillStore, TraceStore {
   private readonly skillStore: SqliteSkillStore;
   private readonly traceStore: SqliteTraceStore;
+  /** Whether the sqlite-vec extension loaded successfully at init. */
+  readonly vecAvailable: boolean;
 
-  constructor(pathOrDb: string | Database) {
+  constructor(
+    pathOrDb: string | Database,
+    options: SqliteLearningStoreOptions = {},
+  ) {
     const db = typeof pathOrDb === "string" ? new Database(pathOrDb) : pathOrDb;
+    const dimensions =
+      options.embeddingDimensions ?? DEFAULT_EMBEDDING_DIMENSIONS;
+
+    // Run base schema migrations first (skills, fts5, traces)
     for (const sql of MIGRATIONS) db.run(sql);
-    this.skillStore = new SqliteSkillStore(db);
+
+    // Attempt sqlite-vec extension load (permanent warning on failure)
+    this.vecAvailable = tryLoadVec(db, dimensions);
+
+    this.skillStore = new SqliteSkillStore(db, this.vecAvailable);
     this.traceStore = new SqliteTraceStore(db);
   }
 
@@ -55,8 +120,12 @@ export class SqliteLearningStore implements SkillStore, TraceStore {
     return this.skillStore.getBestInLineage(skillId);
   }
 
-  search(query: string, limit: number): Promise<ScoredSkill[]> {
-    return this.skillStore.search(query, limit);
+  search(
+    query: string,
+    limit: number,
+    queryEmbedding?: Float32Array,
+  ): Promise<ScoredSkill[]> {
+    return this.skillStore.search(query, limit, queryEmbedding);
   }
 
   list(): Promise<SkillRecord[]> {

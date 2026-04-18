@@ -109,7 +109,7 @@
       },
       "dependencies": {
         "@ageflow/core": "^0.6.0",
-        "@ageflow/executor": "^0.6.0",
+        "@ageflow/executor": "^0.7.0",
         "@ageflow/learning": "^0.5.0",
         "@ageflow/learning-sqlite": "^0.4.1",
         "@ageflow/mcp-server": "^0.5.0",
@@ -171,7 +171,7 @@
     },
     "packages/learning-sqlite": {
       "name": "@ageflow/learning-sqlite",
-      "version": "0.4.2",
+      "version": "0.5.0",
       "dependencies": {
         "@ageflow/learning": "^0.5.0",
       },
@@ -186,7 +186,7 @@
       "version": "0.5.1",
       "dependencies": {
         "@ageflow/core": "^0.6.0",
-        "@ageflow/executor": "^0.6.0",
+        "@ageflow/executor": "^0.7.0",
         "@ageflow/server": "^0.4.4",
         "@modelcontextprotocol/sdk": "^1.0.0",
         "zod-to-json-schema": "^3.23.0",
@@ -255,7 +255,7 @@
       "version": "0.4.5",
       "dependencies": {
         "@ageflow/core": "^0.6.0",
-        "@ageflow/executor": "^0.6.0",
+        "@ageflow/executor": "^0.7.0",
       },
       "devDependencies": {
         "@types/node": "^22.0.0",
@@ -771,6 +771,8 @@
     "zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
 
     "zod-to-json-schema": ["zod-to-json-schema@3.25.2", "", { "peerDependencies": { "zod": "^3.25.28 || ^4" } }, "sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA=="],
+
+    "@ageflow/cli/@ageflow/learning-sqlite": ["@ageflow/learning-sqlite@0.4.2", "", { "dependencies": { "@ageflow/learning": "^0.5.0" } }, "sha512-/1lNQLIryqwKiWyhOtWN6GUiHpQTHFXkBeoBsfnkJ0R9nRc1qznXJnHKpGDFLgJYel7CeM9SxMK/jjxc7mNtuw=="],
 
     "ansi-align/string-width": ["string-width@4.2.3", "", { "dependencies": { "emoji-regex": "^8.0.0", "is-fullwidth-code-point": "^3.0.0", "strip-ansi": "^6.0.1" } }, "sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g=="],
 

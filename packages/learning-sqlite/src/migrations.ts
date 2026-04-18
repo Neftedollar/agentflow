@@ -44,3 +44,15 @@ export const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_traces_workflow
    ON traces(workflow_name, run_at DESC)`,
 ] as const;
+
+/**
+ * SQL to create the sqlite-vec virtual table for embedding-based KNN search.
+ * Dimension must match the embedding size stored in SkillRecord.embedding.
+ * Only executed when the sqlite-vec extension is successfully loaded.
+ */
+export function makeVecTableSql(dimensions: number): string {
+  return `CREATE VIRTUAL TABLE IF NOT EXISTS skills_vec USING vec0(
+    skill_id TEXT PRIMARY KEY,
+    embedding float[${dimensions}]
+  )`;
+}

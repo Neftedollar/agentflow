@@ -36,13 +36,18 @@ function rowToRecord(row: SkillRow): SkillRecord {
     runCount: row.run_count,
     bestInLineage: row.best_in_lineage === 1,
     createdAt: row.created_at,
+    // embedding is not stored as a row column — it lives in skills_vec
   };
 }
 
 // ─── SqliteSkillStore ─────────────────────────────────────────────────────────
 
 export class SqliteSkillStore implements SkillStore {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    /** Whether sqlite-vec was successfully loaded at init. */
+    private readonly vecAvailable: boolean = false,
+  ) {}
 
   async save(skill: SkillRecord): Promise<void> {
     // Insert or replace in skills table
@@ -85,6 +90,22 @@ export class SqliteSkillStore implements SkillStore {
         $name: skill.name,
         $description: skill.description,
       });
+
+    // Sync vec0 table if extension is available and skill has an embedding
+    if (this.vecAvailable && skill.embedding !== undefined) {
+      this.db
+        .query("DELETE FROM skills_vec WHERE skill_id = $id")
+        .run({ $id: skill.id });
+      this.db
+        .query(
+          `INSERT INTO skills_vec(skill_id, embedding)
+           VALUES ($id, $embedding)`,
+        )
+        .run({
+          $id: skill.id,
+          $embedding: skill.embedding,
+        });
+    }
   }
 
   async get(id: string): Promise<SkillRecord | null> {
@@ -182,7 +203,66 @@ export class SqliteSkillStore implements SkillStore {
     return row ? rowToRecord(row) : null;
   }
 
-  async search(query: string, limit: number): Promise<ScoredSkill[]> {
+  /**
+   * Search skills by query string or embedding.
+   *
+   * If sqlite-vec is available AND a queryEmbedding is provided, uses vec0
+   * KNN cosine-distance search. Otherwise falls back to FTS5 keyword search.
+   *
+   * @param query - Keyword query (used for FTS5 fallback)
+   * @param limit - Maximum results to return
+   * @param queryEmbedding - Optional embedding vector for semantic KNN search
+   */
+  async search(
+    query: string,
+    limit: number,
+    queryEmbedding?: Float32Array,
+  ): Promise<ScoredSkill[]> {
+    if (this.vecAvailable && queryEmbedding !== undefined) {
+      return this._searchVec(queryEmbedding, limit);
+    }
+    return this._searchFts(query, limit);
+  }
+
+  // ─── Vec0 KNN search ──────────────────────────────────────────────────────
+
+  private _searchVec(
+    queryEmbedding: Float32Array,
+    limit: number,
+  ): ScoredSkill[] {
+    interface VecRow {
+      skill_id: string;
+      distance: number;
+    }
+
+    const vecRows = this.db
+      .query<VecRow, { $embedding: Float32Array; $limit: number }>(
+        `SELECT skill_id, distance
+         FROM skills_vec
+         WHERE embedding MATCH $embedding
+         ORDER BY distance
+         LIMIT $limit`,
+      )
+      .all({ $embedding: queryEmbedding, $limit: limit });
+
+    const results: ScoredSkill[] = [];
+    for (const vecRow of vecRows) {
+      const skillRow = this.db
+        .query<SkillRow, { $id: string }>("SELECT * FROM skills WHERE id = $id")
+        .get({ $id: vecRow.skill_id });
+      if (skillRow) {
+        // sqlite-vec cosine distance is in [0,2] — convert to similarity [0,1]
+        const relevance = Math.max(0, Math.min(1, 1 - vecRow.distance / 2));
+        results.push({ skill: rowToRecord(skillRow), relevance });
+      }
+    }
+
+    return results;
+  }
+
+  // ─── FTS5 keyword search ──────────────────────────────────────────────────
+
+  private _searchFts(query: string, limit: number): ScoredSkill[] {
     interface FtsRow {
       skill_id: string;
       rank: number;
@@ -235,7 +315,13 @@ export class SqliteSkillStore implements SkillStore {
   }
 
   async delete(id: string): Promise<void> {
-    // Clean up FTS5 first
+    // Clean up vec0 first (if available)
+    if (this.vecAvailable) {
+      this.db
+        .query("DELETE FROM skills_vec WHERE skill_id = $id")
+        .run({ $id: id });
+    }
+    // Clean up FTS5
     this.db
       .query("DELETE FROM skills_fts WHERE skill_id = $id")
       .run({ $id: id });

@@ -73,6 +73,13 @@ export const SkillRecordSchema = z.object({
   runCount: z.number().int().nonnegative(),
   bestInLineage: z.boolean(),
   createdAt: z.string().datetime(),
+  /**
+   * Optional embedding vector for semantic search via sqlite-vec.
+   * Produced externally (e.g. by the reflection workflow) and stored here.
+   * When present the SQLite store uses vec0 KNN search; otherwise
+   * falls back to FTS5 keyword search.
+   */
+  embedding: z.instanceof(Float32Array).optional(),
 });
 
 export type SkillRecord = z.infer<typeof SkillRecordSchema>;
