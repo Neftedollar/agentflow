@@ -26,6 +26,8 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { determinePipeline, loadIssue } from "./shared/issue-loader.js";
+// wired in sub-PR 4 — import kept live so TypeScript validates the signature
+import { initLearning } from "./shared/learning.js";
 import type { PipelineType, WorkflowInput } from "./shared/types.js";
 import { worktreePath } from "./shared/worktree.js";
 
@@ -92,7 +94,16 @@ async function main(): Promise<void> {
   // const pipelineFactory = { feature: createFeaturePipeline, ... }[pipelineType];
   // const pipeline = pipelineFactory({ ...input, worktreePath: worktree });
   // const budgetTracker = new BudgetTracker();
-  // const executor = new WorkflowExecutor(pipeline, { budgetTracker });
+  //   const { hooks, store, dbPath } = initLearning({
+  //     repoRoot: REPO_ROOT,
+  //     workflowName: `dev-workflow:${pipelineType}`,
+  //     reflectEvery: 3,
+  //     // dagStructure: <populated by pipelineFactory>,
+  //   });
+  //   console.log(`[dev-workflow] learning store: ${dbPath}`);
+  //   const executor = new WorkflowExecutor(pipeline, { budgetTracker, hooks });
+  //   ...
+  //   await store.close();
   // const gen = executor.stream(input);
   // let result = await gen.next();
   // while (!result.done) { ... result = await gen.next(); }
