@@ -1,0 +1,28 @@
+{
+  "name": "@ageflow/dev-workflow",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "biome check .",
+    "dev-workflow": "bun run run.ts"
+  },
+  "dependencies": {
+    "@ageflow/core": "^0.6.0",
+    "@ageflow/executor": "^0.7.0",
+    "@ageflow/runner-claude": "^0.3.5",
+    "@ageflow/runner-codex": "^0.3.5",
+    "@ageflow/learning": "^0.5.0",
+    "@ageflow/learning-sqlite": "^0.5.0",
+    "@ageflow/testing": "^0.3.8",
+    "execa": "^9.5.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
