@@ -1,11 +1,17 @@
 // Smoke tests for the pipeline factories — confirms that `feature`, `bugfix`,
-// and `docs` build valid DAGs at definition time with the role prompts
-// loaded from disk.
+// `docs`, and `release` build valid DAGs at definition time.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createBugfixPipeline } from "../pipelines/bugfix.js";
 import { createDocsPipeline } from "../pipelines/docs.js";
 import { createFeaturePipeline } from "../pipelines/feature.js";
+import {
+  PUBLISH_ORDER,
+  bumpFn,
+  createReleasePipeline,
+  publishFn,
+  semverBump,
+} from "../pipelines/release.js";
 import type { WorkflowInput } from "../shared/types.js";
 
 const FAKE_INPUT: WorkflowInput = {
@@ -239,5 +245,154 @@ describe("docs pipeline", () => {
     const publish = wf.tasks.publish as { dependsOn?: readonly string[] };
     expect(publish.dependsOn).toContain("draft");
     expect(publish.dependsOn).toContain("review");
+  });
+});
+
+describe("release pipeline", () => {
+  it("builds a workflow named release-pipeline with 4 tasks", () => {
+    const wf = createReleasePipeline(FAKE_INPUT);
+    expect(wf.name).toBe("release-pipeline");
+    const keys = Object.keys(wf.tasks).sort();
+    expect(keys).toEqual(["bump", "changelog", "cleanup", "publish"]);
+  });
+
+  it("all 4 tasks are defineFunction (fn), not agent", () => {
+    const wf = createReleasePipeline(FAKE_INPUT);
+    for (const key of ["bump", "changelog", "publish", "cleanup"] as const) {
+      const task = wf.tasks[key] as { agent?: unknown; fn?: unknown };
+      expect(task.fn).toBeDefined();
+      expect(task.agent).toBeUndefined();
+    }
+  });
+
+  it("bump has no dependsOn", () => {
+    const wf = createReleasePipeline(FAKE_INPUT);
+    const bump = wf.tasks.bump as { dependsOn?: readonly string[] };
+    expect(bump.dependsOn).toBeUndefined();
+  });
+
+  it("changelog dependsOn bump", () => {
+    const wf = createReleasePipeline(FAKE_INPUT);
+    const changelog = wf.tasks.changelog as { dependsOn?: readonly string[] };
+    expect(changelog.dependsOn).toContain("bump");
+  });
+
+  it("publish dependsOn changelog and bump", () => {
+    const wf = createReleasePipeline(FAKE_INPUT);
+    const publish = wf.tasks.publish as { dependsOn?: readonly string[] };
+    expect(publish.dependsOn).toContain("changelog");
+    expect(publish.dependsOn).toContain("bump");
+  });
+
+  it("cleanup dependsOn publish and bump", () => {
+    const wf = createReleasePipeline(FAKE_INPUT);
+    const cleanup = wf.tasks.cleanup as { dependsOn?: readonly string[] };
+    expect(cleanup.dependsOn).toContain("publish");
+    expect(cleanup.dependsOn).toContain("bump");
+  });
+});
+
+describe("bumpFn.execute — P1-1 guard", () => {
+  it("throws when affectedPackages is empty", async () => {
+    await expect(
+      bumpFn.execute({
+        issueNumber: 1,
+        labels: ["patch"],
+        issueBody: "no package references here",
+        worktreePath: "/tmp/fake-wt",
+        affectedPackages: [],
+      }),
+    ).rejects.toThrow("affectedPackages is empty");
+  });
+
+  it("does not throw when affectedPackages has at least one entry", async () => {
+    // The package dir won't exist on disk, so bumps will be empty but no throw.
+    const result = await bumpFn.execute({
+      issueNumber: 1,
+      labels: ["patch"],
+      issueBody: "@ageflow/core",
+      worktreePath: "/tmp/fake-wt-nonexistent",
+      affectedPackages: ["@ageflow/core"],
+    });
+    // No throw — bumps empty because dir doesn't exist, bumpKind defaults patch.
+    expect(result.bumpKind).toBe("patch");
+    expect(result.bumps).toEqual([]);
+  });
+});
+
+describe("publishFn.execute — P1-3 throw on failure", () => {
+  it("throws when any npm publish fails (skipped.length > 0)", async () => {
+    // Mock execa to reject for @ageflow/core, succeed for nothing else.
+    vi.mock("execa", () => ({
+      execa: vi
+        .fn()
+        .mockRejectedValue(new Error("E403 Forbidden — auth required")),
+    }));
+
+    await expect(
+      publishFn.execute({
+        bumps: [{ package: "@ageflow/core", before: "0.6.0", after: "0.6.1" }],
+        worktreePath: "/tmp/fake-wt-nonexistent",
+        plan: false,
+      }),
+    ).rejects.toThrow("publish failed for");
+
+    vi.restoreAllMocks();
+  });
+
+  it("does not throw in plan:true mode (dry-run — no real publish)", async () => {
+    // plan:true path never calls execa, so no failures.
+    const result = await publishFn.execute({
+      bumps: [{ package: "@ageflow/core", before: "0.6.0", after: "0.6.1" }],
+      worktreePath: "/tmp/fake-wt-nonexistent",
+      plan: true,
+    });
+    expect(result.published).toContain("@ageflow/core");
+    expect(result.skipped).toHaveLength(0);
+  });
+});
+
+describe("PUBLISH_ORDER — P1-2 runner-anthropic included", () => {
+  it("contains @ageflow/runner-anthropic", () => {
+    expect(PUBLISH_ORDER).toContain("@ageflow/runner-anthropic");
+  });
+
+  it("@ageflow/runner-anthropic appears after @ageflow/runner-api", () => {
+    const apiIdx = PUBLISH_ORDER.indexOf("@ageflow/runner-api");
+    const anthropicIdx = PUBLISH_ORDER.indexOf("@ageflow/runner-anthropic");
+    expect(apiIdx).toBeGreaterThanOrEqual(0);
+    expect(anthropicIdx).toBeGreaterThan(apiIdx);
+  });
+
+  it("@ageflow/runner-anthropic appears before @ageflow/testing", () => {
+    const anthropicIdx = PUBLISH_ORDER.indexOf("@ageflow/runner-anthropic");
+    const testingIdx = PUBLISH_ORDER.indexOf("@ageflow/testing");
+    expect(anthropicIdx).toBeLessThan(testingIdx);
+  });
+});
+
+describe("semverBump", () => {
+  it("patch: increments patch, leaves major/minor", () => {
+    expect(semverBump("1.2.3", "patch")).toBe("1.2.4");
+    expect(semverBump("0.0.0", "patch")).toBe("0.0.1");
+    expect(semverBump("1.0.0", "patch")).toBe("1.0.1");
+  });
+
+  it("minor: increments minor, resets patch", () => {
+    expect(semverBump("1.2.3", "minor")).toBe("1.3.0");
+    expect(semverBump("0.5.9", "minor")).toBe("0.6.0");
+    expect(semverBump("2.0.0", "minor")).toBe("2.1.0");
+  });
+
+  it("major: increments major, resets minor + patch", () => {
+    expect(semverBump("1.2.3", "major")).toBe("2.0.0");
+    expect(semverBump("0.9.9", "major")).toBe("1.0.0");
+    expect(semverBump("3.4.5", "major")).toBe("4.0.0");
+  });
+
+  it("throws on invalid semver string", () => {
+    expect(() => semverBump("not-a-version", "patch")).toThrow(
+      "invalid semver",
+    );
   });
 });

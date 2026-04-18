@@ -138,7 +138,7 @@
     },
     "packages/dev-workflow": {
       "name": "@ageflow/dev-workflow",
-      "version": "0.0.13",
+      "version": "0.0.15",
       "dependencies": {
         "@ageflow/core": "^0.6.0",
         "@ageflow/executor": "^0.7.0",
