@@ -8,7 +8,11 @@ import type {
   TraceFilter,
   TraceStore,
 } from "@ageflow/learning";
-import { MIGRATIONS, makeVecTableSql } from "./migrations.js";
+import {
+  MIGRATIONS,
+  detectVecDistanceMetric,
+  makeVecTableSql,
+} from "./migrations.js";
 import { SqliteSkillStore } from "./sqlite-skill-store.js";
 import { SqliteTraceStore } from "./sqlite-trace-store.js";
 
@@ -31,7 +35,33 @@ function tryLoadVec(db: Database, dimensions: number): boolean {
   try {
     // sqlite-vec ships the extension as "vec0" (the module entrypoint)
     db.loadExtension("vec0");
-    db.run(makeVecTableSql(dimensions));
+
+    // Detect whether an existing skills_vec table uses the wrong distance
+    // metric. Databases created before PR #200 use L2 (vec0 default) or have
+    // no distance_metric clause. Either case must be migrated to cosine.
+    const existing = detectVecDistanceMetric(db);
+    if (existing !== null && existing !== "cosine") {
+      console.warn(
+        `[learning-sqlite] migrating skills_vec from ${existing} → cosine distance. Existing embeddings will be repopulated.`,
+      );
+      // Read existing rows from the old table before dropping it.
+      // Embeddings are stored only in skills_vec (not in the skills table).
+      const oldRows = db
+        .query<{ skill_id: string; embedding: Buffer }, []>(
+          "SELECT skill_id, embedding FROM skills_vec",
+        )
+        .all();
+      db.exec("DROP TABLE skills_vec");
+      db.exec(makeVecTableSql(dimensions));
+      const insert = db.prepare(
+        "INSERT INTO skills_vec (skill_id, embedding) VALUES (?, ?)",
+      );
+      for (const r of oldRows) insert.run(r.skill_id, r.embedding);
+    } else {
+      // No existing table or already cosine — create if absent (IF NOT EXISTS).
+      db.run(makeVecTableSql(dimensions));
+    }
+
     return true;
   } catch (err) {
     // PERMANENT warning — fires every init when extension is missing.

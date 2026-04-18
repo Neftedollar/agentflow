@@ -10,7 +10,7 @@
 import { Database } from "bun:sqlite";
 import type { SkillRecord } from "@ageflow/learning";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MIGRATIONS } from "../migrations.js";
+import { MIGRATIONS, detectVecDistanceMetric } from "../migrations.js";
 import { SqliteLearningStore } from "../sqlite-learning-store.js";
 import { SqliteSkillStore } from "../sqlite-skill-store.js";
 
@@ -283,6 +283,138 @@ describe.skipIf(!VEC_AVAILABLE)(
       const results = await store.search("event sourcing", 10);
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]?.skill.id).toBe(skill.id);
+    });
+  },
+);
+
+// ─── detectVecDistanceMetric unit tests — always runs ────────────────────────
+
+describe("detectVecDistanceMetric", () => {
+  it("returns null when skills_vec table does not exist", () => {
+    const db = new Database(":memory:");
+    expect(detectVecDistanceMetric(db)).toBeNull();
+    db.close();
+  });
+
+  it("returns 'cosine' when table declares distance_metric=cosine", () => {
+    const db = new Database(":memory:");
+    // We cannot actually create a vec0 virtual table without the extension,
+    // so we simulate what sqlite_master would show by using a regular table
+    // with a crafted name and inserting a fake row — but sqlite_master only
+    // contains real DDL. Instead we test the string-matching logic directly
+    // by creating a plain SQLite virtual table stub via a trigger workaround
+    // is not possible. The function reads from sqlite_master, so we need a
+    // real CREATE statement. Use a regular (non-virtual) table as a proxy:
+    // the function only inspects the sql column, not the type.
+    db.run(
+      "CREATE TABLE skills_vec (skill_id TEXT PRIMARY KEY, embedding BLOB, distance_metric_cosine TEXT DEFAULT 'distance_metric=cosine')",
+    );
+    // The DDL stored in sqlite_master will contain "distance_metric=cosine"
+    // because it's embedded in the column default string. Verify our helper
+    // correctly parses it.
+    expect(detectVecDistanceMetric(db)).toBe("cosine");
+    db.close();
+  });
+
+  it("returns 'L2' when table declares distance_metric=L2", () => {
+    const db = new Database(":memory:");
+    db.run(
+      "CREATE TABLE skills_vec (skill_id TEXT PRIMARY KEY, embedding BLOB, distance_metric_L2 TEXT DEFAULT 'distance_metric=L2')",
+    );
+    expect(detectVecDistanceMetric(db)).toBe("L2");
+    db.close();
+  });
+
+  it("returns 'unknown' when table exists but has no distance_metric clause", () => {
+    const db = new Database(":memory:");
+    db.run(
+      "CREATE TABLE skills_vec (skill_id TEXT PRIMARY KEY, embedding BLOB)",
+    );
+    expect(detectVecDistanceMetric(db)).toBe("unknown");
+    db.close();
+  });
+});
+
+// ─── Migration tests — gated on SQLITE_VEC_AVAILABLE=1 ───────────────────────
+
+describe.skipIf(!VEC_AVAILABLE)(
+  "skills_vec migration: L2 → cosine (SQLITE_VEC_AVAILABLE=1 required)",
+  () => {
+    it("migrates L2 table to cosine and repopulates embeddings", async () => {
+      // Step 1: create a database with the old L2 schema (no distance_metric).
+      const db = new Database(":memory:");
+      for (const sql of MIGRATIONS) db.run(sql);
+
+      // Manually load vec0 and create an old-style L2 table (no distance_metric
+      // clause — vec0 defaults to L2).
+      db.loadExtension("vec0");
+      db.exec(
+        "CREATE VIRTUAL TABLE skills_vec USING vec0(skill_id TEXT PRIMARY KEY, embedding float[4])",
+      );
+
+      // Insert a skill into the skills table (no embedding column there).
+      const skillId = crypto.randomUUID();
+      const embedding = new Float32Array([0.1, 0.2, 0.3, 0.4]);
+      const embeddingBuffer = Buffer.from(embedding.buffer);
+      db.run(
+        `INSERT INTO skills (id, name, description, content, target_agent, status, score, run_count, best_in_lineage, created_at)
+         VALUES (?, 'test', 'desc', 'content', 'agent', 'active', 0.5, 0, 1, ?)`,
+        [skillId, new Date().toISOString()],
+      );
+      // Insert into the old L2 skills_vec.
+      db.run("INSERT INTO skills_vec (skill_id, embedding) VALUES (?, ?)", [
+        skillId,
+        embeddingBuffer,
+      ]);
+
+      // Step 2: re-init with SqliteLearningStore — should detect old table and
+      // run migration, emitting a warning.
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const store = new SqliteLearningStore(db, { embeddingDimensions: 4 });
+        expect(store.vecAvailable).toBe(true);
+
+        // Warning must mention the migration.
+        expect(warnSpy).toHaveBeenCalledOnce();
+        const [msg] = warnSpy.mock.calls[0] as [string];
+        expect(msg).toContain("[learning-sqlite]");
+        expect(msg).toContain("migrating skills_vec");
+        expect(msg).toContain("cosine");
+
+        // The new table should declare cosine.
+        const row = db
+          .query<{ sql: string }, []>(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='skills_vec'",
+          )
+          .get();
+        expect(row?.sql).toContain("distance_metric=cosine");
+
+        // The repopulated row should be searchable via KNN.
+        const results = await store.search("", 5, embedding);
+        expect(results.map((r) => r.skill.id)).toContain(skillId);
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it("does NOT migrate when table already uses cosine", () => {
+      const db = new Database(":memory:");
+      for (const sql of MIGRATIONS) db.run(sql);
+      db.loadExtension("vec0");
+      // Create a correctly-configured cosine table first.
+      db.exec(
+        "CREATE VIRTUAL TABLE skills_vec USING vec0(skill_id TEXT PRIMARY KEY, embedding float[4] distance_metric=cosine)",
+      );
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const store = new SqliteLearningStore(db, { embeddingDimensions: 4 });
+        expect(store.vecAvailable).toBe(true);
+        // No migration warning should fire.
+        expect(warnSpy).not.toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   },
 );
