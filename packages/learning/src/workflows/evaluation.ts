@@ -167,14 +167,18 @@ export interface EvaluationInput {
   skillStore: SkillStore;
   traceStore: TraceStore;
   /**
-   * DAG structure for the workflow being evaluated.
-   * Maps taskName → direct dependsOn list.
+   * DAG structure keyed by workflow name.
+   * Maps workflowName → { taskName → direct dependsOn list }.
+   *
+   * Each skill's per-workflow DAG is looked up by `skill.targetWorkflow`.
+   * This prevents cross-workflow contamination where a DAG built from
+   * workflow A would be incorrectly applied to skills from workflow B (#183).
    *
    * When provided, downstream task detection uses proper transitive-closure
-   * over the dependency graph (fix for #174).  When omitted, downstream
+   * over the per-skill workflow's dependency graph.  When omitted, downstream
    * defaults to an empty set (safe: no incorrect cross-branch pollution).
    */
-  dagStructure?: Record<string, readonly string[]>;
+  dagStructure?: Record<string, Record<string, readonly string[]>>;
   /** Only evaluate skills with these statuses. Default: ["active", "retired"] */
   statuses?: Array<"active" | "retired">;
   /** Number of recent traces to sample per skill. Default: 10 */
@@ -256,8 +260,11 @@ export async function runEvaluation(
 
       // Build downstream results: task traces that transitively depend on this
       // task, computed via DAG closure rather than array index (#174).
-      const downstreamNames = input.dagStructure
-        ? computeDownstream(input.dagStructure, skill.targetAgent)
+      // Look up the DAG specific to this skill's workflow to avoid cross-workflow
+      // contamination (#183).
+      const skillDag = input.dagStructure?.[skill.targetWorkflow ?? ""];
+      const downstreamNames = skillDag
+        ? computeDownstream(skillDag, skill.targetAgent)
         : new Set<string>();
       const downstreamTraces = trace.taskTraces.filter((tt) =>
         downstreamNames.has(tt.taskName),

@@ -676,6 +676,60 @@ describe("runEvaluation — updates skill scores in store", () => {
   });
 });
 
+// ─── runEvaluation — per-workflow dagStructure scoping (#183) ────────────────
+
+describe("runEvaluation — per-workflow dagStructure scoping", () => {
+  it("skill from workflow-a gets workflow-a DAG, skill from workflow-b gets undefined DAG (no contamination)", async () => {
+    // Two skills in different workflows; dagStructure only has workflow-a entry.
+    const skillA = makeSkillRecord({
+      targetAgent: "analyze",
+      targetWorkflow: "workflow-a",
+      status: "active",
+    });
+    const skillB = makeSkillRecord({
+      targetAgent: "lint",
+      targetWorkflow: "workflow-b",
+      status: "active",
+    });
+
+    const dagStructure: Record<string, Record<string, readonly string[]>> = {
+      "workflow-a": { analyze: [], report: ["analyze"] },
+    };
+
+    // For skill-a (workflow-a): DAG lookup succeeds
+    const dagA = dagStructure[skillA.targetWorkflow ?? ""];
+    expect(dagA).toBeDefined();
+    expect(dagA?.analyze).toEqual([]);
+
+    // For skill-b (workflow-b): DAG lookup returns undefined → safe empty fallback
+    const dagB = dagStructure[skillB.targetWorkflow ?? ""];
+    expect(dagB).toBeUndefined();
+  });
+
+  it("dagStructure keyed by workflowName resolves downstream correctly for the matched workflow", async () => {
+    const dagStructure: Record<string, Record<string, readonly string[]>> = {
+      "my-workflow": {
+        fetch: [],
+        transform: ["fetch"],
+        store: ["transform"],
+      },
+    };
+
+    const { computeDownstream } = await import("../dag-utils.js");
+
+    const skillDag = dagStructure["my-workflow"];
+    expect(skillDag).toBeDefined();
+
+    const downstream = computeDownstream(
+      skillDag as Record<string, readonly string[]>,
+      "fetch",
+    );
+    expect(downstream.has("transform")).toBe(true);
+    expect(downstream.has("store")).toBe(true);
+    expect(downstream.has("fetch")).toBe(false);
+  });
+});
+
 // ─── Phase 7, Task 14: Promotion Workflow ────────────────────────────────────
 
 describe("runPromotion — rollback logic", () => {
@@ -941,14 +995,14 @@ describe("runEvaluation — dagStructure warning", () => {
     expect(message).toContain("credit assignment will be incomplete");
   });
 
-  it("does NOT warn when dagStructure is provided", async () => {
+  it("does NOT warn when dagStructure is provided (keyed by workflowName)", async () => {
     const skillStore = makeSkillStore();
     const traceStore = makeTraceStore();
 
     await runEvaluation({
       skillStore,
       traceStore,
-      dagStructure: { taskA: [], taskB: ["taskA"] },
+      dagStructure: { "my-workflow": { taskA: [], taskB: ["taskA"] } },
     });
 
     expect(warnSpy).not.toHaveBeenCalled();

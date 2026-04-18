@@ -83,9 +83,12 @@ export function registerLearnCommand(program: Command): void {
           import("@ageflow/learning"),
         ]);
 
-        // Build dagStructure from workflow file when provided so that
-        // runEvaluation can perform accurate transitive downstream detection.
-        let dagStructure: Record<string, readonly string[]> | undefined;
+        // Build dagStructure keyed by workflowName from the workflow file when
+        // provided, so that runEvaluation can perform accurate transitive
+        // downstream detection without cross-workflow contamination (#183).
+        let dagStructure:
+          | Record<string, Record<string, readonly string[]>>
+          | undefined;
         if (opts.workflow) {
           const resolvedWorkflowPath = path.resolve(opts.workflow);
           let mod: Record<string, unknown>;
@@ -100,15 +103,28 @@ export function registerLearnCommand(program: Command): void {
             );
             process.exit(1);
           }
-          const workflow = (mod.default ?? mod.workflow) as
-            | { tasks: Record<string, { dependsOn?: readonly string[] }> }
-            | undefined;
-          if (workflow?.tasks) {
-            dagStructure = {};
-            for (const [taskName, task] of Object.entries(workflow.tasks)) {
-              dagStructure[taskName] = task.dependsOn ?? [];
-            }
+          const loaded = mod.default ?? mod.workflow;
+          if (
+            !loaded ||
+            typeof loaded !== "object" ||
+            !("tasks" in loaded) ||
+            typeof (loaded as Record<string, unknown>).tasks !== "object"
+          ) {
+            process.stderr.write(
+              `Error: --workflow module "${opts.workflow}" did not export a valid workflow (missing 'tasks' object)\n`,
+            );
+            process.exit(1);
           }
+          const workflow = loaded as {
+            name?: string;
+            tasks: Record<string, { dependsOn?: readonly string[] }>;
+          };
+          const workflowName = workflow.name ?? resolvedWorkflowPath;
+          const taskDag: Record<string, readonly string[]> = {};
+          for (const [taskName, task] of Object.entries(workflow.tasks)) {
+            taskDag[taskName] = task.dependsOn ?? [];
+          }
+          dagStructure = { [workflowName]: taskDag };
         }
 
         process.stdout.write("Running evaluation workflow...\n");
