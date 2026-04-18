@@ -126,7 +126,7 @@
     },
     "packages/core": {
       "name": "@ageflow/core",
-      "version": "0.6.3",
+      "version": "0.6.4",
       "devDependencies": {
         "@types/node": "^22.0.0",
         "vitest": "^2.1.0",

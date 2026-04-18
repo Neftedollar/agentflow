@@ -194,6 +194,35 @@ export function defineWorkflow<const T extends TasksMap>(
 }
 
 /**
+ * Define a workflow factory that closes over a typed input value.
+ *
+ * Captures the de-facto consumer pattern: wrap `defineWorkflow` in a function
+ * that receives workflow-level data and threads it into task inputs via closure.
+ * Removes per-pipeline boilerplate and the typing footgun of manually annotating
+ * the factory return type.
+ *
+ * @example
+ * // Before (manual factory):
+ * export function createPipeline(input: PipelineInput): WorkflowDef<...> {
+ *   return defineWorkflow({ name: "pipeline", tasks: { ... } });
+ * }
+ *
+ * // After (using helper):
+ * export const createPipeline = defineWorkflowFactory<PipelineInput>(
+ *   (input) => ({ name: "pipeline", tasks: { ... } }),
+ * );
+ *
+ * @remarks
+ * v2: optional second argument for Zod input validation schema (deferred).
+ * When added, the factory will parse+validate `input` before calling `fn`.
+ */
+export function defineWorkflowFactory<I, const T extends TasksMap = TasksMap>(
+  fn: (input: I) => WorkflowDef<T>,
+): (input: I) => WorkflowDef<T> {
+  return (input: I) => defineWorkflow(fn(input));
+}
+
+/**
  * Define a loop task. Runs inner DAG iteratively until `until` returns true.
  *
  * @example
