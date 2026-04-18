@@ -56,3 +56,31 @@ export function makeVecTableSql(dimensions: number): string {
     embedding float[${dimensions}] distance_metric=cosine
   )`;
 }
+
+/**
+ * Inspect the existing skills_vec table (if any) to detect its distance metric.
+ *
+ * Returns:
+ *   null      — no skills_vec table exists yet (fresh database)
+ *   "cosine"  — table exists and uses distance_metric=cosine
+ *   "L2"      — table exists and explicitly declares distance_metric=L2
+ *   "unknown" — table exists but CREATE SQL contains no distance_metric clause
+ *               (vec0 default is L2, so this also needs migration)
+ *
+ * Detection is done by parsing the raw DDL stored in sqlite_master — vec0 does
+ * not expose the metric via PRAGMA, so this is the only reliable approach.
+ */
+export function detectVecDistanceMetric(
+  db: import("bun:sqlite").Database,
+): "cosine" | "L2" | "unknown" | null {
+  const row = db
+    .query<{ sql: string }, []>(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='skills_vec'",
+    )
+    .get();
+  if (!row) return null;
+  if (row.sql.includes("distance_metric=cosine")) return "cosine";
+  if (row.sql.includes("distance_metric=L2")) return "L2";
+  // No distance_metric clause — vec0 defaults to L2.
+  return "unknown";
+}
