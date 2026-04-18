@@ -211,6 +211,18 @@ const realityCheckerAgent = defineAgent({
       "",
       "Reproduce the bug on master, then verify the fix on the worktree",
       "branch. Cite the test file + describe block that captures the bug.",
+      "",
+      "## Required output (JSON)",
+      "",
+      "```json",
+      "{",
+      '  "commandsRun": [{ "cmd": "<shell command>", "result": "PASS" | "FAIL" | "SKIPPED" }],',
+      '  "regressionProof": "<1-2 sentence evidence the bug is gone>",',
+      '  "gate": "APPROVED" | "NEEDS_WORK"',
+      "}",
+      "```",
+      "",
+      "Wrap your response in this JSON object exactly. Do not add prose around it.",
     ].join("\n");
   },
 });

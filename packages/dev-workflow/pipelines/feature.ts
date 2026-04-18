@@ -96,6 +96,18 @@ const seniorDeveloperAgent = defineAgent({
       "",
       "Implement per the plan. Run typecheck + tests locally before returning.",
       "Only commit reality: typecheckPassed must reflect actual exit code.",
+      "",
+      "## Required output (JSON)",
+      "",
+      "```json",
+      "{",
+      '  "filesChanged": ["<path>", ...],',
+      '  "summary": "<one-sentence description>",',
+      '  "typecheckPassed": true | false',
+      "}",
+      "```",
+      "",
+      "Wrap your response in this JSON object exactly. Do not add prose around it.",
     ].join("\n");
   },
 });
