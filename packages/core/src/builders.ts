@@ -201,6 +201,10 @@ export function defineWorkflow<const T extends TasksMap>(
  * Removes per-pipeline boilerplate and the typing footgun of manually annotating
  * the factory return type.
  *
+ * Task-key inference is fully preserved: the return type of the produced factory
+ * carries the exact `T` inferred from `fn`'s return shape, so `CtxFor<>` and
+ * other per-key utilities narrow correctly without a second generic argument.
+ *
  * @example
  * // Before (manual factory):
  * export function createPipeline(input: PipelineInput): WorkflowDef<...> {
@@ -216,7 +220,7 @@ export function defineWorkflow<const T extends TasksMap>(
  * v2: optional second argument for Zod input validation schema (deferred).
  * When added, the factory will parse+validate `input` before calling `fn`.
  */
-export function defineWorkflowFactory<I, const T extends TasksMap = TasksMap>(
+export function defineWorkflowFactory<I, const T extends TasksMap>(
   fn: (input: I) => WorkflowDef<T>,
 ): (input: I) => WorkflowDef<T> {
   return (input: I) => defineWorkflow(fn(input));

@@ -1,6 +1,11 @@
 import { assertType, describe, expectTypeOf, it } from "vitest";
 import { z } from "zod";
-import { defineAgent, defineFunction, resolveAgentDef } from "../builders.js";
+import {
+  defineAgent,
+  defineFunction,
+  defineWorkflowFactory,
+  resolveAgentDef,
+} from "../builders.js";
 import type {
   AgentDef,
   BoundCtx,
@@ -206,6 +211,67 @@ describe("CtxFor with fn task dep", () => {
         readonly output: { orders: string[]; total: number };
         readonly _source: "function";
       };
+    }>({} as Ctx);
+  });
+});
+
+// ─── defineWorkflowFactory task-key inference (#198) ─────────────────────────
+
+const factoryAgentA = defineAgent({
+  runner: "claude",
+  input: z.object({}),
+  output: z.object({ x: z.string() }),
+  prompt: () => "a",
+});
+
+const factoryAgentB = defineAgent({
+  runner: "claude",
+  input: z.object({}),
+  output: z.object({ y: z.number() }),
+  prompt: () => "b",
+});
+
+describe("defineWorkflowFactory preserves task-key inference", () => {
+  it("task keys are 'a' | 'b', not string (TasksMap-wide)", () => {
+    const f = defineWorkflowFactory((_input: { name: string }) => ({
+      name: "x",
+      tasks: {
+        a: { agent: factoryAgentA, input: () => ({}) },
+        b: {
+          agent: factoryAgentB,
+          dependsOn: ["a"] as const,
+          input: () => ({}),
+        },
+      },
+    }));
+
+    const wf = f({ name: "test" });
+
+    // keyof Tasks must be the literal union "a" | "b", not the wide string type
+    expectTypeOf<keyof typeof wf.tasks>().toEqualTypeOf<"a" | "b">();
+  });
+
+  it("CtxFor narrows correctly on a factory-produced WorkflowDef", () => {
+    const f = defineWorkflowFactory((_input: { name: string }) => ({
+      name: "x",
+      tasks: {
+        a: { agent: factoryAgentA, input: () => ({}) },
+        b: {
+          agent: factoryAgentB,
+          dependsOn: ["a"] as const,
+          input: () => ({}),
+        },
+      },
+    }));
+
+    const wf = f({ name: "test" });
+    type Tasks = typeof wf.tasks;
+
+    // CtxFor<Tasks, "b"> should have key "a" with output { x: string }, not the
+    // wide TasksMap shape where output is unknown for all string keys
+    type Ctx = CtxFor<Tasks, "b">;
+    assertType<{
+      readonly a: { readonly output: { x: string }; readonly _source: "agent" };
     }>({} as Ctx);
   });
 });

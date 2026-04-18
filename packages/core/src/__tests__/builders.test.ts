@@ -583,7 +583,7 @@ describe("defineWorkflowFactory", () => {
   });
 
   it("factory called with input returns a valid WorkflowDef", () => {
-    const createPipeline = defineWorkflowFactory<PipelineInput>((input) => ({
+    const createPipeline = defineWorkflowFactory((input: PipelineInput) => ({
       name: "test-pipeline",
       tasks: {
         analyze: {
@@ -605,7 +605,7 @@ describe("defineWorkflowFactory", () => {
   });
 
   it("input typing flows through — return type is WorkflowDef", () => {
-    const createPipeline = defineWorkflowFactory<PipelineInput>((input) => ({
+    const createPipeline = defineWorkflowFactory((input: PipelineInput) => ({
       name: "type-check-pipeline",
       tasks: {
         analyze: {
@@ -640,28 +640,27 @@ describe("defineWorkflowFactory", () => {
       prompt: ({ findings }) => `Summarize: ${findings.join(", ")}`,
     });
 
-    const createRepoPipeline = defineWorkflowFactory<{
-      repo: string;
-      summarize: boolean;
-    }>((input) => ({
-      name: `repo-pipeline-${input.repo}`,
-      tasks: input.summarize
-        ? {
-            scan: { agent: analyzeAgent2, input: { path: input.repo } },
-            summarize: {
-              agent: summarizeAgent,
-              dependsOn: ["scan"],
-              input: (
-                ctx: Record<string, { output: { findings: string[] } }>,
-              ) => ({
-                findings: ctx.scan?.output.findings ?? [],
-              }),
+    const createRepoPipeline = defineWorkflowFactory(
+      (input: { repo: string; summarize: boolean }) => ({
+        name: `repo-pipeline-${input.repo}`,
+        tasks: input.summarize
+          ? {
+              scan: { agent: analyzeAgent2, input: { path: input.repo } },
+              summarize: {
+                agent: summarizeAgent,
+                dependsOn: ["scan"],
+                input: (
+                  ctx: Record<string, { output: { findings: string[] } }>,
+                ) => ({
+                  findings: ctx.scan?.output.findings ?? [],
+                }),
+              },
+            }
+          : {
+              scan: { agent: analyzeAgent2, input: { path: input.repo } },
             },
-          }
-        : {
-            scan: { agent: analyzeAgent2, input: { path: input.repo } },
-          },
-    }));
+      }),
+    );
 
     const wfWithSummary = createRepoPipeline({
       repo: "./packages",
