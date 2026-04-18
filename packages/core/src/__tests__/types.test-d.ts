@@ -275,3 +275,76 @@ describe("defineWorkflowFactory preserves task-key inference", () => {
     }>({} as Ctx);
   });
 });
+
+// ─── defineWorkflowFactory back-compat call shapes (#203) ────────────────────
+
+interface PipelineInput203 {
+  repoPath: string;
+}
+
+describe("defineWorkflowFactory call-shape back-compat (#203)", () => {
+  it("old shape: explicit <I> type arg compiles (T = TasksMap, wide)", () => {
+    // This was the pre-v0.6.5 canonical pattern. T resolves to TasksMap (wide).
+    const f = defineWorkflowFactory<PipelineInput203>((input) => ({
+      name: "back-compat",
+      tasks: {
+        a: { agent: factoryAgentA, input: () => ({}) },
+        b: {
+          agent: factoryAgentB,
+          dependsOn: ["a"] as const,
+          input: () => ({}),
+        },
+      },
+    }));
+
+    const wf = f({ repoPath: "./src" });
+
+    // Input type is preserved correctly
+    expectTypeOf(f).parameter(0).toEqualTypeOf<PipelineInput203>();
+
+    // T = TasksMap, so task keys are string (wide) — acceptable back-compat behaviour
+    expectTypeOf<keyof typeof wf.tasks>().toEqualTypeOf<string>();
+  });
+
+  it("new shape: lambda annotation compiles and narrows task keys", () => {
+    // Canonical v0.6.6+ pattern: annotate the lambda parameter instead.
+    const f = defineWorkflowFactory((input: PipelineInput203) => ({
+      name: "new-shape",
+      tasks: {
+        a: { agent: factoryAgentA, input: () => ({}) },
+        b: {
+          agent: factoryAgentB,
+          dependsOn: ["a"] as const,
+          input: () => ({}),
+        },
+      },
+    }));
+
+    const wf = f({ repoPath: "./src" });
+
+    // Input type is preserved correctly
+    expectTypeOf(f).parameter(0).toEqualTypeOf<PipelineInput203>();
+
+    // T is inferred — task keys are narrow "a" | "b"
+    expectTypeOf<keyof typeof wf.tasks>().toEqualTypeOf<"a" | "b">();
+  });
+
+  it("both shapes produce a WorkflowDef at runtime", () => {
+    const f1 = defineWorkflowFactory<PipelineInput203>((input) => ({
+      name: "wf1",
+      tasks: { a: { agent: factoryAgentA, input: () => ({}) } },
+    }));
+
+    const f2 = defineWorkflowFactory((input: PipelineInput203) => ({
+      name: "wf2",
+      tasks: { a: { agent: factoryAgentA, input: () => ({}) } },
+    }));
+
+    const wf1 = f1({ repoPath: "./src" });
+    const wf2 = f2({ repoPath: "./src" });
+
+    // Both return WorkflowDef shapes (have a tasks property)
+    assertType<{ tasks: TasksMap }>(wf1);
+    assertType<{ tasks: TasksMap }>(wf2);
+  });
+});
