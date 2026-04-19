@@ -20,7 +20,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { registerRunner } from "@ageflow/core";
-import type { WorkflowHooks } from "@ageflow/core";
+import type { TasksMap, WorkflowEvent, WorkflowHooks } from "@ageflow/core";
 import { BudgetTracker, WorkflowExecutor } from "@ageflow/executor";
 import { CodexRunner } from "@ageflow/runner-codex";
 import { determinePipeline, loadIssue } from "./shared/issue-loader.js";
@@ -46,6 +46,100 @@ const pipelineFactories = {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../..");
+
+function formatUsd(usd: number): string {
+  return `$${usd.toFixed(4)}`;
+}
+
+function formatMs(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+export function renderEvent(
+  ev: WorkflowEvent,
+  budgetCapUsd: number | undefined,
+  state: {
+    readonly starts: Map<string, number>;
+    spentUsd: number;
+    warned80: boolean;
+  },
+): void {
+  if (ev.type === "task:start") {
+    state.starts.set(ev.taskName, ev.timestamp);
+    console.log(`[progress] ▶ ${ev.taskName} started`);
+    return;
+  }
+
+  if (ev.type === "task:complete") {
+    const startedAt = state.starts.get(ev.taskName);
+    const durationMs =
+      startedAt !== undefined ? ev.timestamp - startedAt : ev.metrics.latencyMs;
+    state.starts.delete(ev.taskName);
+
+    state.spentUsd += ev.metrics.estimatedCost;
+    console.log(
+      `[progress] ✓ ${ev.taskName} completed in ${formatMs(durationMs)} | +${formatUsd(ev.metrics.estimatedCost)} (spent ${formatUsd(state.spentUsd)})`,
+    );
+
+    if (budgetCapUsd !== undefined) {
+      const pct = (state.spentUsd / budgetCapUsd) * 100;
+      console.log(
+        `[budget] ${formatUsd(state.spentUsd)} / ${formatUsd(budgetCapUsd)} (${pct.toFixed(1)}%)`,
+      );
+      if (!state.warned80 && pct >= 80) {
+        state.warned80 = true;
+        console.warn(
+          `[budget] warning: reached ${pct.toFixed(1)}% of cap ${formatUsd(budgetCapUsd)}`,
+        );
+      }
+    } else {
+      console.log(`[budget] spent ${formatUsd(state.spentUsd)} (no cap)`);
+    }
+    return;
+  }
+
+  if (ev.type === "task:error") {
+    const startedAt = state.starts.get(ev.taskName);
+    const durationMs = startedAt !== undefined ? ev.timestamp - startedAt : 0;
+    state.starts.delete(ev.taskName);
+    const durationSuffix =
+      durationMs > 0 ? ` after ${formatMs(durationMs)}` : "";
+    console.error(
+      `[progress] ✗ ${ev.taskName} failed${durationSuffix}: ${ev.error.message}`,
+    );
+    return;
+  }
+
+  if (ev.type === "budget:warning") {
+    console.warn(
+      `[budget] executor warning: spent ${formatUsd(ev.spentUsd)} > limit ${formatUsd(ev.limitUsd)}`,
+    );
+  }
+}
+
+export async function runWithProgress<T extends TasksMap>(
+  executor: WorkflowExecutor<T>,
+  input: WorkflowInput,
+  budgetCapUsd?: number,
+): Promise<{ outputs?: { [K in keyof T]?: unknown }; metrics?: unknown }> {
+  const state = {
+    starts: new Map<string, number>(),
+    spentUsd: 0,
+    warned80: false,
+  };
+  const stream = executor.stream(input);
+
+  while (true) {
+    const next = await stream.next();
+    if (next.done) {
+      return {
+        outputs: next.value.outputs,
+        metrics: next.value.metrics,
+      };
+    }
+    renderEvent(next.value, budgetCapUsd, state);
+  }
+}
 
 async function main(): Promise<void> {
   // Parse argv: --dry-run flag + issue number + optional --budget=<N>.
@@ -157,7 +251,7 @@ async function main(): Promise<void> {
         budgetTracker,
       });
 
-      const result = await executor.run(updatedInput);
+      const result = await runWithProgress(executor, updatedInput, maxUsd);
       console.log("[dev-workflow] workflow complete:");
       console.log(
         JSON.stringify(
@@ -182,7 +276,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  console.error("[dev-workflow] fatal:", err);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((err) => {
+    console.error("[dev-workflow] fatal:", err);
+    process.exit(1);
+  });
+}
