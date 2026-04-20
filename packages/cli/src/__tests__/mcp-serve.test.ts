@@ -121,6 +121,31 @@ describe("parseMcpServeArgs", () => {
     expect(args.maxTurns).toBeNull();
   });
 
+  it("parses --max-concurrent-jobs", () => {
+    const args = parseMcpServeArgs([
+      "wf.ts",
+      "--async",
+      "--max-concurrent-jobs",
+      "3",
+    ]);
+    expect(args.maxConcurrentJobs).toBe(3);
+  });
+
+  it("defaults maxConcurrentJobs to undefined", () => {
+    const args = parseMcpServeArgs(["wf.ts"]);
+    expect(args.maxConcurrentJobs).toBeUndefined();
+  });
+
+  it("parses --max-concurrent-jobs-per-workflow", () => {
+    const args = parseMcpServeArgs([
+      "wf.ts",
+      "--async",
+      "--max-concurrent-jobs-per-workflow",
+      "4",
+    ]);
+    expect(args.maxConcurrentJobsPerWorkflow).toBe(4);
+  });
+
   it("parses --hitl auto", () => {
     const args = parseMcpServeArgs(["wf.ts", "--hitl", "auto"]);
     expect(args.hitlStrategy).toBe("auto");
@@ -176,6 +201,38 @@ describe("parseMcpServeArgs", () => {
     expect(() => parseMcpServeArgs(["wf.ts", "--max-cost", "abc"])).toThrow(
       /--max-cost must be a non-negative number/,
     );
+  });
+
+  it("throws on invalid --max-concurrent-jobs value", () => {
+    expect(() =>
+      parseMcpServeArgs(["wf.ts", "--max-concurrent-jobs", "0"]),
+    ).toThrow(/positive integer/);
+  });
+
+  it("throws on negative --max-concurrent-jobs value", () => {
+    expect(() =>
+      parseMcpServeArgs(["wf.ts", "--max-concurrent-jobs", "-2"]),
+    ).toThrow(/positive integer/);
+  });
+
+  it("throws on invalid --max-concurrent-jobs-per-workflow value", () => {
+    expect(() =>
+      parseMcpServeArgs([
+        "wf.ts",
+        "--async",
+        "--max-concurrent-jobs-per-workflow",
+        "1.5",
+      ]),
+    ).toThrow(/positive integer/);
+  });
+
+  it("requires --async for concurrency flags", () => {
+    expect(() =>
+      parseMcpServeArgs(["wf.ts", "--max-concurrent-jobs", "2"]),
+    ).toThrow(/requires --async/);
+    expect(() =>
+      parseMcpServeArgs(["wf.ts", "--max-concurrent-jobs-per-workflow", "2"]),
+    ).toThrow(/requires --async/);
   });
 
   it("throws on unknown flag", () => {

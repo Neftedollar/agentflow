@@ -7,6 +7,7 @@ import type {
 } from "@ageflow/core";
 import { registerRunner, unregisterRunner } from "@ageflow/core";
 import { type RunStore, type Runner, createRunner } from "@ageflow/server";
+import type { ConcurrencyController } from "./concurrency.js";
 import { ErrorCode, McpServerError, formatErrorResult } from "./errors.js";
 import { JobEventRecorder } from "./job-event-recorder.js";
 import { type PersistedJob, isExpired, toPersistedJob } from "./job-store.js";
@@ -33,8 +34,6 @@ export interface JobDispatchContext {
   _testOnComposedWorkflow?: (workflow: WorkflowDef) => void;
   /** Task count in the workflow (for progress.tasksTotal). */
   readonly taskCount: number;
-  /** Called from fire() onComplete/onError to release the inflight lock. */
-  readonly releaseInflight: () => void;
 }
 
 function sweepStore(ctx: JobDispatchContext): void {
@@ -94,6 +93,8 @@ function loadCurrentSnapshot(
 export interface DispatchStartOptions {
   /** Effective ceilings (from composeCeilings) to apply to workflow budget. */
   readonly effective: EffectiveCeilings;
+  /** Shared concurrency controller. */
+  readonly concurrency: ConcurrencyController;
   /**
    * Checkpoint resolver for HITL strategy:
    * - "auto": () => true  (approve all)
@@ -121,14 +122,18 @@ export async function dispatchStart(
   ctx: JobDispatchContext,
   runOpts: DispatchStartOptions,
 ): Promise<McpToolResult> {
+  const startPermit = runOpts.concurrency.acquireStart(ctx.workflow.name);
+  if (startPermit instanceof McpServerError) {
+    return formatErrorResult(startPermit);
+  }
+
   // Validate input via the sync tool's input Zod (shared between sync + async)
   const inputTaskDef = ctx.workflow.tasks[ctx.tool.inputTask] as {
     agent: { input: import("zod").ZodType };
   };
   const parsed = inputTaskDef.agent.input.safeParse(args);
   if (!parsed.success) {
-    // Release inflight lock on validation failure (caller already set it)
-    ctx.releaseInflight();
+    startPermit.release();
     return formatErrorResult(
       new McpServerError(
         ErrorCode.INPUT_VALIDATION_FAILED,
@@ -137,6 +142,20 @@ export async function dispatchStart(
       ),
     );
   }
+
+  const jobPermit = runOpts.concurrency.acquireJob(ctx.workflow.name);
+  if (jobPermit instanceof McpServerError) {
+    startPermit.release();
+    return formatErrorResult(jobPermit);
+  }
+
+  let released = false;
+  const releasePermits = (): void => {
+    if (released) return;
+    released = true;
+    jobPermit.release();
+    startPermit.release();
+  };
 
   // Build the composed workflow — apply ceiling overrides and HITL hooks.
   // This mirrors the setup done on the sync path (composeCeilings + buildMcpHooks)
@@ -152,112 +171,83 @@ export async function dispatchStart(
   // Notify test observers with the composed workflow (test-only hook).
   ctx._testOnComposedWorkflow?.(composedWorkflow);
 
-  // If a test executor is injected, temporarily register a fake runner that
-  // delegates to it. This ensures runner.fire() still registers the handle in
-  // the RunRegistry, so observer tools (get_workflow_status, cancel_workflow,
-  // etc.) can find it via runner.get(runId).
-  //
-  // In test mode, dispatchStart awaits job completion so that tests can do
-  //   `await h.callTool("start_ask", ...)` and then immediately call observer
-  //   tools without races. (In production, start_* returns jobId immediately
-  //   and the runner background loop is truly fire-and-forget.)
-  if (ctx.testRunExecutor !== undefined) {
-    const testExec = ctx.testRunExecutor;
-    // Get the runner name used by the input task's agent
-    const inputAgent = ctx.workflow.tasks[ctx.tool.inputTask] as {
-      agent: { runner: string; output: import("zod").ZodType };
-    };
-    const runnerName = inputAgent.agent.runner;
+  let runnerName: string | undefined;
+  let jobId = "";
+  try {
+    // If a test executor is injected, temporarily register a fake runner that
+    // delegates to it. This ensures runner.fire() still registers the handle in
+    // the RunRegistry, so observer tools can find it via runner.get(runId).
+    if (ctx.testRunExecutor !== undefined) {
+      const testExec = ctx.testRunExecutor;
+      const inputAgent = ctx.workflow.tasks[ctx.tool.inputTask] as {
+        agent: { runner: string; output: import("zod").ZodType };
+      };
+      runnerName = inputAgent.agent.runner;
 
-    // Register a temporary runner for the duration of this fire() call
-    const fakeRunner = {
-      validate: async () => ({ ok: true }),
-      spawn: async (
-        _spawnArgs: RunnerSpawnArgs,
-      ): Promise<RunnerSpawnResult> => {
-        const output = await testExec(parsed.data);
-        return {
-          stdout: JSON.stringify(output),
-          sessionHandle: "test",
-          tokensIn: 0,
-          tokensOut: 0,
-        };
-      },
-    };
-    registerRunner(runnerName, fakeRunner);
+      const fakeRunner = {
+        validate: async () => ({ ok: true }),
+        spawn: async (
+          _spawnArgs: RunnerSpawnArgs,
+        ): Promise<RunnerSpawnResult> => {
+          const output = await testExec(parsed.data);
+          return {
+            stdout: JSON.stringify(output),
+            sessionHandle: "test",
+            tokensIn: 0,
+            tokensOut: 0,
+          };
+        },
+      };
+      registerRunner(runnerName, fakeRunner);
+    }
 
-    let jobId = "";
-    const handle = ctx.runner.fire(composedWorkflow, parsed.data, {
+    const onCheckpoint = runOpts.onCheckpoint;
+    const fireOptions = {
       ...(runOpts.abortSignal !== undefined
         ? { signal: runOpts.abortSignal }
         : {}),
-      // Apply HITL strategy: "auto" → approve, "fail" → reject, "elicit" → deferred.
-      ...(runOpts.onCheckpoint !== undefined
+      ...(onCheckpoint !== undefined
         ? {
-            // biome-ignore lint/style/noNonNullAssertion: guarded by outer !== undefined check
-            onCheckpoint: (ev) => runOpts.onCheckpoint!(ev),
+            onCheckpoint: (ev: import("@ageflow/core").CheckpointEvent) =>
+              onCheckpoint(ev),
           }
         : {}),
       onEvent: (ev: WorkflowEvent) => ctx.recorder.record(ev),
       onComplete: () => {
-        unregisterRunner(runnerName);
-        persistSnapshot(ctx, jobId);
-        ctx.releaseInflight();
+        if (runnerName !== undefined) {
+          unregisterRunner(runnerName);
+        }
+        if (jobId !== "") {
+          persistSnapshot(ctx, jobId);
+        }
+        releasePermits();
       },
       onError: () => {
-        unregisterRunner(runnerName);
-        persistSnapshot(ctx, jobId);
-        ctx.releaseInflight();
+        if (runnerName !== undefined) {
+          unregisterRunner(runnerName);
+        }
+        if (jobId !== "") {
+          persistSnapshot(ctx, jobId);
+        }
+        releasePermits();
       },
-    });
+    };
 
+    const handle = ctx.runner.fire(composedWorkflow, parsed.data, fireOptions);
     jobId = handle.runId;
     persistSnapshot(ctx, jobId, handle);
-    // Return the result immediately so the caller has the jobId.
-    // completionPromise is available for tests that need to sync on completion.
     return {
       content: [{ type: "text", text: JSON.stringify({ jobId }) }],
       structuredContent: { jobId },
       isError: false,
     };
+  } catch (err) {
+    if (runnerName !== undefined) {
+      unregisterRunner(runnerName);
+    }
+    releasePermits();
+    return formatErrorResult(err);
   }
-
-  let jobId = "";
-  const handle = ctx.runner.fire(composedWorkflow, parsed.data, {
-    // Wire the DurationWatchdog abort signal (if any) so the internal executor
-    // honours the duration ceiling on the async path.
-    ...(runOpts.abortSignal !== undefined
-      ? { signal: runOpts.abortSignal }
-      : {}),
-    // Apply HITL strategy from runOpts:
-    //   - "auto" maps to onCheckpoint: () => true
-    //   - "fail" maps to onCheckpoint: () => false
-    //   - "elicit" maps to undefined → runner uses deferred path so
-    //     resume_workflow can resolve checkpoints externally.
-    ...(runOpts.onCheckpoint !== undefined
-      ? {
-          // biome-ignore lint/style/noNonNullAssertion: guarded by outer !== undefined check
-          onCheckpoint: (ev) => runOpts.onCheckpoint!(ev),
-        }
-      : {}),
-    onEvent: (ev: WorkflowEvent) => ctx.recorder.record(ev),
-    onComplete: () => {
-      persistSnapshot(ctx, jobId);
-      ctx.releaseInflight();
-    },
-    onError: () => {
-      persistSnapshot(ctx, jobId);
-      ctx.releaseInflight();
-    },
-  });
-
-  jobId = handle.runId;
-  persistSnapshot(ctx, jobId, handle);
-  return {
-    content: [{ type: "text", text: JSON.stringify({ jobId }) }],
-    structuredContent: { jobId },
-    isError: false,
-  };
 }
 
 export function dispatchGetStatus(
@@ -502,7 +492,6 @@ export function createJobDispatchContext(args: {
   jobStore: RunStore;
   jobTtlMs?: number;
   jobCheckpointTtlMs?: number;
-  releaseInflight: () => void;
 }): JobDispatchContext {
   const runner = createRunner({
     ttlMs: args.jobTtlMs ?? 30 * 60_000,
@@ -519,7 +508,6 @@ export function createJobDispatchContext(args: {
     jobTtlMs: args.jobTtlMs ?? 30 * 60_000,
     jobCheckpointTtlMs: args.jobCheckpointTtlMs ?? 60 * 60_000,
     taskCount: Object.keys(args.workflow.tasks).length,
-    releaseInflight: args.releaseInflight,
   };
 }
 

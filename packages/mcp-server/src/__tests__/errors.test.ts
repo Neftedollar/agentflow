@@ -65,6 +65,9 @@ describe("async-mode error mapping (#18)", () => {
     expect(ErrorCode.JOB_CANCELLED).toBe("JOB_CANCELLED");
     expect(ErrorCode.INVALID_RUN_STATE).toBe("INVALID_RUN_STATE");
     expect(ErrorCode.ASYNC_MODE_DISABLED).toBe("ASYNC_MODE_DISABLED");
+    expect(ErrorCode.CONCURRENCY_LIMIT_EXCEEDED).toBe(
+      "CONCURRENCY_LIMIT_EXCEEDED",
+    );
   });
 
   it("maps RunNotFoundError → JOB_NOT_FOUND", () => {

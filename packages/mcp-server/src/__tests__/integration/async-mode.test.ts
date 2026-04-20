@@ -259,6 +259,48 @@ describe("async mode: inflight lock (#18)", () => {
     release();
     h.dispose?.();
   });
+
+  it("applies maxConcurrentJobsPerWorkflow in single-workflow mode", async () => {
+    const h = createMcpServer({
+      workflow,
+      cliCeilings: {},
+      hitlStrategy: "auto",
+      async: true,
+      concurrency: {
+        maxConcurrentJobs: 2,
+        maxConcurrentJobsPerWorkflow: 1,
+      },
+    });
+
+    let release!: () => void;
+    h._testRunExecutor = () =>
+      new Promise((res) => {
+        release = () => res({ a: "ok" });
+      });
+
+    const first = h.callTool("start_ask", { q: "1" });
+    for (let i = 0; i < 50 && typeof release !== "function"; i += 1) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+    expect(typeof release).toBe("function");
+
+    const second = await h.callTool("start_ask", { q: "2" });
+    expect(second.isError).toBe(true);
+    if (second.isError) {
+      expect(second.structuredContent.errorCode).toBe("BUSY");
+      expect(second.structuredContent.context).toMatchObject({
+        scope: "workflow",
+        kind: "start",
+        workflowName: "ask",
+        limit: 1,
+        active: 1,
+      });
+    }
+
+    release();
+    await first;
+    h.dispose?.();
+  });
 });
 
 describe("async mode: cancel_workflow (#18)", () => {

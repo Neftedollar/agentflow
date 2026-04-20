@@ -27,7 +27,7 @@ import {
   createSingleWorkflowServer,
 } from "./server.js";
 import { startStdioTransport } from "./stdio-transport.js";
-import type { CliCeilings, HitlStrategy } from "./types.js";
+import type { CliCeilings, ConcurrencyConfig, HitlStrategy } from "./types.js";
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -159,6 +159,12 @@ export interface McpServerConfig {
    * When omitted, each workflow handle gets its own in-memory store.
    */
   jobStore?: RunStore;
+
+  /** Enable async job mode (start + observer tools) for all workflows. */
+  async?: boolean;
+
+  /** Concurrency controller configuration shared across workflows. */
+  concurrency?: ConcurrencyConfig;
 
   /**
    * MCP server name advertised during initialization. Defaults to the first
@@ -399,6 +405,8 @@ export function createMcpServer(config: McpServerConfig): McpHandle {
     seen.add(name);
   }
 
+  validateConcurrencyWorkflowNames(config.concurrency, seen);
+
   const hitlStrategy = config.hitlStrategy ?? "elicit";
   const stderr =
     config.stderr ??
@@ -444,6 +452,10 @@ export function createMcpServer(config: McpServerConfig): McpHandle {
       workflow: patchedWorkflow,
       cliCeilings: config.ceilings ?? {},
       ...(config.jobStore !== undefined ? { jobStore: config.jobStore } : {}),
+      ...(config.async === true ? { async: true } : {}),
+      ...(config.concurrency !== undefined
+        ? { concurrency: config.concurrency }
+        : {}),
       // When onHitl is set it is baked into patchedWorkflow.hooks.onCheckpoint.
       // buildMcpHooks in hitl-bridge.ts calls that hook first: if it returns true
       // the checkpoint is approved; if it returns false the bridge falls through
@@ -554,4 +566,29 @@ export function createMcpServer(config: McpServerConfig): McpHandle {
   };
 
   return handle;
+}
+
+function validateConcurrencyWorkflowNames(
+  concurrency: ConcurrencyConfig | undefined,
+  workflowNames: ReadonlySet<string>,
+): void {
+  if (concurrency === undefined) {
+    return;
+  }
+
+  for (const workflowName of Object.keys(concurrency.perWorkflow ?? {})) {
+    if (!workflowNames.has(workflowName)) {
+      throw new Error(
+        `createMcpServer: unknown workflow name "${workflowName}" in concurrency.perWorkflow`,
+      );
+    }
+  }
+
+  for (const workflowName of Object.keys(concurrency.workflows ?? {})) {
+    if (!workflowNames.has(workflowName)) {
+      throw new Error(
+        `createMcpServer: unknown workflow name "${workflowName}" in concurrency.workflows`,
+      );
+    }
+  }
 }

@@ -10,6 +10,8 @@
  *   --no-max-duration     disable duration ceiling
  *   --max-turns <n>       maximum agent turns
  *   --no-max-turns        disable turns ceiling
+ *   --max-concurrent-jobs <n>   max concurrent running jobs
+ *   --max-concurrent-jobs-per-workflow <n> max concurrent running jobs for this workflow
  *   --hitl <strategy>     HITL strategy: elicit | auto | fail (default: elicit)
  *   --name <name>         MCP server name (default: workflow name)
  *   --log-file <path>     write stderr log to a file
@@ -24,7 +26,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { WorkflowDef } from "@ageflow/core";
-import type { CliCeilings, HitlStrategy } from "@ageflow/mcp-server";
+import type {
+  CliCeilings,
+  ConcurrencyConfig,
+  HitlStrategy,
+} from "@ageflow/mcp-server";
 import {
   createHttpTransport,
   createSingleWorkflowServer,
@@ -39,6 +45,8 @@ export interface McpServeArgs {
   readonly maxCostUsd?: number | null;
   readonly maxDurationSec?: number | null;
   readonly maxTurns?: number | null;
+  readonly maxConcurrentJobs?: number;
+  readonly maxConcurrentJobsPerWorkflow?: number;
   readonly hitlStrategy: HitlStrategy;
   readonly serverName?: string;
   readonly logFile?: string;
@@ -86,6 +94,8 @@ export function parseMcpServeArgs(argv: readonly string[]): McpServeArgs {
   let maxCostUsd: number | null | undefined = undefined;
   let maxDurationSec: number | null | undefined = undefined;
   let maxTurns: number | null | undefined = undefined;
+  let maxConcurrentJobs: number | undefined = undefined;
+  let maxConcurrentJobsPerWorkflow: number | undefined = undefined;
   let hitlStrategy: HitlStrategy = "elicit";
   let serverName: string | undefined = undefined;
   let logFile: string | undefined = undefined;
@@ -154,6 +164,38 @@ export function parseMcpServeArgs(argv: readonly string[]): McpServeArgs {
       case "--no-max-turns":
         maxTurns = null;
         break;
+
+      case "--max-concurrent-jobs": {
+        const val = args[++i];
+        if (val === undefined || val.startsWith("--")) {
+          throw new Error("--max-concurrent-jobs requires a numeric argument");
+        }
+        const n = Number(val);
+        if (!Number.isInteger(n) || n <= 0) {
+          throw new Error(
+            `--max-concurrent-jobs must be a positive integer, got: ${val}`,
+          );
+        }
+        maxConcurrentJobs = n;
+        break;
+      }
+
+      case "--max-concurrent-jobs-per-workflow": {
+        const val = args[++i];
+        if (val === undefined || val.startsWith("--")) {
+          throw new Error(
+            "--max-concurrent-jobs-per-workflow requires a numeric argument",
+          );
+        }
+        const n = Number(val);
+        if (!Number.isInteger(n) || n <= 0) {
+          throw new Error(
+            `--max-concurrent-jobs-per-workflow must be a positive integer, got: ${val}`,
+          );
+        }
+        maxConcurrentJobsPerWorkflow = n;
+        break;
+      }
 
       case "--hitl": {
         const val = args[++i];
@@ -273,9 +315,13 @@ export function parseMcpServeArgs(argv: readonly string[]): McpServeArgs {
     asyncMode !== true &&
     (jobTtlMs !== undefined ||
       jobCheckpointTtlMs !== undefined ||
-      jobDb !== undefined)
+      jobDb !== undefined ||
+      maxConcurrentJobs !== undefined ||
+      maxConcurrentJobsPerWorkflow !== undefined)
   ) {
-    throw new Error("--job-ttl / --checkpoint-ttl / --job-db requires --async");
+    throw new Error(
+      "--job-ttl / --checkpoint-ttl / --job-db / --max-concurrent-jobs / --max-concurrent-jobs-per-workflow requires --async",
+    );
   }
 
   if (httpPort !== undefined && httpMode !== true) {
@@ -311,6 +357,10 @@ export function parseMcpServeArgs(argv: readonly string[]): McpServeArgs {
     ...(maxCostUsd !== undefined ? { maxCostUsd } : {}),
     ...(maxDurationSec !== undefined ? { maxDurationSec } : {}),
     ...(maxTurns !== undefined ? { maxTurns } : {}),
+    ...(maxConcurrentJobs !== undefined ? { maxConcurrentJobs } : {}),
+    ...(maxConcurrentJobsPerWorkflow !== undefined
+      ? { maxConcurrentJobsPerWorkflow }
+      : {}),
     ...(serverName !== undefined ? { serverName } : {}),
     ...(logFile !== undefined ? { logFile } : {}),
     ...(asyncMode !== undefined ? { async: asyncMode } : {}),
@@ -370,6 +420,21 @@ async function runMcpServe(rawArgv: string[]): Promise<void> {
       : {}),
     ...(parsed.maxTurns !== undefined ? { maxTurns: parsed.maxTurns } : {}),
   };
+  const concurrency: ConcurrencyConfig | undefined =
+    parsed.maxConcurrentJobs !== undefined ||
+    parsed.maxConcurrentJobsPerWorkflow !== undefined
+      ? {
+          ...(parsed.maxConcurrentJobs !== undefined
+            ? { maxConcurrentJobs: parsed.maxConcurrentJobs }
+            : {}),
+          ...(parsed.maxConcurrentJobsPerWorkflow !== undefined
+            ? {
+                maxConcurrentJobsPerWorkflow:
+                  parsed.maxConcurrentJobsPerWorkflow,
+              }
+            : {}),
+        }
+      : undefined;
 
   // Determine server name
   const serverName = parsed.serverName ?? workflow.name;
@@ -390,6 +455,7 @@ async function runMcpServe(rawArgv: string[]): Promise<void> {
     workflow,
     cliCeilings,
     hitlStrategy: parsed.hitlStrategy,
+    ...(concurrency !== undefined ? { concurrency } : {}),
     stderr,
     ...(parsed.async === true ? { async: true } : {}),
     ...(parsed.jobTtlMs !== undefined ? { jobTtlMs: parsed.jobTtlMs } : {}),
@@ -474,6 +540,8 @@ export function registerMcpCommand(program: Command): void {
         "  --no-max-duration      disable duration ceiling\n" +
         "  --max-turns <n>        max agent turns\n" +
         "  --no-max-turns         disable turns ceiling\n" +
+        "  --max-concurrent-jobs <n>   max concurrent running jobs\n" +
+        "  --max-concurrent-jobs-per-workflow <n> max concurrent running jobs for this workflow\n" +
         "  --hitl <strategy>      elicit | auto | fail (default: elicit)\n" +
         "  --name <name>          MCP server name\n" +
         "  --log-file <path>      log stderr to file\n" +

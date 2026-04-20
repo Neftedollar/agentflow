@@ -242,6 +242,82 @@ describe("createMcpServer() — multi-workflow", () => {
   });
 });
 
+describe("createMcpServer() — concurrency", () => {
+  it("shares server-wide start limits and applies per-workflow overrides", async () => {
+    const handle = createMcpServer({
+      workflows: [greetWorkflow, summarizeWorkflow],
+      async: true,
+      concurrency: {
+        maxConcurrentJobs: 2,
+        maxConcurrentJobsPerWorkflow: 1,
+      },
+    });
+
+    const releases: Record<string, () => void> = {};
+    handle._routerHandle._testRunExecutor = async (args: unknown) => {
+      const input = args as Record<string, unknown>;
+      if (typeof input.name === "string") {
+        return await new Promise((resolve) => {
+          releases.greet = () => resolve({ greeting: `hello, ${input.name}!` });
+        });
+      }
+      if (typeof input.text === "string") {
+        return await new Promise((resolve) => {
+          releases.summarize = () =>
+            resolve({ summary: `short: ${input.text}` });
+        });
+      }
+      throw new Error("unexpected input");
+    };
+
+    const summarize1 = handle._routerHandle.callTool("start_summarize", {
+      text: "first",
+    });
+    const greet1 = handle._routerHandle.callTool("start_greet", {
+      name: "Bob",
+    });
+
+    const summarize2 = await handle._routerHandle.callTool("start_summarize", {
+      text: "second",
+    });
+    expect(summarize2.isError).toBe(true);
+    if (summarize2.isError) {
+      expect(summarize2.structuredContent.errorCode).toBe("BUSY");
+      expect(summarize2.structuredContent.context).toMatchObject({
+        scope: "workflow",
+        kind: "start",
+        workflowName: "summarize",
+        limit: 1,
+        active: 1,
+      });
+    }
+
+    releases.greet?.();
+    releases.summarize?.();
+
+    await expect(summarize1).resolves.toMatchObject({ isError: false });
+    await expect(greet1).resolves.toMatchObject({ isError: false });
+  });
+
+  it("throws on invalid concurrency config values", () => {
+    expect(() =>
+      createMcpServer({
+        workflows: greetWorkflow,
+        concurrency: { maxConcurrentJobs: 0 },
+      }),
+    ).toThrow(/positive integer/);
+  });
+
+  it("throws when perWorkflow references an unknown workflow", () => {
+    expect(() =>
+      createMcpServer({
+        workflows: [greetWorkflow, summarizeWorkflow],
+        concurrency: { perWorkflow: { missing: 1 } },
+      }),
+    ).toThrow(/unknown workflow name/);
+  });
+});
+
 describe("createMcpServer() — middleware", () => {
   it("middleware is called for each callTool invocation", async () => {
     const calls: McpMiddlewareRequest[] = [];
