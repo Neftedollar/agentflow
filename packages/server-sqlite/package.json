@@ -1,0 +1,35 @@
+{
+  "name": "@ageflow/server-sqlite",
+  "version": "0.2.0",
+  "description": "SQLite-backed RunStore implementation for @ageflow/server.",
+  "homepage": "https://github.com/Neftedollar/ageflow/tree/master/packages/server-sqlite",
+  "type": "module",
+  "private": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "bun --bun x vitest run",
+    "lint": "biome check src/"
+  },
+  "dependencies": {
+    "@ageflow/server": "^0.6.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.12",
+    "@types/node": "^22.0.0",
+    "vitest": "^2.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Neftedollar/ageflow.git"
+  },
+  "keywords": ["sqlite", "server", "workflow", "bun", "persistence"],
+  "license": "MIT"
+}

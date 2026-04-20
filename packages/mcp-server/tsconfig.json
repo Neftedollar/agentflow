@@ -7,13 +7,15 @@
     "paths": {
       "@ageflow/core": ["../core/src/index.ts"],
       "@ageflow/executor": ["../executor/src/index.ts"],
-      "@ageflow/server": ["../server/src/index.ts"]
+      "@ageflow/server": ["../server/src/index.ts"],
+      "@ageflow/server-sqlite": ["../server-sqlite/src/index.ts"]
     }
   },
   "references": [
     { "path": "../core" },
     { "path": "../executor" },
-    { "path": "../server" }
+    { "path": "../server" },
+    { "path": "../server-sqlite" }
   ],
   "include": ["src/**/*"],
   "exclude": [

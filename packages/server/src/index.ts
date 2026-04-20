@@ -1,12 +1,15 @@
 export { createRunner } from "./runner.js";
 export type {
   FireOptions,
+  PersistedRunRecord,
+  RunStore,
   Runner,
   RunnerConfig,
   RunOptions,
   RunHandle,
   WorkflowResult,
 } from "./types.js";
+export { InMemoryRunStore } from "./run-store.js";
 export {
   CheckpointTimeoutError,
   HitlRejectedError,

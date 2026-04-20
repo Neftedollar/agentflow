@@ -14,6 +14,7 @@
  */
 
 import type { WorkflowDef } from "@ageflow/core";
+import type { RunStore } from "@ageflow/server";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
   type HttpTransportHandle,
@@ -152,6 +153,12 @@ export interface McpServerConfig {
    * Applied to all workflows. Default: no overrides (workflow config applies).
    */
   ceilings?: CliCeilings;
+
+  /**
+   * Optional async job snapshot store shared across workflow handles.
+   * When omitted, each workflow handle gets its own in-memory store.
+   */
+  jobStore?: RunStore;
 
   /**
    * MCP server name advertised during initialization. Defaults to the first
@@ -436,6 +443,7 @@ export function createMcpServer(config: McpServerConfig): McpHandle {
     const handle = createSingleWorkflowServer({
       workflow: patchedWorkflow,
       cliCeilings: config.ceilings ?? {},
+      ...(config.jobStore !== undefined ? { jobStore: config.jobStore } : {}),
       // When onHitl is set it is baked into patchedWorkflow.hooks.onCheckpoint.
       // buildMcpHooks in hitl-bridge.ts calls that hook first: if it returns true
       // the checkpoint is approved; if it returns false the bridge falls through

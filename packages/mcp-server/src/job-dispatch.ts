@@ -1,13 +1,15 @@
 import type {
+  RunHandle,
   RunnerSpawnArgs,
   RunnerSpawnResult,
   WorkflowDef,
   WorkflowEvent,
 } from "@ageflow/core";
 import { registerRunner, unregisterRunner } from "@ageflow/core";
-import { type Runner, createRunner } from "@ageflow/server";
+import { type RunStore, type Runner, createRunner } from "@ageflow/server";
 import { ErrorCode, McpServerError, formatErrorResult } from "./errors.js";
 import { JobEventRecorder } from "./job-event-recorder.js";
+import { type PersistedJob, isExpired, toPersistedJob } from "./job-store.js";
 import type { McpToolResult } from "./server.js";
 import type { ToolDefinition } from "./tool-registry.js";
 import type { EffectiveCeilings } from "./types.js";
@@ -15,9 +17,12 @@ import type { EffectiveCeilings } from "./types.js";
 export interface JobDispatchContext {
   readonly runner: Runner;
   readonly recorder: JobEventRecorder;
+  readonly store: RunStore;
   readonly workflow: WorkflowDef;
   readonly tool: ToolDefinition; // sync tool (for output validation)
   readonly jobTools: readonly ToolDefinition[]; // full job-tool array
+  readonly jobTtlMs: number;
+  readonly jobCheckpointTtlMs: number;
   /** Executor injection hook from tests (mirrors sync path's _testRunExecutor). */
   testRunExecutor?: (input: unknown) => Promise<unknown>;
   /**
@@ -30,6 +35,60 @@ export interface JobDispatchContext {
   readonly taskCount: number;
   /** Called from fire() onComplete/onError to release the inflight lock. */
   readonly releaseInflight: () => void;
+}
+
+function sweepStore(ctx: JobDispatchContext): void {
+  const now = Date.now();
+  for (const snapshot of ctx.store.list()) {
+    if (isExpired(snapshot, now, ctx.jobTtlMs, ctx.jobCheckpointTtlMs)) {
+      ctx.store.delete(snapshot.runId);
+      ctx.recorder.forget(snapshot.runId);
+    }
+  }
+}
+
+function getLiveSnapshot(
+  ctx: JobDispatchContext,
+  jobId: string,
+): RunHandle | undefined {
+  const handle = ctx.runner.get(jobId);
+  if (!handle) return undefined;
+  if (isExpired(handle, Date.now(), ctx.jobTtlMs, ctx.jobCheckpointTtlMs)) {
+    return undefined;
+  }
+  return handle;
+}
+
+function persistSnapshot(
+  ctx: JobDispatchContext,
+  jobId: string,
+  snapshot?: RunHandle | PersistedJob,
+): PersistedJob | undefined {
+  const live = snapshot ?? getLiveSnapshot(ctx, jobId);
+  const stored = ctx.store.get(jobId) as PersistedJob | undefined;
+  const base = live ?? stored;
+  if (!base) return undefined;
+  const previousProgress =
+    base !== undefined && "progress" in base
+      ? (base as PersistedJob).progress
+      : undefined;
+  const progress =
+    ctx.recorder.snapshot(jobId) ?? stored?.progress ?? previousProgress;
+  const persisted = toPersistedJob(base, progress);
+  ctx.store.upsert(persisted);
+  return persisted;
+}
+
+function loadCurrentSnapshot(
+  ctx: JobDispatchContext,
+  jobId: string,
+): PersistedJob | undefined {
+  sweepStore(ctx);
+  const live = getLiveSnapshot(ctx, jobId);
+  if (live) {
+    return persistSnapshot(ctx, jobId, live);
+  }
+  return ctx.store.get(jobId) as PersistedJob | undefined;
 }
 
 export interface DispatchStartOptions {
@@ -82,6 +141,7 @@ export async function dispatchStart(
   // Build the composed workflow — apply ceiling overrides and HITL hooks.
   // This mirrors the setup done on the sync path (composeCeilings + buildMcpHooks)
   // so that both paths behave identically with respect to CLI ceilings and HITL.
+  sweepStore(ctx);
   const composedWorkflow = applyRunOpts(
     ctx.workflow,
     ctx.tool.inputTask,
@@ -126,6 +186,7 @@ export async function dispatchStart(
     };
     registerRunner(runnerName, fakeRunner);
 
+    let jobId = "";
     const handle = ctx.runner.fire(composedWorkflow, parsed.data, {
       ...(runOpts.abortSignal !== undefined
         ? { signal: runOpts.abortSignal }
@@ -140,15 +201,18 @@ export async function dispatchStart(
       onEvent: (ev: WorkflowEvent) => ctx.recorder.record(ev),
       onComplete: () => {
         unregisterRunner(runnerName);
+        persistSnapshot(ctx, jobId);
         ctx.releaseInflight();
       },
       onError: () => {
         unregisterRunner(runnerName);
+        persistSnapshot(ctx, jobId);
         ctx.releaseInflight();
       },
     });
 
-    const jobId = handle.runId;
+    jobId = handle.runId;
+    persistSnapshot(ctx, jobId, handle);
     // Return the result immediately so the caller has the jobId.
     // completionPromise is available for tests that need to sync on completion.
     return {
@@ -158,6 +222,7 @@ export async function dispatchStart(
     };
   }
 
+  let jobId = "";
   const handle = ctx.runner.fire(composedWorkflow, parsed.data, {
     // Wire the DurationWatchdog abort signal (if any) so the internal executor
     // honours the duration ceiling on the async path.
@@ -177,16 +242,20 @@ export async function dispatchStart(
       : {}),
     onEvent: (ev: WorkflowEvent) => ctx.recorder.record(ev),
     onComplete: () => {
+      persistSnapshot(ctx, jobId);
       ctx.releaseInflight();
     },
     onError: () => {
+      persistSnapshot(ctx, jobId);
       ctx.releaseInflight();
     },
   });
 
+  jobId = handle.runId;
+  persistSnapshot(ctx, jobId, handle);
   return {
-    content: [{ type: "text", text: JSON.stringify({ jobId: handle.runId }) }],
-    structuredContent: { jobId: handle.runId },
+    content: [{ type: "text", text: JSON.stringify({ jobId }) }],
+    structuredContent: { jobId },
     isError: false,
   };
 }
@@ -197,42 +266,44 @@ export function dispatchGetStatus(
 ): McpToolResult {
   const jobId = parseJobId(args);
   if (typeof jobId !== "string") return jobId;
-  const handle = ctx.runner.get(jobId);
-  if (!handle) {
+  const snapshot = loadCurrentSnapshot(ctx, jobId);
+  if (!snapshot) {
     return formatErrorResult(
       new McpServerError(ErrorCode.JOB_NOT_FOUND, `unknown jobId: ${jobId}`, {
         jobId,
       }),
     );
   }
-  const snap = ctx.recorder.snapshot(jobId);
   const currentTask =
-    handle.state === "awaiting-checkpoint" && handle.pendingCheckpoint
+    snapshot.state === "awaiting-checkpoint" && snapshot.pendingCheckpoint
       ? {
-          name: handle.pendingCheckpoint.taskName,
+          name: snapshot.pendingCheckpoint.taskName,
           kind: "checkpoint" as const,
-          message: handle.pendingCheckpoint.message,
+          message: snapshot.pendingCheckpoint.message,
         }
-      : snap?.lastTaskStart
-        ? { name: snap.lastTaskStart.taskName, kind: "task" as const }
+      : snapshot.progress?.lastTaskStart
+        ? {
+            name: snapshot.progress.lastTaskStart.taskName,
+            kind: "task" as const,
+          }
         : undefined;
-  const progress = snap
+  const progress = snapshot.progress
     ? {
-        tasksCompleted: snap.tasksCompleted,
+        tasksCompleted: snapshot.progress.tasksCompleted,
         tasksTotal: ctx.taskCount,
-        ...(snap.lastBudgetWarning !== undefined
+        ...(snapshot.progress.lastBudgetWarning !== undefined
           ? {
-              spentUsd: snap.lastBudgetWarning.spentUsd,
-              limitUsd: snap.lastBudgetWarning.limitUsd,
+              spentUsd: snapshot.progress.lastBudgetWarning.spentUsd,
+              limitUsd: snapshot.progress.lastBudgetWarning.limitUsd,
             }
           : {}),
       }
     : undefined;
 
   const structured = {
-    state: handle.state,
-    createdAt: handle.createdAt,
-    lastEventAt: handle.lastEventAt,
+    state: snapshot.state,
+    createdAt: snapshot.createdAt,
+    lastEventAt: snapshot.lastEventAt,
     ...(currentTask !== undefined ? { currentTask } : {}),
     ...(progress !== undefined ? { progress } : {}),
   };
@@ -249,8 +320,8 @@ export function dispatchGetResult(
 ): McpToolResult {
   const jobId = parseJobId(args);
   if (typeof jobId !== "string") return jobId;
-  const handle = ctx.runner.get(jobId);
-  if (!handle) {
+  const snapshot = loadCurrentSnapshot(ctx, jobId);
+  if (!snapshot) {
     return formatErrorResult(
       new McpServerError(ErrorCode.JOB_NOT_FOUND, `unknown jobId: ${jobId}`, {
         jobId,
@@ -258,14 +329,17 @@ export function dispatchGetResult(
     );
   }
 
-  if (handle.state === "running" || handle.state === "awaiting-checkpoint") {
+  if (
+    snapshot.state === "running" ||
+    snapshot.state === "awaiting-checkpoint"
+  ) {
     return {
       content: [{ type: "text", text: JSON.stringify({ pending: true }) }],
       structuredContent: { pending: true },
       isError: false,
     };
   }
-  if (handle.state === "cancelled") {
+  if (snapshot.state === "cancelled") {
     return formatErrorResult(
       new McpServerError(
         ErrorCode.JOB_CANCELLED,
@@ -274,17 +348,17 @@ export function dispatchGetResult(
       ),
     );
   }
-  if (handle.state === "failed") {
+  if (snapshot.state === "failed") {
     return formatErrorResult(
       new McpServerError(
         ErrorCode.WORKFLOW_FAILED,
-        handle.error?.message ?? "workflow failed",
-        { jobId, error: handle.error },
+        snapshot.error?.message ?? "workflow failed",
+        { jobId, error: snapshot.error },
       ),
     );
   }
   // done — re-validate the output task's result through the output Zod schema.
-  const raw = handle.result?.outputs[ctx.tool.outputTask];
+  const raw = snapshot.result?.outputs[ctx.tool.outputTask];
   const outputTaskDef = ctx.workflow.tasks[ctx.tool.outputTask] as {
     agent: { output: import("zod").ZodType };
   };
@@ -301,7 +375,7 @@ export function dispatchGetResult(
   const structured = {
     state: "done" as const,
     output: parsedOutput.data,
-    metrics: handle.result?.metrics,
+    metrics: snapshot.result?.metrics,
   };
   return {
     content: [{ type: "text", text: JSON.stringify(structured) }],
@@ -316,7 +390,8 @@ export function dispatchCancel(
 ): McpToolResult {
   const jobId = parseJobId(args);
   if (typeof jobId !== "string") return jobId;
-  const handle = ctx.runner.get(jobId);
+  sweepStore(ctx);
+  const handle = getLiveSnapshot(ctx, jobId);
   if (!handle) {
     return formatErrorResult(
       new McpServerError(ErrorCode.JOB_NOT_FOUND, `unknown jobId: ${jobId}`, {
@@ -338,6 +413,7 @@ export function dispatchCancel(
   }
   const priorState = handle.state;
   ctx.runner.cancel(jobId);
+  persistSnapshot(ctx, jobId);
   return {
     content: [
       {
@@ -356,11 +432,23 @@ export function dispatchResume(
 ): McpToolResult {
   const parsed = parseResumeArgs(args);
   if ("isError" in parsed) return parsed;
+  sweepStore(ctx);
+  const handle = getLiveSnapshot(ctx, parsed.jobId);
+  if (!handle) {
+    return formatErrorResult(
+      new McpServerError(
+        ErrorCode.JOB_NOT_FOUND,
+        `unknown jobId: ${parsed.jobId}`,
+        { jobId: parsed.jobId },
+      ),
+    );
+  }
   try {
     ctx.runner.resume(parsed.jobId, parsed.approved);
   } catch (err) {
     return formatErrorResult(err);
   }
+  persistSnapshot(ctx, parsed.jobId);
   return {
     content: [{ type: "text", text: JSON.stringify({ resumed: true }) }],
     structuredContent: { resumed: true },
@@ -411,6 +499,7 @@ export function createJobDispatchContext(args: {
   workflow: WorkflowDef;
   tool: ToolDefinition;
   jobTools: readonly ToolDefinition[];
+  jobStore: RunStore;
   jobTtlMs?: number;
   jobCheckpointTtlMs?: number;
   releaseInflight: () => void;
@@ -418,13 +507,17 @@ export function createJobDispatchContext(args: {
   const runner = createRunner({
     ttlMs: args.jobTtlMs ?? 30 * 60_000,
     checkpointTtlMs: args.jobCheckpointTtlMs ?? 60 * 60_000,
+    ...(args.jobStore !== undefined ? { store: args.jobStore } : {}),
   });
   return {
     runner,
     recorder: new JobEventRecorder(),
+    store: args.jobStore,
     workflow: args.workflow,
     tool: args.tool,
     jobTools: args.jobTools,
+    jobTtlMs: args.jobTtlMs ?? 30 * 60_000,
+    jobCheckpointTtlMs: args.jobCheckpointTtlMs ?? 60 * 60_000,
     taskCount: Object.keys(args.workflow.tasks).length,
     releaseInflight: args.releaseInflight,
   };

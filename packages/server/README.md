@@ -251,8 +251,9 @@ All errors extend `AgentFlowError` from `@ageflow/core`.
 - **No bundled HTTP middleware.** Turning events into SSE / WebSocket / JSONL
   is the caller's responsibility. A separate `@ageflow/server-http` package may
   ship in v0.2.
-- **No persistence.** The run registry is in-memory. Pluggable `RunStore`
-  (SQLite / Redis) is planned for v0.2.
+- **In-memory by default; persistence is pluggable.** The run registry
+  keeps active handles in-process. When a durable `RunStore` is provided,
+  run snapshots can survive restart and be hydrated by higher layers.
 - **No distributed runs.** Single-process only.
 - **No `subscribe(runId)`.** Joining an in-flight run from a second observer
   is deferred to v0.2.

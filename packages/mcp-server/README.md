@@ -89,8 +89,9 @@ agentwf mcp serve ./workflow.ts --async --checkpoint-ttl 7200000
 
 ### Known limitations
 
-- **No persistence** — the job registry is in-memory only. Restarting the
-  server loses all job state.
+- **Durability is opt-in** — by default the job registry is in-memory.
+  Use `--job-db <path>` to persist async job snapshots to SQLite and
+  recover known jobs after restart.
 - **Single-instance** — the registry is not shared across processes. Running
   multiple server processes will have independent job stores.
 - **Single BUSY lock** — only one `start_*` call can be in-flight at a time.

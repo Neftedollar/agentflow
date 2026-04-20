@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import {
   defineAgent,
   defineWorkflow,
@@ -9,11 +12,88 @@ import type {
   RunnerSpawnResult,
   WorkflowDef,
 } from "@ageflow/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { ErrorCode } from "../../errors.js";
+import { createSqliteJobStore } from "../../index.js";
 import type { McpToolResult } from "../../server.js";
 import { ASYNC_OBSERVER_TOOL_NAMES, createMcpServer } from "../../server.js";
+
+type SqliteRow = {
+  readonly payload: string;
+  readonly runId: string;
+  readonly state: string;
+  readonly lastEventAt: number;
+};
+
+const sqliteStores = new Map<string, Map<string, SqliteRow>>();
+
+vi.mock("bun:sqlite", () => {
+  class Database {
+    constructor(private readonly dbPath: string) {}
+
+    query(sql: string) {
+      const normalized = sql.trim().replace(/\s+/g, " ");
+      const getStore = () => {
+        let store = sqliteStores.get(this.dbPath);
+        if (!store) {
+          store = new Map<string, SqliteRow>();
+          sqliteStores.set(this.dbPath, store);
+        }
+        return store;
+      };
+
+      return {
+        run: (params?: Record<string, unknown>) => {
+          const store = getStore();
+          if (normalized.startsWith("INSERT INTO jobs")) {
+            const row: SqliteRow = {
+              runId: String(params?.$runId),
+              state: String(params?.$state),
+              lastEventAt: Number(params?.$lastEventAt),
+              payload: String(params?.$payload),
+            };
+            store.set(row.runId, row);
+          } else if (
+            normalized.startsWith("DELETE FROM jobs WHERE runId = $runId")
+          ) {
+            store.delete(String(params?.$runId));
+          }
+          return { changes: 1 };
+        },
+        get: (params?: Record<string, unknown>) => {
+          const store = getStore();
+          if (normalized.startsWith("SELECT payload FROM jobs WHERE runId")) {
+            return store.get(String(params?.$runId));
+          }
+          return undefined;
+        },
+        all: () => {
+          const store = getStore();
+          if (normalized.startsWith("SELECT payload FROM jobs ORDER BY")) {
+            return [...store.values()]
+              .sort((a, b) => b.lastEventAt - a.lastEventAt)
+              .map((row) => ({ payload: row.payload }));
+          }
+          if (
+            normalized.startsWith("SELECT runId, state, lastEventAt FROM jobs")
+          ) {
+            return [...store.values()].map((row) => ({
+              runId: row.runId,
+              state: row.state,
+              lastEventAt: row.lastEventAt,
+            }));
+          }
+          return [];
+        },
+      };
+    }
+
+    close() {}
+  }
+
+  return { Database };
+});
 
 const agent = defineAgent({
   runner: "fake",
@@ -26,6 +106,17 @@ const workflow = defineWorkflow({
   name: "ask",
   tasks: { t: { agent, input: { q: "hi" } } },
 });
+
+async function makeJobDbPath(prefix: string): Promise<{
+  readonly dir: string;
+  readonly dbPath: string;
+}> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), `ageflow-${prefix}-`));
+  return {
+    dir,
+    dbPath: path.join(dir, "jobs.sqlite"),
+  };
+}
 
 describe("async mode: listTools (#18)", () => {
   it("returns 1 tool when async is omitted (default)", async () => {
@@ -123,6 +214,10 @@ describe("async mode: inflight lock (#18)", () => {
       });
 
     const first = h.callTool("start_ask", { q: "1" });
+    for (let i = 0; i < 50 && typeof release !== "function"; i += 1) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+    expect(typeof release).toBe("function");
     const second = await h.callTool("start_ask", { q: "2" });
     expect(second.isError).toBe(true);
     if (second.isError) expect(second.structuredContent.errorCode).toBe("BUSY");
@@ -213,6 +308,219 @@ describe("async mode: cancel_workflow (#18)", () => {
 
     release();
     h.dispose?.();
+  });
+});
+
+describe("async mode: sqlite job store recovery", () => {
+  it("recovers a completed job after recreating the server", async () => {
+    const { dir, dbPath } = await makeJobDbPath("recovery");
+    const jobStore1 = await createSqliteJobStore(dbPath);
+    const server1 = createMcpServer({
+      workflow,
+      cliCeilings: {},
+      hitlStrategy: "auto",
+      async: true,
+      jobStore: jobStore1,
+    });
+    server1._testRunExecutor = async (args) => {
+      const input = args as { q: string };
+      return { a: `done:${input.q}` };
+    };
+
+    try {
+      const startRes = await server1.callTool("start_ask", { q: "persist" });
+      expect(startRes.isError).toBe(false);
+      if (startRes.isError) throw new Error("start failed");
+
+      const jobId = (startRes.structuredContent as { jobId: string }).jobId;
+      let state = "running";
+      for (let i = 0; i < 50 && state === "running"; i++) {
+        await new Promise<void>((r) => setTimeout(r, 10));
+        const statusRes = await server1.callTool("get_workflow_status", {
+          jobId,
+        });
+        if (!statusRes.isError) {
+          state = (statusRes.structuredContent as { state: string }).state;
+        }
+      }
+      expect(state).toBe("done");
+
+      const result1 = await server1.callTool("get_workflow_result", { jobId });
+      expect(result1.isError).toBe(false);
+
+      server1.dispose?.();
+      jobStore1.close();
+
+      const jobStore2 = await createSqliteJobStore(dbPath);
+      const server2 = createMcpServer({
+        workflow,
+        cliCeilings: {},
+        hitlStrategy: "auto",
+        async: true,
+        jobStore: jobStore2,
+      });
+
+      try {
+        const statusRes = await server2.callTool("get_workflow_status", {
+          jobId,
+        });
+        expect(statusRes.isError).toBe(false);
+        if (!statusRes.isError) {
+          expect(statusRes.structuredContent).toMatchObject({ state: "done" });
+        }
+
+        const resultRes = await server2.callTool("get_workflow_result", {
+          jobId,
+        });
+        expect(resultRes.isError).toBe(false);
+        if (!resultRes.isError) {
+          expect(
+            (resultRes.structuredContent as { output: { a: string } }).output.a,
+          ).toBe("done:persist");
+        }
+      } finally {
+        server2.dispose?.();
+        jobStore2.close();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps an in-flight job queryable after recreating the server", async () => {
+    const { dir, dbPath } = await makeJobDbPath("inflight");
+    const jobStore1 = await createSqliteJobStore(dbPath);
+    const server1 = createMcpServer({
+      workflow,
+      cliCeilings: {},
+      hitlStrategy: "auto",
+      async: true,
+      jobStore: jobStore1,
+    });
+    let release!: (value: { a: string }) => void;
+    server1._testRunExecutor = () =>
+      new Promise<{ a: string }>((resolve) => {
+        release = resolve;
+      });
+
+    try {
+      const startRes = await server1.callTool("start_ask", { q: "hold" });
+      expect(startRes.isError).toBe(false);
+      if (startRes.isError) throw new Error("start failed");
+      const jobId = (startRes.structuredContent as { jobId: string }).jobId;
+
+      const jobStore2 = await createSqliteJobStore(dbPath);
+      const server2 = createMcpServer({
+        workflow,
+        cliCeilings: {},
+        hitlStrategy: "auto",
+        async: true,
+        jobStore: jobStore2,
+      });
+
+      try {
+        const statusRes = await server2.callTool("get_workflow_status", {
+          jobId,
+        });
+        expect(statusRes.isError).toBe(false);
+        if (!statusRes.isError) {
+          expect(statusRes.structuredContent).toMatchObject({
+            state: "running",
+          });
+        }
+
+        const resultRes = await server2.callTool("get_workflow_result", {
+          jobId,
+        });
+        expect(resultRes.isError).toBe(false);
+        if (!resultRes.isError) {
+          expect(resultRes.structuredContent).toMatchObject({ pending: true });
+        }
+
+        release({ a: "finished" });
+        await new Promise<void>((r) => setTimeout(r, 0));
+      } finally {
+        server2.dispose?.();
+        jobStore2.close();
+      }
+    } finally {
+      server1.dispose?.();
+      jobStore1.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reaps expired persistent rows after reopening the same database", async () => {
+    const { dir, dbPath } = await makeJobDbPath("ttl");
+    const jobStore1 = await createSqliteJobStore(dbPath);
+    const server1 = createMcpServer({
+      workflow,
+      cliCeilings: {},
+      hitlStrategy: "auto",
+      async: true,
+      jobTtlMs: 50,
+      jobCheckpointTtlMs: 50,
+      jobStore: jobStore1,
+    });
+    server1._testRunExecutor = async () => ({ a: "ttl" });
+
+    try {
+      const startRes = await server1.callTool("start_ask", { q: "expire" });
+      expect(startRes.isError).toBe(false);
+      if (startRes.isError) throw new Error("start failed");
+
+      const jobId = (startRes.structuredContent as { jobId: string }).jobId;
+      let state = "running";
+      for (let i = 0; i < 50 && state === "running"; i++) {
+        await new Promise<void>((r) => setTimeout(r, 10));
+        const statusRes = await server1.callTool("get_workflow_status", {
+          jobId,
+        });
+        if (!statusRes.isError) {
+          state = (statusRes.structuredContent as { state: string }).state;
+        }
+      }
+      expect(state).toBe("done");
+
+      server1.dispose?.();
+      jobStore1.close();
+
+      const jobStore2 = await createSqliteJobStore(dbPath);
+      const server2 = createMcpServer({
+        workflow,
+        cliCeilings: {},
+        hitlStrategy: "auto",
+        async: true,
+        jobTtlMs: 50,
+        jobCheckpointTtlMs: 50,
+        jobStore: jobStore2,
+      });
+
+      try {
+        await new Promise<void>((r) => setTimeout(r, 200));
+
+        const statusRes = await server2.callTool("get_workflow_status", {
+          jobId,
+        });
+        expect(statusRes.isError).toBe(true);
+        if (statusRes.isError) {
+          expect(statusRes.structuredContent.errorCode).toBe("JOB_NOT_FOUND");
+        }
+
+        const resultRes = await server2.callTool("get_workflow_result", {
+          jobId,
+        });
+        expect(resultRes.isError).toBe(true);
+        if (resultRes.isError) {
+          expect(resultRes.structuredContent.errorCode).toBe("JOB_NOT_FOUND");
+        }
+      } finally {
+        server2.dispose?.();
+        jobStore2.close();
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -48,6 +48,8 @@ export interface McpServeArgs {
   readonly jobTtlMs?: number;
   /** Override default 1-hour checkpoint TTL in ms (--checkpoint-ttl <ms>). */
   readonly jobCheckpointTtlMs?: number;
+  /** Persist async job registry to a SQLite database (--job-db <path>). */
+  readonly jobDb?: string;
   /** Use Streamable HTTP transport instead of stdio (--http). */
   readonly http?: boolean;
   /** HTTP port (--port <n>, required with --http). */
@@ -90,6 +92,7 @@ export function parseMcpServeArgs(argv: readonly string[]): McpServeArgs {
   let asyncMode: boolean | undefined = undefined;
   let jobTtlMs: number | undefined = undefined;
   let jobCheckpointTtlMs: number | undefined = undefined;
+  let jobDb: string | undefined = undefined;
   let httpMode: boolean | undefined = undefined;
   let httpPort: number | undefined = undefined;
   let httpHost: string | undefined = undefined;
@@ -215,6 +218,15 @@ export function parseMcpServeArgs(argv: readonly string[]): McpServeArgs {
         break;
       }
 
+      case "--job-db": {
+        const val = args[++i];
+        if (val === undefined || val.startsWith("-")) {
+          throw new Error("--job-db requires a path argument");
+        }
+        jobDb = val;
+        break;
+      }
+
       case "--http":
         httpMode = true;
         break;
@@ -259,9 +271,11 @@ export function parseMcpServeArgs(argv: readonly string[]): McpServeArgs {
 
   if (
     asyncMode !== true &&
-    (jobTtlMs !== undefined || jobCheckpointTtlMs !== undefined)
+    (jobTtlMs !== undefined ||
+      jobCheckpointTtlMs !== undefined ||
+      jobDb !== undefined)
   ) {
-    throw new Error("--job-ttl / --checkpoint-ttl requires --async");
+    throw new Error("--job-ttl / --checkpoint-ttl / --job-db requires --async");
   }
 
   if (httpPort !== undefined && httpMode !== true) {
@@ -302,6 +316,7 @@ export function parseMcpServeArgs(argv: readonly string[]): McpServeArgs {
     ...(asyncMode !== undefined ? { async: asyncMode } : {}),
     ...(jobTtlMs !== undefined ? { jobTtlMs } : {}),
     ...(jobCheckpointTtlMs !== undefined ? { jobCheckpointTtlMs } : {}),
+    ...(jobDb !== undefined ? { jobDb } : {}),
     ...(httpMode !== undefined ? { http: httpMode } : {}),
     ...(httpPort !== undefined ? { port: httpPort } : {}),
     ...(httpHost !== undefined ? { httpHost } : {}),
@@ -381,6 +396,7 @@ async function runMcpServe(rawArgv: string[]): Promise<void> {
     ...(parsed.jobCheckpointTtlMs !== undefined
       ? { jobCheckpointTtlMs: parsed.jobCheckpointTtlMs }
       : {}),
+    ...(parsed.jobDb !== undefined ? { jobDbPath: parsed.jobDb } : {}),
   });
 
   if (parsed.http === true) {
@@ -464,6 +480,7 @@ export function registerMcpCommand(program: Command): void {
         "  --async                enable async job mode (5 extra tools)\n" +
         "  --job-ttl <ms>         job TTL in ms (default: 1800000, requires --async)\n" +
         "  --checkpoint-ttl <ms>  checkpoint TTL in ms (default: 3600000, requires --async)\n" +
+        "  --job-db <path>        persist async job registry to SQLite (requires --async)\n" +
         "  --http                 use Streamable HTTP transport instead of stdio\n" +
         "  --port <n>             HTTP port (required with --http)\n" +
         "  --host <addr>          HTTP bind address (default: 127.0.0.1, requires --http)\n" +

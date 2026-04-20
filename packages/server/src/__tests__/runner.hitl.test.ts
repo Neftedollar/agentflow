@@ -4,10 +4,11 @@ import {
   registerRunner,
   unregisterRunner,
 } from "@ageflow/core";
-import type { Runner as AgentRunner } from "@ageflow/core";
+import type { Runner as AgentRunner, RunHandle } from "@ageflow/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createRunner } from "../runner.js";
+import type { PersistedRunRecord, RunStore } from "../types.js";
 
 const stub: AgentRunner = {
   validate: async () => ({ ok: true }),
@@ -29,6 +30,31 @@ const wf = defineWorkflow({
   name: "gated",
   tasks: { t: { agent, input: {} } },
 });
+
+class RecordingRunStore implements RunStore {
+  readonly snapshots = new Map<string, PersistedRunRecord>();
+
+  get(runId: string): PersistedRunRecord | undefined {
+    const snapshot = this.snapshots.get(runId);
+    return snapshot !== undefined ? structuredClone(snapshot) : undefined;
+  }
+
+  list(): readonly PersistedRunRecord[] {
+    return [...this.snapshots.values()].map((snapshot) =>
+      structuredClone(snapshot),
+    );
+  }
+
+  upsert(snapshot: PersistedRunRecord): void {
+    this.snapshots.set(snapshot.runId, structuredClone(snapshot));
+  }
+
+  delete(runId: string): void {
+    this.snapshots.delete(runId);
+  }
+
+  close(): void {}
+}
 
 beforeEach(() => registerRunner("stub", stub));
 afterEach(() => unregisterRunner("stub"));
@@ -145,6 +171,28 @@ describe("async HITL", () => {
     await runner.run(wfp, {});
     const id = runner.list()[0]?.runId;
     if (id) expect(() => runner.resume(id, true)).toThrow();
+    await runner.close();
+  });
+
+  it("persists awaiting-checkpoint snapshots to the store", async () => {
+    const store = new RecordingRunStore();
+    const runner = createRunner({ store });
+    const gen = runner.stream(wf, {});
+    let step = await gen.next();
+    while (!step.done && step.value.type !== "checkpoint") {
+      step = await gen.next();
+    }
+    expect(step.done).toBe(false);
+    const snapshot = [...store.snapshots.values()][0];
+    expect(snapshot?.state).toBe("awaiting-checkpoint");
+    expect(snapshot?.pendingCheckpoint?.taskName).toBe("t");
+    if (!step.done) {
+      runner.resume(step.value.runId, true);
+    }
+    let next = await gen.next();
+    while (!next.done) {
+      next = await gen.next();
+    }
     await runner.close();
   });
 });

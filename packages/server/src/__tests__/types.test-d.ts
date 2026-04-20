@@ -1,7 +1,7 @@
 import type { WorkflowDef } from "@ageflow/core";
 import { describe, expectTypeOf, it } from "vitest";
 import { createRunner } from "../runner.js";
-import type { RunHandle, Runner, WorkflowResult } from "../types.js";
+import type { RunHandle, RunStore, Runner, WorkflowResult } from "../types.js";
 
 // Use a real but minimal tasks map to avoid the {} ban.
 type EmptyTasks = Record<string, never>;
@@ -42,5 +42,16 @@ describe("types", () => {
     const r: Runner = createRunner();
     expectTypeOf(r.get("id")).toEqualTypeOf<RunHandle | undefined>();
     expectTypeOf(r.list()).toMatchTypeOf<readonly RunHandle[]>();
+  });
+
+  it("createRunner accepts a RunStore", () => {
+    const store: RunStore = {
+      get: () => undefined,
+      list: () => [],
+      upsert: () => {},
+      delete: () => {},
+      close: () => {},
+    };
+    expectTypeOf(createRunner({ store })).toMatchTypeOf<Runner>();
   });
 });

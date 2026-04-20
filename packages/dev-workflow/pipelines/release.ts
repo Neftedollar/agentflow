@@ -23,6 +23,7 @@ const PUBLISH_ORDER = [
   "@ageflow/runner-anthropic",
   "@ageflow/testing",
   "@ageflow/server",
+  "@ageflow/server-sqlite",
   "@ageflow/mcp-server",
   "@ageflow/learning",
   "@ageflow/learning-sqlite",

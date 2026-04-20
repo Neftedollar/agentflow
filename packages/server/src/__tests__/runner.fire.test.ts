@@ -4,10 +4,11 @@ import {
   registerRunner,
   unregisterRunner,
 } from "@ageflow/core";
-import type { Runner as AgentRunner } from "@ageflow/core";
+import type { Runner as AgentRunner, RunHandle } from "@ageflow/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createRunner } from "../runner.js";
+import type { PersistedRunRecord, RunStore } from "../types.js";
 
 const stub: AgentRunner = {
   validate: async () => ({ ok: true }),
@@ -28,6 +29,33 @@ const wf = defineWorkflow({
   name: "fire-wf",
   tasks: { t: { agent, input: {} } },
 });
+
+class RecordingRunStore implements RunStore {
+  readonly snapshots = new Map<string, PersistedRunRecord>();
+  readonly upserts: PersistedRunRecord[] = [];
+
+  get(runId: string): PersistedRunRecord | undefined {
+    const snapshot = this.snapshots.get(runId);
+    return snapshot !== undefined ? structuredClone(snapshot) : undefined;
+  }
+
+  list(): readonly PersistedRunRecord[] {
+    return [...this.snapshots.values()].map((snapshot) =>
+      structuredClone(snapshot),
+    );
+  }
+
+  upsert(snapshot: PersistedRunRecord): void {
+    this.upserts.push(structuredClone(snapshot));
+    this.snapshots.set(snapshot.runId, structuredClone(snapshot));
+  }
+
+  delete(runId: string): void {
+    this.snapshots.delete(runId);
+  }
+
+  close(): void {}
+}
 
 beforeEach(() => registerRunner("stub2", stub));
 afterEach(() => unregisterRunner("stub2"));
@@ -109,6 +137,16 @@ describe("fire()", () => {
     expect(handle.runId).toBeDefined();
     expect(handle.state).toBe("running");
     expect(handle.workflowName).toBe("fire-wf");
+    await runner.close();
+  });
+
+  it("persists the terminal snapshot to the configured store", async () => {
+    const store = new RecordingRunStore();
+    const runner = createRunner({ store });
+    await runner.run(wf, {});
+    const snapshot = [...store.snapshots.values()][0];
+    expect(snapshot?.state).toBe("done");
+    expect(snapshot?.result).toBeDefined();
     await runner.close();
   });
 });

@@ -5,15 +5,20 @@ import type {
   WorkflowMetrics,
 } from "@ageflow/core";
 import { CheckpointTimeoutError } from "./errors.js";
+import type { PersistedRunRecord } from "./run-store.js";
 
 export interface CreateHandleArgs {
   readonly runId: string;
   readonly workflowName: string;
+  readonly input?: unknown;
+  readonly snapshot?: PersistedRunRecord;
+  readonly persist?: (snapshot: PersistedRunRecord) => void;
 }
 
 export interface PendingCheckpoint {
   readonly event: CheckpointEvent;
   readonly resolve: (approved: boolean) => void;
+  readonly recoveredFromStore?: boolean;
 }
 
 export class InternalRunHandle {
@@ -21,6 +26,9 @@ export class InternalRunHandle {
   readonly workflowName: string;
   readonly createdAt: number;
   readonly abort: AbortController;
+  readonly recoveredFromStore: boolean;
+  readonly input?: unknown;
+  private readonly persist: ((snapshot: PersistedRunRecord) => void) | undefined;
 
   state: RunState = "running";
   lastEventAt: number;
@@ -31,13 +39,43 @@ export class InternalRunHandle {
   constructor(args: CreateHandleArgs) {
     this.runId = args.runId;
     this.workflowName = args.workflowName;
-    this.createdAt = Date.now();
-    this.lastEventAt = this.createdAt;
+    this.recoveredFromStore = args.snapshot !== undefined;
+    this.persist = args.persist;
+    this.createdAt = args.snapshot?.createdAt ?? Date.now();
+    this.lastEventAt = args.snapshot?.lastEventAt ?? this.createdAt;
     this.abort = new AbortController();
+    this.input = args.input ?? args.snapshot?.input;
+    if (args.snapshot !== undefined) {
+      this.state = args.snapshot.state;
+      if (args.snapshot.pendingCheckpoint !== undefined) {
+        this.pendingCheckpoint = {
+          event: args.snapshot.pendingCheckpoint,
+          resolve: () => {},
+          recoveredFromStore: true,
+        };
+      }
+      if (args.snapshot.result !== undefined) {
+        this.result = args.snapshot.result;
+      }
+      if (args.snapshot.error !== undefined) {
+        this.error = new Error(args.snapshot.error.message);
+        this.error.name = args.snapshot.error.name;
+      }
+    }
   }
 
   touch(): void {
     this.lastEventAt = Date.now();
+  }
+
+  private persistSnapshot(): void {
+    if (!this.persist) return;
+    const snapshot = this.snapshot();
+    const persisted: PersistedRunRecord = {
+      ...snapshot,
+      ...(this.input !== undefined ? { input: this.input } : {}),
+    };
+    this.persist(persisted);
   }
 
   markAwaitingCheckpoint(
@@ -47,6 +85,7 @@ export class InternalRunHandle {
     this.state = "awaiting-checkpoint";
     this.pendingCheckpoint = { event, resolve };
     this.touch();
+    this.persistSnapshot();
   }
 
   clearCheckpoint(): void {
@@ -54,6 +93,7 @@ export class InternalRunHandle {
     delete this.pendingCheckpoint;
     this.state = "running";
     this.touch();
+    this.persistSnapshot();
   }
 
   markDone(result: {
@@ -65,6 +105,7 @@ export class InternalRunHandle {
     // biome-ignore lint/performance/noDelete: exactOptionalPropertyTypes requires delete over undefined assignment
     delete this.pendingCheckpoint;
     this.touch();
+    this.persistSnapshot();
   }
 
   markFailed(err: Error): void {
@@ -73,6 +114,7 @@ export class InternalRunHandle {
     // biome-ignore lint/performance/noDelete: exactOptionalPropertyTypes requires delete over undefined assignment
     delete this.pendingCheckpoint;
     this.touch();
+    this.persistSnapshot();
   }
 
   markCancelled(): void {
@@ -80,6 +122,7 @@ export class InternalRunHandle {
     // biome-ignore lint/performance/noDelete: exactOptionalPropertyTypes requires delete over undefined assignment
     delete this.pendingCheckpoint;
     this.touch();
+    this.persistSnapshot();
   }
 
   snapshot(): RunHandle {
@@ -103,9 +146,20 @@ export class InternalRunHandle {
     return snap;
   }
 
+  persistedSnapshot(): PersistedRunRecord {
+    return {
+      ...this.snapshot(),
+      ...(this.input !== undefined ? { input: this.input } : {}),
+    };
+  }
+
   autoRejectCheckpoint(): void {
     const pc = this.pendingCheckpoint;
     if (!pc) return;
+    if (pc.recoveredFromStore) {
+      this.markFailed(new CheckpointTimeoutError(pc.event.taskName));
+      return;
+    }
     pc.resolve(false);
     this.markFailed(new CheckpointTimeoutError(pc.event.taskName));
   }

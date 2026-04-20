@@ -1,6 +1,7 @@
 import type { WorkflowDef, WorkflowHooks } from "@ageflow/core";
 import { resolveMcpConfig } from "@ageflow/core";
 import { WorkflowExecutor } from "@ageflow/executor";
+import { InMemoryRunStore, type RunStore } from "@ageflow/server";
 import { composeCeilings } from "./ceiling-resolver.js";
 import {
   ErrorCode,
@@ -54,6 +55,12 @@ export interface McpServerOptions {
   readonly jobTtlMs?: number;
   /** Override the default 1-hour checkpoint TTL (async mode only). */
   readonly jobCheckpointTtlMs?: number;
+  /** Optional async job registry store. Defaults to an in-memory store. */
+  readonly runStore?: RunStore;
+  /** Back-compat alias for `runStore`. */
+  readonly jobStore?: RunStore;
+  /** Optional SQLite job database path. Used when no explicit store is provided. */
+  readonly jobDbPath?: string;
   /** Custom stderr writer (for testing); defaults to process.stderr.write. */
   readonly stderr?: (line: string) => void;
   /**
@@ -141,7 +148,9 @@ export function createSingleWorkflowServer(
   const jobTools = opts.async === true ? buildJobTools(opts.workflow) : [];
 
   let inflight = false;
-  let dispatchCtx: JobDispatchContext | undefined; // lazy — created on first start_*
+  let dispatchCtx: JobDispatchContext | undefined;
+  let dispatchCtxPromise: Promise<JobDispatchContext> | undefined;
+  let jobStorePromise: Promise<RunStore> | undefined;
 
   const startName = `start_${opts.workflow.name}`;
   const OBSERVER_TOOLS = new Set([
@@ -151,22 +160,109 @@ export function createSingleWorkflowServer(
     "resume_workflow",
   ]);
 
-  function ensureDispatchCtx(): JobDispatchContext {
-    if (!dispatchCtx) {
+  function resolveJobStore(): Promise<RunStore> {
+    if (jobStorePromise !== undefined) {
+      return jobStorePromise;
+    }
+
+    if (opts.runStore !== undefined) {
+      jobStorePromise = Promise.resolve(opts.runStore);
+      return jobStorePromise;
+    }
+
+    if (opts.jobStore !== undefined) {
+      jobStorePromise = Promise.resolve(opts.jobStore);
+      return jobStorePromise;
+    }
+
+    if (opts.jobDbPath !== undefined) {
+      jobStorePromise = import(/* @vite-ignore */ "@ageflow/server-sqlite").then(
+        ({ SqliteRunStore }) => new SqliteRunStore(opts.jobDbPath!),
+      );
+      return jobStorePromise;
+    }
+
+    jobStorePromise = Promise.resolve(new InMemoryRunStore());
+    return jobStorePromise;
+  }
+
+  function ensureDispatchCtxSync(): JobDispatchContext {
+    if (dispatchCtx !== undefined) {
+      return dispatchCtx;
+    }
+
+    const jobStore =
+      opts.runStore ??
+      opts.jobStore ??
+      (opts.jobDbPath !== undefined ? undefined : new InMemoryRunStore());
+
+    if (jobStore === undefined) {
+      throw new Error("dispatch context is not ready");
+    }
+
+    dispatchCtx = createJobDispatchContext({
+      workflow: opts.workflow,
+      tool,
+      jobTools,
+      jobStore,
+      ...(opts.jobTtlMs !== undefined ? { jobTtlMs: opts.jobTtlMs } : {}),
+      ...(opts.jobCheckpointTtlMs !== undefined
+        ? { jobCheckpointTtlMs: opts.jobCheckpointTtlMs }
+        : {}),
+      releaseInflight: () => {},
+    });
+    dispatchCtx.runner.recover?.(opts.workflow);
+    return dispatchCtx;
+  }
+
+  function ensureDispatchCtx(): Promise<JobDispatchContext> {
+    if (dispatchCtx !== undefined) {
+      return Promise.resolve(dispatchCtx);
+    }
+
+    if (opts.jobDbPath === undefined) {
+      return Promise.resolve(ensureDispatchCtxSync());
+    }
+
+    dispatchCtxPromise ??= resolveJobStore().then((jobStore) => {
       dispatchCtx = createJobDispatchContext({
         workflow: opts.workflow,
         tool,
         jobTools,
+        jobStore,
         ...(opts.jobTtlMs !== undefined ? { jobTtlMs: opts.jobTtlMs } : {}),
         ...(opts.jobCheckpointTtlMs !== undefined
           ? { jobCheckpointTtlMs: opts.jobCheckpointTtlMs }
           : {}),
-        releaseInflight: () => {
-          inflight = false;
-        },
+        releaseInflight: () => {},
       });
+      dispatchCtx.runner.recover?.(opts.workflow);
+      return dispatchCtx;
+    });
+
+    return dispatchCtxPromise;
+  }
+
+  if (opts.async === true) {
+    if (opts.jobDbPath === undefined) {
+      ensureDispatchCtxSync();
+    } else {
+      void ensureDispatchCtx();
     }
-    return dispatchCtx;
+  }
+
+  async function hasActiveRun(): Promise<boolean> {
+    const ctx =
+      dispatchCtx !== undefined
+        ? dispatchCtx
+        : opts.jobDbPath === undefined
+          ? ensureDispatchCtxSync()
+          : await ensureDispatchCtx();
+    return ctx.runner.list().some(
+      (snapshot) =>
+        snapshot.state === "running" ||
+        snapshot.state === "awaiting-checkpoint",
+    );
   }
 
   const handle: McpServerHandle = {
@@ -176,6 +272,9 @@ export function createSingleWorkflowServer(
 
     dispose() {
       dispatchCtx?.runner.close();
+      void resolveJobStore().then((jobStore) => {
+        jobStore.close();
+      });
     },
 
     async callTool(name, args, callOpts) {
@@ -205,7 +304,7 @@ export function createSingleWorkflowServer(
 
       // Observer tools: no inflight lock.
       if (isObserver) {
-        const ctx = ensureDispatchCtx();
+        const ctx = await ensureDispatchCtx();
         switch (name) {
           case "get_workflow_status":
             return dispatchGetStatus(args, ctx);
@@ -218,92 +317,120 @@ export function createSingleWorkflowServer(
         }
       }
 
-      // start_* and sync tool: share the inflight lock.
-      if (inflight) {
-        return formatErrorResult(
-          new McpServerError(
-            ErrorCode.BUSY,
-            "Another workflow run is in progress",
-          ),
-        );
-      }
-      inflight = true;
-
       if (isStart) {
-        const ctx = ensureDispatchCtx();
-        // Thread test hooks into context (test-only).
-        if (handle._testOnComposedWorkflow !== undefined) {
-          ctx._testOnComposedWorkflow = handle._testOnComposedWorkflow;
-        }
-        // Thread test executor into context if set on handle (wraps 4-arg to 1-arg)
-        if (handle._testRunExecutor !== undefined) {
-          const testExec = handle._testRunExecutor;
-          ctx.testRunExecutor = (input: unknown) =>
-            testExec(
-              input,
-              undefined,
-              new AbortController().signal,
-              {} as EffectiveCeilings,
-            );
-        }
-
-        // Apply the same ceiling/hook composition as the sync path so that
-        // async jobs respect CLI ceiling overrides and the configured HITL strategy.
-        const asyncEffective = composeCeilings(
-          resolved,
-          opts.cliCeilings,
-          stderr,
-        );
-
-        // DurationWatchdog for async: instead of Promise.race (which requires
-        // awaiting the run), we wire an AbortController into runner.fire() via
-        // the `signal` option. When maxDurationSec elapses the signal fires,
-        // the internal executor stream receives it, and the run is cancelled.
-        // This is semantically equivalent to the sync watchdog (both abort the
-        // underlying executor) but adapted for fire-and-forget execution.
-        // Note: the run will appear as "cancelled" (not "duration-exceeded") in
-        // the job registry, which is the correct terminal state for async jobs
-        // that hit their duration ceiling. A finer-grained DURATION_EXCEEDED
-        // status is left as a follow-up (tracked in #84 item 11).
-        let asyncWatchdogSignal: AbortSignal | undefined;
-        if (asyncEffective.maxDurationSec !== null) {
-          const asyncWatchdog = new DurationWatchdog(
-            asyncEffective.maxDurationSec,
-            () => {},
+        if (inflight) {
+          return formatErrorResult(
+            new McpServerError(
+              ErrorCode.BUSY,
+              "Another workflow run is in progress",
+            ),
           );
-          asyncWatchdog.start();
-          asyncWatchdogSignal = asyncWatchdog.abortSignal;
         }
+        inflight = true;
+        try {
+          if (await hasActiveRun()) {
+            return formatErrorResult(
+              new McpServerError(
+                ErrorCode.BUSY,
+                "Another workflow run is in progress",
+              ),
+            );
+          }
+          const ctx =
+            opts.jobDbPath === undefined
+              ? ensureDispatchCtxSync()
+              : await ensureDispatchCtx();
+          // Thread test hooks into context (test-only).
+          if (handle._testOnComposedWorkflow !== undefined) {
+            ctx._testOnComposedWorkflow = handle._testOnComposedWorkflow;
+          }
+          // Thread test executor into context if set on handle (wraps 4-arg to 1-arg)
+          if (handle._testRunExecutor !== undefined) {
+            const testExec = handle._testRunExecutor;
+            ctx.testRunExecutor = (input: unknown) =>
+              testExec(
+                input,
+                undefined,
+                new AbortController().signal,
+                {} as EffectiveCeilings,
+              );
+          }
 
-        // Derive async HITL strategy: map hitlStrategy to a simple checkpoint
-        // resolver for runner.fire(). The async path cannot use MCP elicitation
-        // (no persistent connection during fire-and-forget execution), so:
-        //   "auto"   → immediately approve
-        //   "fail"   → immediately reject
-        //   "elicit" → undefined (runner's deferred path; client uses resume_workflow)
-        const asyncOnCheckpoint: DispatchStartOptions["onCheckpoint"] =
-          opts.hitlStrategy === "auto"
-            ? () => true
-            : opts.hitlStrategy === "fail"
-              ? () => false
-              : undefined; // elicit → deferred resume_workflow mechanism
+          // Apply the same ceiling/hook composition as the sync path so that
+          // async jobs respect CLI ceiling overrides and the configured HITL strategy.
+          const asyncEffective = composeCeilings(
+            resolved,
+            opts.cliCeilings,
+            stderr,
+          );
 
-        const dispatchOpts: DispatchStartOptions = {
-          effective: asyncEffective,
-          ...(asyncOnCheckpoint !== undefined
-            ? { onCheckpoint: asyncOnCheckpoint }
-            : {}),
-          ...(asyncWatchdogSignal !== undefined
-            ? { abortSignal: asyncWatchdogSignal }
-            : {}),
-        };
+          // DurationWatchdog for async: instead of Promise.race (which requires
+          // awaiting the run), we wire an AbortController into runner.fire() via
+          // the `signal` option. When maxDurationSec elapses the signal fires,
+          // the internal executor stream receives it, and the run is cancelled.
+          // This is semantically equivalent to the sync watchdog (both abort the
+          // underlying executor) but adapted for fire-and-forget execution.
+          // Note: the run will appear as "cancelled" (not "duration-exceeded") in
+          // the job registry, which is the correct terminal state for async jobs
+          // that hit their duration ceiling. A finer-grained DURATION_EXCEEDED
+          // status is left as a follow-up (tracked in #84 item 11).
+          let asyncWatchdogSignal: AbortSignal | undefined;
+          if (asyncEffective.maxDurationSec !== null) {
+            const asyncWatchdog = new DurationWatchdog(
+              asyncEffective.maxDurationSec,
+              () => {},
+            );
+            asyncWatchdog.start();
+            asyncWatchdogSignal = asyncWatchdog.abortSignal;
+          }
 
-        // dispatchStart releases inflight via ctx.releaseInflight (onComplete/onError)
-        // or on validation failure.
-        return await dispatchStart(name, args, ctx, dispatchOpts);
+          // Derive async HITL strategy: map hitlStrategy to a simple checkpoint
+          // resolver for runner.fire(). The async path cannot use MCP elicitation
+          // (no persistent connection during fire-and-forget execution), so:
+          //   "auto"   → immediately approve
+          //   "fail"   → immediately reject
+          //   "elicit" → undefined (runner's deferred path; client uses resume_workflow)
+          const asyncOnCheckpoint: DispatchStartOptions["onCheckpoint"] =
+            opts.hitlStrategy === "auto"
+              ? () => true
+              : opts.hitlStrategy === "fail"
+                ? () => false
+                : undefined; // elicit → deferred resume_workflow mechanism
+
+          const dispatchOpts: DispatchStartOptions = {
+            effective: asyncEffective,
+            ...(asyncOnCheckpoint !== undefined
+              ? { onCheckpoint: asyncOnCheckpoint }
+              : {}),
+            ...(asyncWatchdogSignal !== undefined
+              ? { abortSignal: asyncWatchdogSignal }
+              : {}),
+          };
+
+          // dispatchStart releases inflight via ctx.releaseInflight (onComplete/onError)
+          // or on validation failure.
+          return await dispatchStart(name, args, ctx, dispatchOpts);
+        } finally {
+          inflight = false;
+        }
+      }
+
+      // Sync tool: share the inflight lock and hydrated active-run state.
+      if (isSync) {
+        const busy =
+          inflight || (opts.async === true && (await hasActiveRun()));
+        if (busy) {
+          return formatErrorResult(
+            new McpServerError(
+              ErrorCode.BUSY,
+              "Another workflow run is in progress",
+            ),
+          );
+        }
       }
 
       // Sync path (existing body) — inflight cleared in finally.
+      inflight = true;
       try {
         // Validate input
         const inputTaskDef = (opts.workflow.tasks as Record<string, unknown>)[

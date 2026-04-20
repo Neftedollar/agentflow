@@ -44,8 +44,9 @@ transports are all re-expressed on top of it.
 
 - **No bundled HTTP server.** We do not ship Express / Fastify middleware.
   Framework integrations live in userland or future packages.
-- **No persistence.** Runs live in process memory. Restarting the server
-  drops in-flight runs. Durable runs are a v0.2+ feature.
+- **In-memory by default; persistence is pluggable.** Without a `RunStore`,
+  runs live in process memory. With a durable `RunStore` backend, run
+  snapshots can survive restart.
 - **No distributed execution.** A `runId` is only valid on the instance that
   created it. Horizontal scale requires sticky sessions or external state,
   out of scope here.
@@ -146,7 +147,8 @@ behavior unchanged). So CLI keeps prompting on TTY exactly like today.
 
 ### Run registry
 
-`@ageflow/server` owns a `RunRegistry` — an in-memory `Map<string, RunHandle>`.
+`@ageflow/server` owns a `RunRegistry` (active handles) and can mirror
+run snapshots through a pluggable `RunStore` backend.
 
 ```ts
 interface RunHandle {

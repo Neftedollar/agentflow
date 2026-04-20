@@ -216,6 +216,16 @@ describe("parseMcpServeArgs: async mode flags (#18)", () => {
     expect(parsed.jobCheckpointTtlMs).toBe(900_000);
   });
 
+  it("parses --job-db <path>", () => {
+    const parsed = parseMcpServeArgs([
+      "wf.ts",
+      "--async",
+      "--job-db",
+      "/tmp/jobs.sqlite",
+    ]);
+    expect(parsed.jobDb).toBe("/tmp/jobs.sqlite");
+  });
+
   it("rejects --job-ttl with no value", () => {
     expect(() => parseMcpServeArgs(["wf.ts", "--async", "--job-ttl"])).toThrow(
       /requires/,
@@ -237,6 +247,12 @@ describe("parseMcpServeArgs: async mode flags (#18)", () => {
   it("rejects --checkpoint-ttl without --async", () => {
     expect(() =>
       parseMcpServeArgs(["wf.ts", "--checkpoint-ttl", "1000"]),
+    ).toThrow(/requires --async/);
+  });
+
+  it("rejects --job-db without --async", () => {
+    expect(() =>
+      parseMcpServeArgs(["wf.ts", "--job-db", "/tmp/jobs.sqlite"]),
     ).toThrow(/requires --async/);
   });
 });

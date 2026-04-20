@@ -29,6 +29,12 @@ export type {
   McpToolResult,
   RunWorkflowFn,
 } from "./server.js";
+export { createSqliteJobStore } from "./job-store-sqlite.js";
+export {
+  InMemoryJobStore,
+  type JobStore,
+  type PersistedJob,
+} from "./job-store.js";
 export { startStdioTransport } from "./stdio-transport.js";
 export type { StdioTransportOptions } from "./stdio-transport.js";
 export type { CliCeilings, EffectiveCeilings, HitlStrategy } from "./types.js";

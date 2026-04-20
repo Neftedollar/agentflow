@@ -8,8 +8,9 @@ import type {
 import { shutdownAllRunners } from "@ageflow/core";
 import { WorkflowExecutor, type WorkflowResult } from "@ageflow/executor";
 import { InvalidRunStateError, RunNotFoundError } from "./errors.js";
-import { createDeferred } from "./run-handle.js";
+import { createDeferred, type InternalRunHandle } from "./run-handle.js";
 import { RunRegistry } from "./run-registry.js";
+import { InMemoryRunStore } from "./run-store.js";
 import type { FireOptions, RunOptions, Runner, RunnerConfig } from "./types.js";
 
 const DEFAULT_TTL_MS = 5 * 60_000;
@@ -17,21 +18,26 @@ const DEFAULT_CHECKPOINT_TTL_MS = 60 * 60_000;
 const DEFAULT_REAPER_INTERVAL_MS = 60_000;
 
 export function createRunner(config: RunnerConfig = {}): Runner {
+  const store = config.store ?? new InMemoryRunStore();
   const registry = new RunRegistry({
     ttlMs: config.ttlMs ?? DEFAULT_TTL_MS,
     checkpointTtlMs: config.checkpointTtlMs ?? DEFAULT_CHECKPOINT_TTL_MS,
     reaperIntervalMs: config.reaperIntervalMs ?? DEFAULT_REAPER_INTERVAL_MS,
+    store,
   });
   const generateRunId = config.generateRunId ?? (() => crypto.randomUUID());
+  const replayedRunIds = new Set<string>();
 
   async function* streamImpl<T extends TasksMap>(
     workflow: WorkflowDef<T>,
     input: unknown,
     options: RunOptions | undefined,
     preAllocatedRunId?: string,
+    existingHandle?: InternalRunHandle,
   ): AsyncGenerator<WorkflowEvent, WorkflowResult<T>, void> {
     const runId = preAllocatedRunId ?? generateRunId();
-    const handle = registry.create({ runId, workflowName: workflow.name });
+    const handle =
+      existingHandle ?? registry.create({ runId, workflowName: workflow.name, input });
 
     // Combine caller signal + internal abort.
     if (options?.signal) {
@@ -179,6 +185,9 @@ export function createRunner(config: RunnerConfig = {}): Runner {
       if (h.state !== "awaiting-checkpoint" || !h.pendingCheckpoint) {
         throw new InvalidRunStateError(runId, h.state);
       }
+      if (h.pendingCheckpoint.recoveredFromStore === true) {
+        throw new InvalidRunStateError(runId, h.state);
+      }
       const { resolve } = h.pendingCheckpoint;
       h.clearCheckpoint();
       resolve(approved);
@@ -206,9 +215,49 @@ export function createRunner(config: RunnerConfig = {}): Runner {
 
     get: (runId) => registry.get(runId),
     list: () => registry.list(),
+    recover(workflow: WorkflowDef): void {
+      for (const record of store.list()) {
+        if (record.workflowName !== workflow.name) continue;
+        if (
+          record.state !== "running" &&
+          record.state !== "awaiting-checkpoint"
+        ) {
+          continue;
+        }
+        if (replayedRunIds.has(record.runId)) continue;
+        const handle = registry.getInternal(record.runId);
+        if (!handle) continue;
+        replayedRunIds.add(record.runId);
+        void replayRecoveredRun(workflow, handle, record.input).catch(
+          (err: unknown) => {
+            const error =
+              err instanceof Error ? err : new Error(String(err));
+            handle.markFailed(error);
+          },
+        );
+      }
+    },
     async close(): Promise<void> {
-      registry.stop();
+      registry.close();
       await shutdownAllRunners();
     },
   };
+
+  async function replayRecoveredRun<T extends TasksMap>(
+    workflow: WorkflowDef<T>,
+    handle: InternalRunHandle,
+    input: unknown,
+  ): Promise<void> {
+    // Rehydrate the run under the same runId by replaying from the stored input.
+    // The handle is already in the registry with the recovered snapshot state.
+    const gen = streamImpl(workflow, input, undefined, handle.runId, handle);
+    try {
+      let step: IteratorResult<WorkflowEvent, WorkflowResult<T>>;
+      do {
+        step = await gen.next();
+      } while (!step.done);
+    } catch {
+      // The outer catch in the caller marks the handle failed and persists it.
+    }
+  }
 }

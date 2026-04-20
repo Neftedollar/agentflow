@@ -47,15 +47,16 @@ decides how to reuse them and what the MCP tool surface looks like.
   progress/elicitation as today. In job mode, elicitation surfaces via
   `get_workflow_status.currentTask` — no out-of-band prompt because the
   originating client may be gone.
-- **Job registry is in-process.** Matches `@ageflow/server` today. An
-  interface hook (`RunStore`) is sketched for future persistent backends.
+- **Job registry defaults to in-process, with optional persistence.**
+  By default jobs use an in-memory store. With `--job-db <path>` the
+  registry persists snapshots to SQLite and hydrates known jobs on startup.
 
 ## Non-goals
 
 - **No distributed jobs.** `jobId` is valid only on the server that created
   it. Horizontal scale requires sticky routing — out of scope.
-- **No persistence across restarts.** Jobs live in memory; restart drops
-  them. Durable jobs → future work (see "Future: RunStore").
+- **No distributed persistence / replication.** Durable snapshots are local
+  to a single server instance (for example SQLite on local disk).
 - **No job prioritization / queueing.** Single-run `BUSY` lock preserved
   (§5). First caller wins; second caller gets `BUSY`.
 - **No new HITL mechanism.** Existing `hitl-bridge`; only **surfacing**
@@ -405,7 +406,8 @@ input type is structurally identical to the sync tool's input type
 Restated for emphasis, since issue #18 is deliberately narrow:
 
 - **No distributed jobs.** Jobs are single-instance only.
-- **No persistence across server restart.** In-memory `RunRegistry` only.
+- **No distributed persistence across server restart.** Restart recovery is
+  supported only when a durable local `RunStore` backend is configured.
 - **No job prioritization / queueing.** Single `BUSY` lock — same policy
   as sync mode.
 - **No `list_jobs` / `wait_for_job` bulk APIs.** v2 if ever requested.
@@ -430,8 +432,8 @@ Restated for emphasis, since issue #18 is deliberately narrow:
 
 ## Open follow-ups / future work
 
-- **`RunStore` persistence.** File-backed or SQLite-backed
-  `RunRegistry` for jobs that survive server restart.
+- **Additional durable backends.** Add Redis/Postgres-grade `RunStore`
+  adapters where restart recovery must survive host replacement.
 - **Webhook / push notifications.** Optional "call me at URL X when job
   finishes" so polling isn't required for clients that can accept
   callbacks.

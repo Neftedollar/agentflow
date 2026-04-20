@@ -6,7 +6,9 @@ import type {
   WorkflowEvent,
 } from "@ageflow/core";
 import type { WorkflowResult } from "@ageflow/executor";
+import type { RunStore } from "./run-store.js";
 
+export type { PersistedRunRecord, RunStore } from "./run-store.js";
 export type { RunHandle } from "@ageflow/core";
 export type { WorkflowResult } from "@ageflow/executor";
 
@@ -30,6 +32,8 @@ export interface RunnerConfig {
   readonly reaperIntervalMs?: number;
   /** runId generator. Default: crypto.randomUUID. */
   readonly generateRunId?: () => string;
+  /** Optional run snapshot store. Defaults to an in-memory store. */
+  readonly store?: RunStore;
 }
 
 export interface Runner {
@@ -55,6 +59,8 @@ export interface Runner {
   cancel(runId: string): void;
   get(runId: string): RunHandle | undefined;
   list(): readonly RunHandle[];
+  /** Internal recovery hook used by async job hydration. */
+  recover?(workflow: WorkflowDef): void;
   /** Stop the reaper and shut down all registered runners. Process-level teardown. */
   close(): Promise<void>;
 }
